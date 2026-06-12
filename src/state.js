@@ -45,6 +45,11 @@ export function resetLocalData() {
   state.interviewProfile = buildProfileWithRulesets(ensureProfileShape(state.interviewProfile));
 }
 
+export function loadDemo(demoId) {
+  state = createDemoState(demoId);
+  saveState(state);
+}
+
 export function getInterviewState() {
   const profile = buildProfileWithRulesets(ensureProfileShape(state.interviewProfile));
   const visibleQuestions = getVisibleQuestions(profile);
@@ -90,6 +95,17 @@ export function editInterviewAnswer(questionId) {
 }
 
 export function markDone(collectionName, id) {
+  if (collectionName === "guidance") {
+    state.guidanceState[id] = {
+      ...state.guidanceState[id],
+      status: "done",
+      completed: true,
+      completedAt: new Date().toISOString(),
+    };
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "recommendations") {
     state.recommendationState[id] = {
       ...state.recommendationState[id],
@@ -114,6 +130,16 @@ export function markDone(collectionName, id) {
 }
 
 export function doItNow(collectionName, id) {
+  if (collectionName === "guidance") {
+    state.guidanceState[id] = {
+      ...state.guidanceState[id],
+      status: "doing",
+      startedAt: new Date().toISOString(),
+    };
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "recommendations") {
     state.recommendationState[id] = {
       ...state.recommendationState[id],
@@ -137,6 +163,11 @@ export function doItNow(collectionName, id) {
 }
 
 export function snoozeItem(collectionName, id) {
+  if (collectionName === "guidance") {
+    snoozeGuidance(id);
+    return;
+  }
+
   if (collectionName === "recommendations") {
     snoozeRecommendation(id);
     return;
@@ -162,7 +193,27 @@ export function snoozeRecommendation(id) {
   saveState(state);
 }
 
+export function snoozeGuidance(id) {
+  state.guidanceState[id] = {
+    ...state.guidanceState[id],
+    status: "snoozed",
+    snoozedUntil: getSnoozeLabel(),
+  };
+  saveState(state);
+}
+
 export function skipItem(collectionName, id) {
+  if (collectionName === "guidance") {
+    state.guidanceState[id] = {
+      ...state.guidanceState[id],
+      status: "skipped",
+      completed: false,
+      skippedUntil: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    };
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "recommendations") {
     state.recommendationState[id] = {
       ...state.recommendationState[id],
@@ -188,6 +239,15 @@ export function skipItem(collectionName, id) {
 export function dismissRecommendation(id) {
   state.recommendationState[id] = {
     ...state.recommendationState[id],
+    status: "dismissed",
+    dismissedAt: new Date().toISOString(),
+  };
+  saveState(state);
+}
+
+export function dismissGuidance(id) {
+  state.guidanceState[id] = {
+    ...state.guidanceState[id],
     status: "dismissed",
     dismissedAt: new Date().toISOString(),
   };
@@ -257,6 +317,7 @@ export function getWorkingModeData() {
 export function getMorningBriefingData() {
   return {
     bigThings: getScoredActionableItems().slice(0, 3),
+    guidance: getGeneratedGuidance(),
     scheduledToday: getScheduledCandidates()
       .filter(isOpen)
       .sort((left, right) => getRawMinutesUntilScheduledStart(left) - getRawMinutesUntilScheduledStart(right)),
@@ -352,7 +413,99 @@ export function statusTone(item) {
 }
 
 function allCompletableItems() {
-  return [...state.actions, ...state.routines, ...state.timeline, ...getGeneratedRecommendations()];
+  return [...state.actions, ...state.routines, ...state.timeline, ...getGeneratedRecommendations(), ...getGeneratedGuidance()];
+}
+
+function getGeneratedGuidance() {
+  const profile = state.interviewProfile ?? {};
+  const activeRulesets = new Set(profile.activeRulesets ?? []);
+  const guidance = [];
+  const dayPart = getDayPart();
+
+  if (dayPart === "morning" && (profile.adhd?.busyFailureMode || activeRulesets.has("time_blindness_support") || activeRulesets.has("decision_paralysis_support"))) {
+    guidance.push(createGuidance({
+      id: "guide-adhd-morning-planning",
+      title: "Do a quick morning plan",
+      category: "Personal",
+      priority: "High",
+      preferredWindow: "Today",
+      reason: "ADHD morning planning guidance",
+    }));
+  }
+
+  if (activeRulesets.has("time_blindness_support")) {
+    guidance.push(createGuidance({
+      id: "guide-adhd-transition",
+      title: "Check the next transition",
+      category: "Personal",
+      priority: "Medium",
+      preferredWindow: "Today",
+      reason: "ADHD transition guidance",
+    }));
+  }
+
+  if (profile.fitness?.goal === "weight_loss" || activeRulesets.has("weight_loss_support")) {
+    guidance.push(createGuidance({
+      id: "guide-weight-loss-water",
+      title: "Drink water early today",
+      category: "Health",
+      priority: "Medium",
+      preferredWindow: "Today",
+      reason: "Weight Loss water guidance",
+    }));
+    if (dayPart === "morning") {
+      guidance.push(createGuidance({
+        id: "guide-weight-loss-walk",
+        title: "Take a short morning walk",
+        category: "Fitness",
+        priority: "Medium",
+        preferredWindow: "Today",
+        reason: "Weight Loss movement guidance",
+      }));
+    }
+  }
+
+  if (profile.fitness?.goal === "muscle_gain" || activeRulesets.has("muscle_gain_support")) {
+    guidance.push(createGuidance({
+      id: "guide-muscle-protein",
+      title: "Plan protein with your next meal",
+      category: "Health",
+      priority: "Medium",
+      preferredWindow: "Today",
+      reason: "Muscle Gain protein guidance",
+    }));
+    guidance.push(createGuidance({
+      id: "guide-muscle-recovery",
+      title: "Check recovery before training",
+      category: "Fitness",
+      priority: "Medium",
+      preferredWindow: "Today",
+      reason: "Muscle Gain recovery guidance",
+    }));
+  }
+
+  if (profile.work?.workType === "self_employed" || activeRulesets.has("self_employed")) {
+    guidance.push(createGuidance({
+      id: "guide-self-employed-revenue",
+      title: "Review revenue-producing work",
+      category: "Work",
+      workType: "revenue",
+      priority: "High",
+      preferredWindow: "Today",
+      reason: "Self-employed revenue guidance",
+    }));
+    guidance.push(createGuidance({
+      id: "guide-self-employed-followup",
+      title: "Pick one follow-up to send",
+      category: "Work",
+      workType: "follow_up",
+      priority: "Medium",
+      preferredWindow: "Today",
+      reason: "Self-employed follow-up guidance",
+    }));
+  }
+
+  return guidance.filter((item) => !isDone(item));
 }
 
 function getGeneratedRecommendations() {
@@ -439,6 +592,21 @@ function createRecommendation(baseRecommendation) {
   };
 }
 
+function createGuidance(baseGuidance) {
+  const savedState = state.guidanceState?.[baseGuidance.id] ?? {};
+  return {
+    areaId: "guidance",
+    estimatedEffortMinutes: 10,
+    type: "Guidance",
+    source: "Ruleset",
+    timingType: "flexible",
+    dueDate: "Today",
+    workType: "none",
+    ...baseGuidance,
+    ...savedState,
+  };
+}
+
 function getActionableCandidates() {
   return [
     ...state.actions.map((item, index) => ({ collection: "actions", item, order: index })),
@@ -457,6 +625,17 @@ function getActionableCandidates() {
       collection: "recommendations",
       item,
       order: state.actions.length + state.routines.length + state.timeline.length + state.focusSessions.length + index,
+    })),
+    ...getGeneratedGuidance().map((item, index) => ({
+      collection: "guidance",
+      item,
+      order:
+        state.actions.length +
+        state.routines.length +
+        state.timeline.length +
+        state.focusSessions.length +
+        getGeneratedRecommendations().length +
+        index,
     })),
   ];
 }
@@ -479,6 +658,10 @@ function scoreCandidate(candidate) {
 
   if (item.type === "Recommendation") {
     reasons.push(item.reason ?? "profile recommendation");
+  }
+
+  if (item.type === "Guidance") {
+    reasons.push(item.reason ?? "ruleset guidance");
   }
 
   const deadlineUrgency = getDeadlineUrgencyScore(item);
@@ -857,7 +1040,136 @@ function getTodayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function createDemoState(demoId) {
+  const demoState = clone(defaultState);
+  demoState.ui = {
+    activeView: "briefing",
+    lastMorningBriefingDate: null,
+  };
+  demoState.recommendationState = {};
+
+  if (demoId === "adhd-weight-loss") {
+    demoState.interviewProfile = buildProfileWithRulesets({
+      adhd: { busyFailureMode: "time", supportNeeded: "choose" },
+      fitness: { wantsSupport: "yes", barrier: "time", goal: "weight_loss" },
+      health: { wantsSupport: "yes", trackFirst: "medications" },
+      work: {},
+      money: {},
+      relationships: {},
+      activeRulesets: [],
+    });
+    demoState.actions = [
+      createDemoTask("demo-water-bottle", "Fill water bottle", "Health", "flexible", "Today", "High"),
+      createDemoTask("demo-walk-shoes", "Put walking shoes by the door", "Fitness", "flexible", "Today", "Medium"),
+      createDemoTask("demo-plan-meals", "Choose simple lunch", "Health", "deadline", "Today", "Medium"),
+    ];
+    demoState.timeline = [
+      createDemoScheduledItem("demo-morning-walk", "Morning walk", "8:30 AM", "Fitness", 20),
+      createDemoScheduledItem("demo-lunch-check", "Lunch check-in", "12:00 PM", "Health", 10),
+    ];
+  } else if (demoId === "adhd-muscle-gain") {
+    demoState.interviewProfile = buildProfileWithRulesets({
+      adhd: { busyFailureMode: "forget", supportNeeded: "remember" },
+      fitness: { wantsSupport: "yes", barrier: "forget", goal: "muscle_gain" },
+      health: { wantsSupport: "yes", trackFirst: "refills" },
+      work: {},
+      money: {},
+      relationships: {},
+      activeRulesets: [],
+    });
+    demoState.actions = [
+      createDemoTask("demo-protein", "Plan protein with breakfast", "Health", "flexible", "Today", "High"),
+      createDemoTask("demo-lift", "Pack gym clothes", "Fitness", "flexible", "Today", "Medium"),
+      createDemoTask("demo-refill", "Check supplement supply", "Health", "deadline", "Tomorrow", "Medium"),
+    ];
+    demoState.timeline = [
+      createDemoScheduledItem("demo-workout", "Strength workout", "5:30 PM", "Fitness", 45),
+      createDemoScheduledItem("demo-evening-protein", "Evening protein reminder", "7:30 PM", "Health", 5),
+    ];
+  } else if (demoId === "self-employed") {
+    demoState.interviewProfile = buildProfileWithRulesets({
+      adhd: { busyFailureMode: "overwhelmed", supportNeeded: "choose" },
+      fitness: {},
+      health: {},
+      work: { wantsSupport: "yes", helpFirst: "priorities", workType: "self_employed" },
+      money: { wantsSupport: "yes", trackFirst: "income" },
+      relationships: {},
+      activeRulesets: [],
+    });
+    demoState.actions = [
+      createDemoTask("demo-proposal", "Send paid proposal", "Work", "flexible", "Today", "High", "revenue"),
+      createDemoTask("demo-invoice", "Review unpaid invoice", "Money", "deadline", "Today", "High", "revenue"),
+      createDemoTask("demo-receipts", "File receipts", "Work", "flexible", "Today", "Medium", "admin"),
+    ];
+    demoState.timeline = [
+      createDemoScheduledItem("demo-client-call", "Client follow-up call", "10:30 AM", "Work", 30),
+      createDemoScheduledItem("demo-admin-block", "Admin block", "3:00 PM", "Work", 45),
+    ];
+  }
+
+  demoState.routines = [];
+  demoState.focusSessions = [];
+  demoState.interview = {
+    currentQuestionId: null,
+    completed: true,
+  };
+
+  return demoState;
+}
+
+function createDemoTask(id, title, category, timingType, when, priority, workType = "none") {
+  const task = {
+    id,
+    title,
+    areaId: category.toLowerCase(),
+    category,
+    workType,
+    timingType,
+    status: "todo",
+    priority,
+    estimatedEffortMinutes: 15,
+  };
+
+  if (timingType === "scheduled") {
+    task.startTime = when;
+    task.dueDate = "Today";
+  } else if (timingType === "deadline") {
+    task.deadline = when;
+    task.dueDate = when;
+  } else {
+    task.preferredWindow = when;
+    task.dueDate = when;
+  }
+
+  return task;
+}
+
+function createDemoScheduledItem(id, title, startTime, category, estimatedEffortMinutes) {
+  return {
+    id,
+    title,
+    areaId: category.toLowerCase(),
+    category,
+    workType: "none",
+    timingType: "scheduled",
+    startTime,
+    time: startTime,
+    type: "Scheduled",
+    status: "Upcoming",
+    priority: "Medium",
+    estimatedEffortMinutes,
+  };
+}
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 function findByCollection(collectionName, id) {
+  if (collectionName === "guidance") {
+    return getGeneratedGuidance().find((item) => item.id === id);
+  }
+
   if (collectionName === "recommendations") {
     return getGeneratedRecommendations().find((item) => item.id === id);
   }
@@ -868,6 +1180,17 @@ function findByCollection(collectionName, id) {
 function getSnoozeLabel() {
   const date = new Date(Date.now() + 30 * 60 * 1000);
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function getDayPart() {
+  const hour = new Date().getHours();
+  if (hour < 12) {
+    return "morning";
+  }
+  if (hour < 17) {
+    return "afternoon";
+  }
+  return "evening";
 }
 
 function titleCase(value) {

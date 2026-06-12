@@ -125,6 +125,7 @@ export const appState = {
     { id: "discovery-placeholder", areaId: "transportation", title: "Manual note: rear tire may require replacement", source: "Prototype seed", status: "Review" },
   ],
   recommendationState: {},
+  guidanceState: {},
   waitingOn: [
     { id: "wait-insurance", title: "Insurance quote", owner: "Insurance company", areaId: "finances" },
     { id: "wait-doctor", title: "Doctor office callback", owner: "Provider office", areaId: "health" },

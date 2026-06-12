@@ -47,6 +47,7 @@ function mergeState(base, stored) {
       activeRulesets: arrayOrDefault(stored.interviewProfile?.activeRulesets, base.interviewProfile?.activeRulesets ?? []),
     },
     recommendationState: { ...base.recommendationState, ...stored.recommendationState },
+    guidanceState: { ...base.guidanceState, ...stored.guidanceState },
     responsibilityAreas: arrayOrDefault(stored.responsibilityAreas, base.responsibilityAreas),
     profiles: arrayOrDefault(stored.profiles, base.profiles),
     routines: arrayOrDefault(stored.routines, base.routines),

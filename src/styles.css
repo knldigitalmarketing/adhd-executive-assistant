@@ -111,6 +111,30 @@ main {
   padding: 30px clamp(18px, 5vw, 56px) 56px;
 }
 
+.test-mode-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px clamp(18px, 5vw, 56px);
+  border-bottom: 1px solid var(--line);
+  background: #fff8e8;
+}
+
+.test-mode-panel strong {
+  font-size: 0.86rem;
+  text-transform: uppercase;
+}
+
+.test-mode-panel div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.test-mode-panel button {
+  min-height: 34px;
+  font-size: 0.84rem;
+}
+
 .section {
   display: grid;
   gap: 16px;
@@ -299,7 +323,7 @@ main {
 
 .morning-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -385,7 +409,7 @@ main {
 
 .add-task-form {
   display: grid;
-  grid-template-columns: minmax(220px, 1.5fr) minmax(140px, 0.7fr) minmax(120px, 0.6fr) minmax(120px, 0.6fr) auto;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(5, minmax(120px, 0.65fr)) auto;
   gap: 12px;
   align-items: end;
 }

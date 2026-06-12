@@ -3,6 +3,7 @@ import {
   addTask,
   answerInterviewQuestion,
   dismissRecommendation,
+  dismissGuidance,
   doItNow,
   editInterviewAnswer,
   getDecisionRecommendation,
@@ -14,6 +15,7 @@ import {
   getTodayStats,
   getWorkingModeData,
   isDone,
+  loadDemo,
   markDone,
   resetLocalData,
   setActiveView,
@@ -72,6 +74,20 @@ function renderHeader() {
         <a href="#models">Models</a>
       </nav>
     </header>
+  `;
+}
+
+function renderTestModePanel() {
+  return `
+    <aside class="test-mode-panel" aria-label="Prototype Tools">
+      <strong>Test Mode / Prototype Tools</strong>
+      <div>
+        <button type="button" data-action="reset-local-data">Reset App Data</button>
+        <button type="button" data-action="load-demo" data-demo-id="adhd-weight-loss">Load ADHD + Weight Loss Demo</button>
+        <button type="button" data-action="load-demo" data-demo-id="adhd-muscle-gain">Load ADHD + Muscle Gain Demo</button>
+        <button type="button" data-action="load-demo" data-demo-id="self-employed">Load Self Employed Demo</button>
+      </div>
+    </aside>
   `;
 }
 
@@ -135,6 +151,16 @@ function renderMorningBriefing() {
               detail: `${item.why} Score ${item.score}`,
             })),
             "No major actions are waiting.",
+          )}
+        </article>
+        <article class="panel">
+          <h3>Guidance</h3>
+          ${renderBriefingItems(
+            briefing.guidance.map((item) => ({
+              title: item.title,
+              detail: item.reason,
+            })),
+            "No guidance blocks for this profile right now.",
           )}
         </article>
         <article class="panel">
@@ -222,6 +248,7 @@ function renderNowCard(working) {
         <button type="button" data-action="snooze" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Snooze</button>
         <button type="button" data-action="skip" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Skip</button>
         ${recommendation.collection === "recommendations" ? `<button type="button" data-action="dismiss-recommendation" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
+        ${recommendation.collection === "guidance" ? `<button type="button" data-action="dismiss-guidance" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
       </div>
     </article>
   `;
@@ -713,6 +740,7 @@ function renderApp() {
 
   app.innerHTML = `
     ${renderHeader()}
+    ${renderTestModePanel()}
     <main>
       ${activeView === "briefing" ? renderMorningBriefing() : activeView === "working" ? renderWorkingMode() : fullDashboard}
     </main>
@@ -764,8 +792,16 @@ app.addEventListener("click", (event) => {
     dismissRecommendation(id);
     renderApp();
   }
+  if (action === "dismiss-guidance") {
+    dismissGuidance(id);
+    renderApp();
+  }
   if (action === "reset-local-data") {
     resetLocalData();
+    renderApp();
+  }
+  if (action === "load-demo") {
+    loadDemo(button.dataset.demoId);
     renderApp();
   }
   if (action === "start-working") {
