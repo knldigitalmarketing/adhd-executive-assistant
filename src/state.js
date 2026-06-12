@@ -95,6 +95,17 @@ export function editInterviewAnswer(questionId) {
 }
 
 export function markDone(collectionName, id) {
+  if (collectionName === "morningRoutine") {
+    state.morningRoutineState[id] = {
+      ...state.morningRoutineState[id],
+      status: "done",
+      completed: true,
+      completedAt: new Date().toISOString(),
+    };
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "guidance") {
     state.guidanceState[id] = {
       ...state.guidanceState[id],
@@ -130,6 +141,16 @@ export function markDone(collectionName, id) {
 }
 
 export function doItNow(collectionName, id) {
+  if (collectionName === "morningRoutine") {
+    state.morningRoutineState[id] = {
+      ...state.morningRoutineState[id],
+      status: "doing",
+      startedAt: new Date().toISOString(),
+    };
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "guidance") {
     state.guidanceState[id] = {
       ...state.guidanceState[id],
@@ -163,6 +184,11 @@ export function doItNow(collectionName, id) {
 }
 
 export function snoozeItem(collectionName, id) {
+  if (collectionName === "morningRoutine") {
+    snoozeMorningRoutine(id);
+    return;
+  }
+
   if (collectionName === "guidance") {
     snoozeGuidance(id);
     return;
@@ -202,7 +228,27 @@ export function snoozeGuidance(id) {
   saveState(state);
 }
 
+export function snoozeMorningRoutine(id) {
+  state.morningRoutineState[id] = {
+    ...state.morningRoutineState[id],
+    status: "snoozed",
+    snoozedUntil: getSnoozeLabel(),
+  };
+  saveState(state);
+}
+
 export function skipItem(collectionName, id) {
+  if (collectionName === "morningRoutine") {
+    state.morningRoutineState[id] = {
+      ...state.morningRoutineState[id],
+      status: "skipped",
+      completed: false,
+      skippedUntil: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    };
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "guidance") {
     state.guidanceState[id] = {
       ...state.guidanceState[id],
@@ -248,6 +294,15 @@ export function dismissRecommendation(id) {
 export function dismissGuidance(id) {
   state.guidanceState[id] = {
     ...state.guidanceState[id],
+    status: "dismissed",
+    dismissedAt: new Date().toISOString(),
+  };
+  saveState(state);
+}
+
+export function dismissMorningRoutine(id) {
+  state.morningRoutineState[id] = {
+    ...state.morningRoutineState[id],
     status: "dismissed",
     dismissedAt: new Date().toISOString(),
   };
@@ -316,6 +371,7 @@ export function getWorkingModeData() {
 
 export function getMorningBriefingData() {
   return {
+    morningRoutine: getGeneratedMorningRoutine(),
     bigThings: getScoredActionableItems().slice(0, 3),
     guidance: getGeneratedGuidance(),
     scheduledToday: getScheduledCandidates()
@@ -413,7 +469,82 @@ export function statusTone(item) {
 }
 
 function allCompletableItems() {
-  return [...state.actions, ...state.routines, ...state.timeline, ...getGeneratedRecommendations(), ...getGeneratedGuidance()];
+  return [
+    ...state.actions,
+    ...state.routines,
+    ...state.timeline,
+    ...getGeneratedRecommendations(),
+    ...getGeneratedGuidance(),
+    ...getGeneratedMorningRoutine(),
+  ];
+}
+
+export function getGeneratedMorningRoutine() {
+  const profile = state.interviewProfile ?? {};
+  const activeRulesets = new Set(profile.activeRulesets ?? []);
+  const routine = [];
+  const dayPart = getDayPart();
+
+  if (dayPart !== "morning") {
+    return [];
+  }
+
+  if (profile.fitness?.goal === "weight_loss" || activeRulesets.has("weight_loss_support")) {
+    routine.push(createMorningRoutineItem({
+      id: "morning-weight-loss-water",
+      title: "Drink water",
+      category: "Health",
+      priority: "High",
+      reason: "Weight Loss morning routine",
+    }));
+    routine.push(createMorningRoutineItem({
+      id: "morning-weight-loss-walk",
+      title: "Morning walk",
+      category: "Fitness",
+      priority: "Medium",
+      reason: "Weight Loss morning routine",
+    }));
+  }
+
+  if (profile.fitness?.goal === "muscle_gain" || activeRulesets.has("muscle_gain_support")) {
+    routine.push(createMorningRoutineItem({
+      id: "morning-muscle-water",
+      title: "Drink water",
+      category: "Health",
+      priority: "High",
+      reason: "Muscle Gain morning routine",
+    }));
+    routine.push(createMorningRoutineItem({
+      id: "morning-muscle-protein",
+      title: "Protein intake",
+      category: "Health",
+      priority: "Medium",
+      reason: "Muscle Gain morning routine",
+    }));
+  }
+
+  if (profile.adhd?.busyFailureMode || activeRulesets.has("time_blindness_support") || activeRulesets.has("decision_paralysis_support")) {
+    routine.push(createMorningRoutineItem({
+      id: "morning-adhd-planning-review",
+      title: "Morning planning review",
+      category: "Personal",
+      priority: "High",
+      reason: "ADHD morning routine",
+    }));
+  }
+
+  if (profile.work?.workType === "self_employed" || activeRulesets.has("self_employed")) {
+    routine.push(createMorningRoutineItem({
+      id: "morning-self-employed-revenue",
+      title: "Review revenue opportunities",
+      category: "Work",
+      workType: "revenue",
+      priority: "High",
+      reason: "Self-employed morning routine",
+    }));
+  }
+
+  return routine.filter((item) => !isDone(item));
 }
 
 function getGeneratedGuidance() {
@@ -607,7 +738,27 @@ function createGuidance(baseGuidance) {
   };
 }
 
+function createMorningRoutineItem(baseRoutine) {
+  const savedState = state.morningRoutineState?.[baseRoutine.id] ?? {};
+  return {
+    areaId: "morningRoutine",
+    estimatedEffortMinutes: 10,
+    type: "Morning Routine",
+    source: "Ruleset",
+    timingType: "flexible",
+    dueDate: "Today",
+    preferredWindow: "Today",
+    workType: "none",
+    ...baseRoutine,
+    ...savedState,
+  };
+}
+
 function getActionableCandidates() {
+  const generatedRecommendations = getGeneratedRecommendations();
+  const generatedGuidance = getGeneratedGuidance();
+  const generatedMorningRoutine = getGeneratedMorningRoutine();
+
   return [
     ...state.actions.map((item, index) => ({ collection: "actions", item, order: index })),
     ...state.routines.map((item, index) => ({ collection: "routines", item, order: state.actions.length + index })),
@@ -621,12 +772,12 @@ function getActionableCandidates() {
       item,
       order: state.actions.length + state.routines.length + state.timeline.length + index,
     })),
-    ...getGeneratedRecommendations().map((item, index) => ({
+    ...generatedRecommendations.map((item, index) => ({
       collection: "recommendations",
       item,
       order: state.actions.length + state.routines.length + state.timeline.length + state.focusSessions.length + index,
     })),
-    ...getGeneratedGuidance().map((item, index) => ({
+    ...generatedGuidance.map((item, index) => ({
       collection: "guidance",
       item,
       order:
@@ -634,7 +785,19 @@ function getActionableCandidates() {
         state.routines.length +
         state.timeline.length +
         state.focusSessions.length +
-        getGeneratedRecommendations().length +
+        generatedRecommendations.length +
+        index,
+    })),
+    ...generatedMorningRoutine.map((item, index) => ({
+      collection: "morningRoutine",
+      item,
+      order:
+        state.actions.length +
+        state.routines.length +
+        state.timeline.length +
+        state.focusSessions.length +
+        generatedRecommendations.length +
+        generatedGuidance.length +
         index,
     })),
   ];
@@ -662,6 +825,10 @@ function scoreCandidate(candidate) {
 
   if (item.type === "Guidance") {
     reasons.push(item.reason ?? "ruleset guidance");
+  }
+
+  if (item.type === "Morning Routine") {
+    reasons.push(item.reason ?? "morning routine");
   }
 
   const deadlineUrgency = getDeadlineUrgencyScore(item);
@@ -1047,6 +1214,8 @@ function createDemoState(demoId) {
     lastMorningBriefingDate: null,
   };
   demoState.recommendationState = {};
+  demoState.guidanceState = {};
+  demoState.morningRoutineState = {};
 
   if (demoId === "adhd-weight-loss") {
     demoState.interviewProfile = buildProfileWithRulesets({
@@ -1166,6 +1335,10 @@ function clone(value) {
 }
 
 function findByCollection(collectionName, id) {
+  if (collectionName === "morningRoutine") {
+    return getGeneratedMorningRoutine().find((item) => item.id === id);
+  }
+
   if (collectionName === "guidance") {
     return getGeneratedGuidance().find((item) => item.id === id);
   }

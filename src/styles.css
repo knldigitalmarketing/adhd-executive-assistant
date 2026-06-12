@@ -327,6 +327,10 @@ main {
   gap: 16px;
 }
 
+.morning-routine-panel {
+  margin-bottom: 16px;
+}
+
 .briefing-list {
   display: grid;
   gap: 12px;
@@ -340,6 +344,11 @@ main {
   gap: 4px;
   padding: 12px 0;
   border-top: 1px solid var(--line);
+}
+
+.morning-routine-list li {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
 }
 
 .briefing-list span,

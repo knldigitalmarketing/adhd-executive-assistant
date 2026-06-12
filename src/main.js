@@ -4,6 +4,7 @@ import {
   answerInterviewQuestion,
   dismissRecommendation,
   dismissGuidance,
+  dismissMorningRoutine,
   doItNow,
   editInterviewAnswer,
   getDecisionRecommendation,
@@ -139,6 +140,13 @@ function renderMorningBriefing() {
         </div>
         <button type="button" data-action="start-working">Start My Day</button>
       </div>
+      <article class="panel morning-routine-panel">
+        <div class="panel-title">
+          <h3>Morning Routine</h3>
+          ${pill(`${briefing.morningRoutine.length} first-hour`, "strong")}
+        </div>
+        ${renderMorningRoutineItems(briefing.morningRoutine)}
+      </article>
       <div class="morning-grid">
         <article class="panel">
           <div class="panel-title">
@@ -179,6 +187,35 @@ function renderMorningBriefing() {
         </article>
       </div>
     </section>
+  `;
+}
+
+function renderMorningRoutineItems(items) {
+  if (items.length === 0) {
+    return `<p class="empty-copy">No morning routine items for this profile right now.</p>`;
+  }
+
+  return `
+    <ul class="briefing-list morning-routine-list">
+      ${items
+        .map(
+          (item) => `
+            <li>
+              <div>
+                <strong>${escapeHtml(item.title)}</strong>
+                <span>${escapeHtml(item.reason)}</span>
+              </div>
+              <div class="item-actions">
+                ${pill(statusText(item), statusTone(item))}
+                <button type="button" data-action="mark-done" data-collection="morningRoutine" data-id="${escapeHtml(item.id)}">Done</button>
+                <button type="button" data-action="snooze" data-collection="morningRoutine" data-id="${escapeHtml(item.id)}">Snooze</button>
+                <button type="button" data-action="dismiss-morning-routine" data-id="${escapeHtml(item.id)}">Dismiss</button>
+              </div>
+            </li>
+          `,
+        )
+        .join("")}
+    </ul>
   `;
 }
 
@@ -249,6 +286,7 @@ function renderNowCard(working) {
         <button type="button" data-action="skip" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Skip</button>
         ${recommendation.collection === "recommendations" ? `<button type="button" data-action="dismiss-recommendation" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
         ${recommendation.collection === "guidance" ? `<button type="button" data-action="dismiss-guidance" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
+        ${recommendation.collection === "morningRoutine" ? `<button type="button" data-action="dismiss-morning-routine" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
       </div>
     </article>
   `;
@@ -299,6 +337,7 @@ function renderDecisionCard(recommendation) {
         <button type="button" data-action="mark-done" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Done</button>
         <button type="button" data-action="snooze" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Snooze</button>
         <button type="button" data-action="skip" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Skip</button>
+        ${recommendation.collection === "morningRoutine" ? `<button type="button" data-action="dismiss-morning-routine" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
       </div>
     </article>
   `;
@@ -794,6 +833,10 @@ app.addEventListener("click", (event) => {
   }
   if (action === "dismiss-guidance") {
     dismissGuidance(id);
+    renderApp();
+  }
+  if (action === "dismiss-morning-routine") {
+    dismissMorningRoutine(id);
     renderApp();
   }
   if (action === "reset-local-data") {
