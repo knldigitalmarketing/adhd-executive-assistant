@@ -2,6 +2,7 @@ import { modelDefinitions } from "./models.js";
 import {
   addTask,
   answerInterviewQuestion,
+  dismissRecommendation,
   doItNow,
   editInterviewAnswer,
   getDecisionRecommendation,
@@ -220,6 +221,7 @@ function renderNowCard(working) {
         <button type="button" data-action="mark-done" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Done</button>
         <button type="button" data-action="snooze" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Snooze</button>
         <button type="button" data-action="skip" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Skip</button>
+        ${recommendation.collection === "recommendations" ? `<button type="button" data-action="dismiss-recommendation" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
       </div>
     </article>
   `;
@@ -325,6 +327,29 @@ function renderAddTaskForm() {
           <option value="flexible" selected>Flexible</option>
           <option value="scheduled">Scheduled</option>
           <option value="deadline">Deadline</option>
+        </select>
+      </div>
+      <div>
+        <label for="task-category">Category</label>
+        <select id="task-category" name="category">
+          <option selected>Personal</option>
+          <option>Health</option>
+          <option>Fitness</option>
+          <option>Work</option>
+          <option>Money</option>
+          <option>Relationship</option>
+          <option>Errand</option>
+        </select>
+      </div>
+      <div>
+        <label for="task-work-type">Work Type</label>
+        <select id="task-work-type" name="workType">
+          <option selected>None</option>
+          <option>Revenue</option>
+          <option>Admin</option>
+          <option>Follow-up</option>
+          <option>Creative</option>
+          <option>Maintenance</option>
         </select>
       </div>
       <input type="hidden" name="areaId" value="projects" />
@@ -495,7 +520,7 @@ function renderActionItem(action) {
       <span class="task-dot"></span>
       <div>
         <strong>${escapeHtml(action.title)}</strong>
-        <span>${escapeHtml(areaName(action.areaId))} - ${escapeHtml(action.priority)} priority</span>
+        <span>${escapeHtml(renderTaskContext(action))}</span>
       </div>
       <div class="item-actions">
         ${pill(statusText(action), statusTone(action))}
@@ -503,6 +528,15 @@ function renderActionItem(action) {
       </div>
     </li>
   `;
+}
+
+function renderTaskContext(task) {
+  const parts = [task.category ?? areaName(task.areaId), `${task.priority} priority`];
+  if (task.category === "Work" && task.workType && task.workType !== "none") {
+    parts.push(titleCase(task.workType.replaceAll("_", "-")));
+  }
+
+  return parts.join(" - ");
 }
 
 function renderRoutineItem(routine) {
@@ -724,6 +758,10 @@ app.addEventListener("click", (event) => {
   }
   if (action === "skip") {
     skipItem(collection, id);
+    renderApp();
+  }
+  if (action === "dismiss-recommendation") {
+    dismissRecommendation(id);
     renderApp();
   }
   if (action === "reset-local-data") {

@@ -47,6 +47,18 @@ export const interviewQuestions = [
     ],
   },
   {
+    id: "fitness-goal",
+    category: "fitness",
+    field: "goal",
+    prompt: "What fitness goal should I support first?",
+    onlyIf: { field: "wantsSupport", value: "yes" },
+    options: [
+      { value: "weight_loss", label: "Weight loss", rulesets: ["weight_loss_support"] },
+      { value: "muscle_gain", label: "Muscle gain", rulesets: ["muscle_gain_support"] },
+      { value: "consistency", label: "Just consistency", rulesets: ["consistency_over_intensity"] },
+    ],
+  },
+  {
     id: "health-primary",
     category: "health",
     field: "wantsSupport",

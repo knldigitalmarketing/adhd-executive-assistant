@@ -90,6 +90,17 @@ export function editInterviewAnswer(questionId) {
 }
 
 export function markDone(collectionName, id) {
+  if (collectionName === "recommendations") {
+    state.recommendationState[id] = {
+      ...state.recommendationState[id],
+      status: "done",
+      completed: true,
+      completedAt: new Date().toISOString(),
+    };
+    saveState(state);
+    return;
+  }
+
   const item = findByCollection(collectionName, id);
   if (!item) {
     return;
@@ -103,6 +114,16 @@ export function markDone(collectionName, id) {
 }
 
 export function doItNow(collectionName, id) {
+  if (collectionName === "recommendations") {
+    state.recommendationState[id] = {
+      ...state.recommendationState[id],
+      status: "doing",
+      startedAt: new Date().toISOString(),
+    };
+    saveState(state);
+    return;
+  }
+
   const item = findByCollection(collectionName, id);
   if (!item) {
     return;
@@ -116,6 +137,11 @@ export function doItNow(collectionName, id) {
 }
 
 export function snoozeItem(collectionName, id) {
+  if (collectionName === "recommendations") {
+    snoozeRecommendation(id);
+    return;
+  }
+
   const item = findByCollection(collectionName, id);
   if (!item) {
     return;
@@ -127,7 +153,27 @@ export function snoozeItem(collectionName, id) {
   saveState(state);
 }
 
+export function snoozeRecommendation(id) {
+  state.recommendationState[id] = {
+    ...state.recommendationState[id],
+    status: "snoozed",
+    snoozedUntil: getSnoozeLabel(),
+  };
+  saveState(state);
+}
+
 export function skipItem(collectionName, id) {
+  if (collectionName === "recommendations") {
+    state.recommendationState[id] = {
+      ...state.recommendationState[id],
+      status: "skipped",
+      completed: false,
+      skippedUntil: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    };
+    saveState(state);
+    return;
+  }
+
   const item = findByCollection(collectionName, id);
   if (!item) {
     return;
@@ -136,6 +182,15 @@ export function skipItem(collectionName, id) {
   item.status = "skipped";
   item.completed = false;
   item.skippedUntil = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+  saveState(state);
+}
+
+export function dismissRecommendation(id) {
+  state.recommendationState[id] = {
+    ...state.recommendationState[id],
+    status: "dismissed",
+    dismissedAt: new Date().toISOString(),
+  };
   saveState(state);
 }
 
@@ -148,10 +203,14 @@ export function addTask(formData) {
   const areaId = String(formData.get("areaId") ?? "projects");
   const timingType = String(formData.get("timingType") ?? "flexible");
   const when = String(formData.get("when") ?? "Today");
+  const category = String(formData.get("category") ?? "Personal");
+  const workType = normalizeWorkType(String(formData.get("workType") ?? "none"));
   const task = {
     id: `action-${Date.now()}`,
     areaId,
     title,
+    category,
+    workType,
     timingType,
     status: "todo",
     priority: String(formData.get("priority") ?? "Medium"),
@@ -247,7 +306,7 @@ export function getOpenTodayActions() {
 }
 
 export function isDone(item) {
-  return item.completed === true || item.status === "done" || item.status === "Done";
+  return item.completed === true || item.status === "done" || item.status === "Done" || item.status === "dismissed";
 }
 
 export function isSnoozed(item) {
@@ -293,7 +352,91 @@ export function statusTone(item) {
 }
 
 function allCompletableItems() {
-  return [...state.actions, ...state.routines, ...state.timeline];
+  return [...state.actions, ...state.routines, ...state.timeline, ...getGeneratedRecommendations()];
+}
+
+function getGeneratedRecommendations() {
+  const profile = state.interviewProfile ?? {};
+  const activeRulesets = new Set(profile.activeRulesets ?? []);
+  const recommendations = [];
+
+  if (profile.fitness?.goal === "weight_loss" || activeRulesets.has("weight_loss_support")) {
+    recommendations.push(createRecommendation({
+      id: "rec-weight-loss-water",
+      title: "Drink water this morning",
+      category: "Health",
+      priority: "Medium",
+      timingType: "flexible",
+      preferredWindow: "Today",
+      dueDate: "Today",
+      reason: "Weight Loss support",
+    }));
+    recommendations.push(createRecommendation({
+      id: "rec-weight-loss-walk",
+      title: "Take a short morning walk",
+      category: "Fitness",
+      priority: "Medium",
+      timingType: "flexible",
+      preferredWindow: "Today",
+      dueDate: "Today",
+      reason: "Weight Loss support",
+    }));
+  }
+
+  if (profile.fitness?.goal === "muscle_gain" || activeRulesets.has("muscle_gain_support")) {
+    recommendations.push(createRecommendation({
+      id: "rec-muscle-protein",
+      title: "Plan protein with your next meal",
+      category: "Health",
+      priority: "Medium",
+      timingType: "flexible",
+      preferredWindow: "Today",
+      dueDate: "Today",
+      reason: "Muscle Gain support",
+    }));
+  }
+
+  if (profile.adhd?.busyFailureMode || activeRulesets.has("time_blindness_support") || activeRulesets.has("decision_paralysis_support")) {
+    recommendations.push(createRecommendation({
+      id: "rec-adhd-morning-plan",
+      title: "Review the day before starting",
+      category: "Personal",
+      priority: "High",
+      timingType: "flexible",
+      preferredWindow: "Today",
+      dueDate: "Today",
+      reason: "ADHD support",
+    }));
+  }
+
+  if (profile.work?.workType === "self_employed" || activeRulesets.has("self_employed")) {
+    recommendations.push(createRecommendation({
+      id: "rec-self-employed-revenue-review",
+      title: "Review one revenue-producing task",
+      category: "Work",
+      workType: "revenue",
+      priority: "High",
+      timingType: "flexible",
+      preferredWindow: "Today",
+      dueDate: "Today",
+      reason: "Self-employed support",
+    }));
+  }
+
+  return recommendations.filter((item) => !isDone(item));
+}
+
+function createRecommendation(baseRecommendation) {
+  const savedState = state.recommendationState?.[baseRecommendation.id] ?? {};
+  return {
+    areaId: "recommendations",
+    estimatedEffortMinutes: 10,
+    type: "Recommendation",
+    source: "Profile",
+    workType: "none",
+    ...baseRecommendation,
+    ...savedState,
+  };
 }
 
 function getActionableCandidates() {
@@ -309,6 +452,11 @@ function getActionableCandidates() {
       collection: "focusSessions",
       item,
       order: state.actions.length + state.routines.length + state.timeline.length + index,
+    })),
+    ...getGeneratedRecommendations().map((item, index) => ({
+      collection: "recommendations",
+      item,
+      order: state.actions.length + state.routines.length + state.timeline.length + state.focusSessions.length + index,
     })),
   ];
 }
@@ -329,6 +477,10 @@ function scoreCandidate(candidate) {
     reasons.push("due today");
   }
 
+  if (item.type === "Recommendation") {
+    reasons.push(item.reason ?? "profile recommendation");
+  }
+
   const deadlineUrgency = getDeadlineUrgencyScore(item);
   if (deadlineUrgency > 0) {
     score += deadlineUrgency;
@@ -338,6 +490,11 @@ function scoreCandidate(candidate) {
   if (item.priority === "High") {
     score += 25;
     reasons.push("high priority");
+  }
+
+  if (item.priority === "High" && isHealthTask(item)) {
+    score += 5;
+    reasons.push("health importance boost");
   }
 
   if (item.priority === "Medium") {
@@ -413,11 +570,11 @@ function applyRulesetEffects(item, ruleEffects) {
   }
 
   if (activeRulesets.has("self_employed")) {
-    if (item.workType === "revenue") {
+    if (item.category === "Work" && item.workType === "revenue") {
       score += 15;
       ruleEffects.push("Self-employed revenue boost");
     }
-    if (item.workType === "administrative") {
+    if (item.category === "Work" && (item.workType === "admin" || item.workType === "administrative")) {
       score -= 5;
       ruleEffects.push("Self-employed admin penalty");
     }
@@ -661,12 +818,25 @@ function inferTimingType(item) {
 function isMovementTask(item) {
   const title = String(item.title ?? item.name ?? "").toLowerCase();
   return (
+    item.category === "Fitness" ||
     item.areaId === "fitness" ||
     (item.areaId === "health" && title.includes("exercise")) ||
     title.includes("walk") ||
     title.includes("stretch") ||
     title.includes("workout")
   );
+}
+
+function isHealthTask(item) {
+  return item.category === "Health" || item.areaId === "health";
+}
+
+function normalizeWorkType(workType) {
+  if (workType === "None") {
+    return "none";
+  }
+
+  return workType.toLowerCase().replaceAll("-", "_");
 }
 
 function isDeadlineWithinHours(item, hours) {
@@ -688,6 +858,10 @@ function getTodayKey() {
 }
 
 function findByCollection(collectionName, id) {
+  if (collectionName === "recommendations") {
+    return getGeneratedRecommendations().find((item) => item.id === id);
+  }
+
   return state[collectionName]?.find((item) => item.id === id);
 }
 
