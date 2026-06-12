@@ -3,6 +3,7 @@ import {
   addTask,
   answerInterviewQuestion,
   completeEndOfDayReview,
+  completeWeeklyReview,
   dismissRecommendation,
   dismissGuidance,
   dismissMorningRoutine,
@@ -20,6 +21,7 @@ import {
   getOpenTodayActions,
   getState,
   getTodayStats,
+  getWeeklyReviewData,
   getWorkingModeData,
   isDone,
   loadDemo,
@@ -130,7 +132,104 @@ function renderEndOfDayReview() {
           ${renderCarryoverForm(review)}
         </article>
       </div>
+      ${renderWeeklyReview()}
     </section>
+  `;
+}
+
+function renderWeeklyReview() {
+  const review = getWeeklyReviewData();
+
+  return `
+    <section class="weekly-review-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Weekly Review</p>
+          <h2>Last 7 days</h2>
+        </div>
+        <div class="button-row">
+          ${review.savedReview ? pill("Weekly review saved", "strong") : ""}
+          <button type="button" data-action="complete-weekly-review">Save Weekly Review</button>
+        </div>
+      </div>
+      <div class="briefing-grid">
+        <article class="panel">
+          <div class="panel-title">
+            <h3>Top Accomplishments</h3>
+            ${pill(`${review.topAccomplishments.length} shown`, "strong")}
+          </div>
+          ${renderWeeklyList(
+            review.topAccomplishments.map((item) => ({ title: item.title, detail: item.goalArea })),
+            "No accomplishments logged yet.",
+          )}
+        </article>
+        <article class="panel">
+          <div class="panel-title">
+            <h3>Missed Items</h3>
+            ${pill(`${review.missedItems.length} missed`, "warn")}
+          </div>
+          ${renderWeeklyList(
+            review.missedItems.map((item) => ({ title: item.title, detail: `${item.missedCount} missed` })),
+            "No missed items recorded.",
+          )}
+        </article>
+        <article class="panel">
+          <div class="panel-title">
+            <h3>Focus Sessions</h3>
+            ${pill(`${review.focusSessionsCompleted.length} completed`, "strong")}
+          </div>
+          ${renderWeeklyList(
+            review.focusSessionsCompleted.map((item) => ({ title: item.title, detail: `${Math.round((item.completedSeconds ?? 0) / 60)} min` })),
+            "No completed focus sessions yet.",
+          )}
+        </article>
+        <article class="panel">
+          <h3>Goal Progress</h3>
+          ${renderGoalProgress({ counts: review.goalProgress, summary: `${review.completedItems.length} completed in the last 7 days.` })}
+        </article>
+        <article class="panel">
+          <div class="panel-title">
+            <h3>Recurring Problem Areas</h3>
+            ${pill(`${review.recurringProblems.length} patterns`, "warn")}
+          </div>
+          ${renderWeeklyList(
+            review.recurringProblems.map((item) => ({
+              title: item.title,
+              detail: `${item.snoozeCount} snoozed - ${item.skipCount} skipped - ${item.dismissCount} dismissed`,
+            })),
+            "No recurring problem areas yet.",
+          )}
+        </article>
+        <article class="panel">
+          <h3>Improvement Suggestions</h3>
+          ${renderWeeklyList(
+            review.suggestions.map((suggestion) => ({ title: suggestion, detail: "Next week" })),
+            "No suggestions yet.",
+          )}
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function renderWeeklyList(items, emptyText) {
+  if (items.length === 0) {
+    return `<p class="empty-copy">${escapeHtml(emptyText)}</p>`;
+  }
+
+  return `
+    <ul class="briefing-list">
+      ${items
+        .map(
+          (item) => `
+            <li>
+              <strong>${escapeHtml(item.title)}</strong>
+              <span>${escapeHtml(item.detail)}</span>
+            </li>
+          `,
+        )
+        .join("")}
+    </ul>
   `;
 }
 
@@ -1164,6 +1263,10 @@ app.addEventListener("click", (event) => {
   }
   if (action === "show-review") {
     setActiveView("review");
+    renderApp();
+  }
+  if (action === "complete-weekly-review") {
+    completeWeeklyReview();
     renderApp();
   }
   if (action === "answer-interview") {

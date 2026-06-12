@@ -56,6 +56,7 @@ function mergeState(base, stored) {
     focusHistory: arrayOrDefault(stored.focusHistory, base.focusHistory),
     progressHistory: arrayOrDefault(stored.progressHistory, base.progressHistory),
     endOfDayReviews: { ...base.endOfDayReviews, ...stored.endOfDayReviews },
+    weeklyReviewHistory: { ...base.weeklyReviewHistory, ...stored.weeklyReviewHistory },
     responsibilityAreas: arrayOrDefault(stored.responsibilityAreas, base.responsibilityAreas),
     profiles: arrayOrDefault(stored.profiles, base.profiles),
     routines: arrayOrDefault(stored.routines, base.routines),

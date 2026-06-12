@@ -384,6 +384,10 @@ main {
   gap: 12px;
 }
 
+.weekly-review-panel {
+  margin-top: 24px;
+}
+
 .carryover-option {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

@@ -59,6 +59,45 @@ export function buildEndOfDayReviewData(context) {
   };
 }
 
+export function buildWeeklyReviewData(context) {
+  const weekKey = getWeekKey(new Date());
+  const completedItems = getCompletedLastSevenDays(context);
+  const missedItems = getMissedLastSevenDays(context);
+  const focusSessionsCompleted = getCompletedFocusSessions(context.state);
+  const goalProgress = getSevenDayGoalProgress(context.state);
+  const recurringProblems = getRecurringProblems(context.state);
+  const topAccomplishments = completedItems.slice(0, 5);
+  const suggestions = buildImprovementSuggestions(recurringProblems, missedItems);
+
+  return {
+    weekKey,
+    completedItems,
+    missedItems,
+    focusSessionsCompleted,
+    goalProgress,
+    topAccomplishments,
+    recurringProblems,
+    suggestions,
+    savedReview: context.state.weeklyReviewHistory?.[weekKey] ?? null,
+  };
+}
+
+export function saveWeeklyReviewSnapshot(context) {
+  const { state, saveState } = context;
+  const review = buildWeeklyReviewData(context);
+  state.weeklyReviewHistory = state.weeklyReviewHistory ?? {};
+  state.weeklyReviewHistory[review.weekKey] = {
+    completedAt: new Date().toISOString(),
+    completedCount: review.completedItems.length,
+    missedCount: review.missedItems.length,
+    focusSessionCount: review.focusSessionsCompleted.length,
+    goalProgress: review.goalProgress,
+    recurringProblemCount: review.recurringProblems.length,
+    suggestionCount: review.suggestions.length,
+  };
+  saveState(state);
+}
+
 export function completeEndOfDayReviewFromCarryoverIds(context, carryoverIds = []) {
   const { state, getTodayKey, saveState } = context;
   const todayKey = getTodayKey();
@@ -231,6 +270,109 @@ function isToday(value, getTodayKey) {
   }
 
   return date.toISOString().slice(0, 10) === getTodayKey();
+}
+
+function getCompletedLastSevenDays(context) {
+  return (context.state.progressHistory ?? [])
+    .filter((entry) => isWithinLastDays(entry.completedAt, 7))
+    .sort((left, right) => new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime())
+    .map((entry) => ({
+      key: `${entry.collection}:${entry.itemId}`,
+      title: entry.title,
+      status: "Done",
+      goalArea: entry.goalArea,
+      completedAt: entry.completedAt,
+    }));
+}
+
+function getMissedLastSevenDays(context) {
+  return Object.entries(context.getLearningStats())
+    .filter(([, stats]) => stats.lastMissedDate && isWithinLastDays(stats.lastMissedDate, 7))
+    .map(([key, stats]) => ({
+      key,
+      title: stats.title ?? key,
+      missedCount: Number(stats.missedCount ?? 0),
+      lastMissedDate: stats.lastMissedDate,
+    }))
+    .sort((left, right) => right.missedCount - left.missedCount || String(right.lastMissedDate).localeCompare(String(left.lastMissedDate)));
+}
+
+function getCompletedFocusSessions(state) {
+  return (state.focusHistory ?? [])
+    .filter((entry) => entry.completedFocus === true && isWithinLastDays(entry.endedAt, 7))
+    .sort((left, right) => new Date(right.endedAt).getTime() - new Date(left.endedAt).getTime());
+}
+
+function getSevenDayGoalProgress(state) {
+  const areas = ["Health", "Fitness", "Work", "Money", "Relationships", "Personal"];
+  const counts = Object.fromEntries(areas.map((area) => [area, 0]));
+
+  for (const entry of state.progressHistory ?? []) {
+    if (isWithinLastDays(entry.completedAt, 7) && counts[entry.goalArea] !== undefined) {
+      counts[entry.goalArea] += 1;
+    }
+  }
+
+  return counts;
+}
+
+function getRecurringProblems(state) {
+  return Object.entries(state.learningStats ?? {})
+    .map(([key, stats]) => ({
+      key,
+      title: stats.title ?? key,
+      snoozeCount: Number(stats.snoozeCount ?? 0),
+      skipCount: Number(stats.skipCount ?? 0),
+      dismissCount: Number(stats.dismissCount ?? 0),
+    }))
+    .filter((entry) => entry.snoozeCount >= 2 || entry.skipCount >= 2 || entry.dismissCount >= 2)
+    .sort((left, right) => getProblemTotal(right) - getProblemTotal(left));
+}
+
+function buildImprovementSuggestions(recurringProblems, missedItems) {
+  const suggestions = [];
+
+  if (recurringProblems.some((item) => item.snoozeCount >= 2)) {
+    suggestions.push("Schedule repeatedly snoozed items for a different time.");
+  }
+  if (recurringProblems.some((item) => item.skipCount >= 2)) {
+    suggestions.push("Break repeatedly skipped items into a smaller first step.");
+  }
+  if (recurringProblems.some((item) => item.dismissCount >= 2)) {
+    suggestions.push("Review repeatedly dismissed items and remove anything that no longer matters.");
+  }
+  if (missedItems.length > 0) {
+    suggestions.push("Move missed items into tomorrow planning before starting the day.");
+  }
+  if (suggestions.length === 0) {
+    suggestions.push("Keep using Working Mode and End-of-Day Review to protect the next action.");
+  }
+
+  return suggestions;
+}
+
+function getProblemTotal(problem) {
+  return problem.snoozeCount + problem.skipCount + problem.dismissCount;
+}
+
+function isWithinLastDays(value, days) {
+  if (!value) {
+    return false;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - (days - 1));
+  return date >= start && date <= new Date();
+}
+
+function getWeekKey(date) {
+  return getWeekStartDate(date).toISOString().slice(0, 10);
 }
 
 function getWeekStartDate(date) {

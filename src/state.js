@@ -17,10 +17,12 @@ import {
 import {
   buildEndOfDayReviewData,
   buildGoalProgressSummary,
+  buildWeeklyReviewData,
   buildTomorrowPlanningData,
   completeEndOfDayReviewFromCarryoverIds,
   getGoalAreaForItem,
   recordGoalProgressEntry,
+  saveWeeklyReviewSnapshot,
 } from "./progress-review.js";
 import {
   buildGeneratedRecoverySuggestions,
@@ -626,6 +628,14 @@ export function completeEndOfDayReview(carryoverIds = []) {
   completeEndOfDayReviewFromCarryoverIds(getProgressReviewContext(), carryoverIds);
 }
 
+export function getWeeklyReviewData() {
+  return buildWeeklyReviewData(getProgressReviewContext());
+}
+
+export function completeWeeklyReview() {
+  saveWeeklyReviewSnapshot(getProgressReviewContext());
+}
+
 export function getGoalProgressSummary() {
   return buildGoalProgressSummary({ state, getTodayKey });
 }
@@ -1222,6 +1232,7 @@ function createDemoState(demoId) {
   demoState.focusHistory = [];
   demoState.progressHistory = [];
   demoState.endOfDayReviews = {};
+  demoState.weeklyReviewHistory = {};
 
   if (demoId === "adhd-weight-loss") {
     demoState.interviewProfile = buildProfileWithRulesets({
