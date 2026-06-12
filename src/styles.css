@@ -416,6 +416,26 @@ main {
   font-size: 2rem;
 }
 
+.focus-mode-panel {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.focus-mode-panel span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.focus-mode-panel strong {
+  font-size: 1.5rem;
+}
+
 .add-task-form {
   display: grid;
   grid-template-columns: minmax(220px, 1.4fr) repeat(5, minmax(120px, 0.65fr)) auto;

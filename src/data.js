@@ -130,6 +130,8 @@ export const appState = {
   learningStats: {},
   recoveryState: {},
   recoveryHistory: [],
+  focusMode: null,
+  focusHistory: [],
   waitingOn: [
     { id: "wait-insurance", title: "Insurance quote", owner: "Insurance company", areaId: "finances" },
     { id: "wait-doctor", title: "Doctor office callback", owner: "Provider office", areaId: "health" },

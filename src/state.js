@@ -22,6 +22,25 @@ export function getLearningStats() {
   return state.learningStats;
 }
 
+export function getFocusModeData() {
+  const focus = state.focusMode;
+  if (!focus) {
+    return {
+      status: "idle",
+      timeRemaining: formatFocusTime(25 * 60),
+      remainingSeconds: 25 * 60,
+      durationSeconds: 25 * 60,
+    };
+  }
+
+  const remainingSeconds = getFocusRemainingSeconds(focus);
+  return {
+    ...focus,
+    remainingSeconds,
+    timeRemaining: formatFocusTime(remainingSeconds),
+  };
+}
+
 export function getActiveView() {
   if (state.ui?.lastMorningBriefingDate !== getTodayKey()) {
     return "briefing";
@@ -52,6 +71,84 @@ export function resetLocalData() {
 
 export function loadDemo(demoId) {
   state = createDemoState(demoId);
+  saveState(state);
+}
+
+export function startFocus(collectionName, id) {
+  const item = findByCollection(collectionName, id);
+  if (!item) {
+    return;
+  }
+
+  state.focusMode = {
+    id: `focus-${Date.now()}`,
+    collection: collectionName,
+    itemId: id,
+    title: item.title ?? item.name,
+    status: "running",
+    durationSeconds: 25 * 60,
+    remainingSeconds: 25 * 60,
+    startedAt: new Date().toISOString(),
+    resumedAt: new Date().toISOString(),
+  };
+  saveState(state);
+}
+
+export function pauseFocus() {
+  if (!state.focusMode || state.focusMode.status !== "running") {
+    return;
+  }
+
+  state.focusMode = {
+    ...state.focusMode,
+    status: "paused",
+    remainingSeconds: getFocusRemainingSeconds(state.focusMode),
+    pausedAt: new Date().toISOString(),
+  };
+  saveState(state);
+}
+
+export function resumeFocus() {
+  if (!state.focusMode || state.focusMode.status !== "paused") {
+    return;
+  }
+
+  state.focusMode = {
+    ...state.focusMode,
+    status: "running",
+    resumedAt: new Date().toISOString(),
+  };
+  saveState(state);
+}
+
+export function endFocus(markNowDone = false) {
+  if (!state.focusMode) {
+    return;
+  }
+
+  const focus = getFocusModeData();
+  const endedAt = new Date().toISOString();
+  state.focusHistory = state.focusHistory ?? [];
+  state.focusHistory.push({
+    id: focus.id,
+    collection: focus.collection,
+    itemId: focus.itemId,
+    title: focus.title,
+    startedAt: focus.startedAt,
+    endedAt,
+    durationSeconds: focus.durationSeconds,
+    completedSeconds: Math.max(0, focus.durationSeconds - focus.remainingSeconds),
+    completedFocus: focus.remainingSeconds === 0,
+    markedDone: Boolean(markNowDone),
+  });
+  state.focusHistory = state.focusHistory.slice(-50);
+  state.focusMode = null;
+
+  if (markNowDone) {
+    markDone(focus.collection, focus.itemId);
+    return;
+  }
+
   saveState(state);
 }
 
@@ -495,6 +592,13 @@ export function formatTimeRemaining(minutesUntilDue) {
   }
 
   return `Time Remaining: ${hours} ${hours === 1 ? "hour" : "hours"} ${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+}
+
+export function formatFocusTime(totalSeconds) {
+  const safeSeconds = Math.max(0, Math.ceil(totalSeconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 export function getScoredActionableItems() {
@@ -1449,6 +1553,24 @@ function getTimeRemainingLabel(comingUp) {
   return formatTimeRemaining(getMinutesUntilTime(startTime));
 }
 
+function getFocusRemainingSeconds(focus) {
+  if (!focus) {
+    return 25 * 60;
+  }
+
+  if (focus.status !== "running") {
+    return Math.max(0, Number(focus.remainingSeconds ?? focus.durationSeconds ?? 25 * 60));
+  }
+
+  const resumedAt = new Date(focus.resumedAt ?? focus.startedAt).getTime();
+  if (Number.isNaN(resumedAt)) {
+    return Math.max(0, Number(focus.remainingSeconds ?? focus.durationSeconds ?? 25 * 60));
+  }
+
+  const elapsedSeconds = Math.floor((Date.now() - resumedAt) / 1000);
+  return Math.max(0, Number(focus.remainingSeconds ?? focus.durationSeconds ?? 25 * 60) - elapsedSeconds);
+}
+
 function getMinutesUntilTime(timeText) {
   const target = parseTodayTime(timeText);
   if (!target) {
@@ -1618,6 +1740,8 @@ function createDemoState(demoId) {
   demoState.learningStats = {};
   demoState.recoveryState = {};
   demoState.recoveryHistory = [];
+  demoState.focusMode = null;
+  demoState.focusHistory = [];
 
   if (demoId === "adhd-weight-loss") {
     demoState.interviewProfile = buildProfileWithRulesets({

@@ -8,9 +8,11 @@ import {
   dismissRecoverySuggestion,
   dismissItem,
   doItNow,
+  endFocus,
   editInterviewAnswer,
   getDecisionRecommendation,
   getActiveView,
+  getFocusModeData,
   getInterviewState,
   getMorningBriefingData,
   getOpenTodayActions,
@@ -24,6 +26,9 @@ import {
   setActiveView,
   skipItem,
   snoozeItem,
+  pauseFocus,
+  resumeFocus,
+  startFocus,
   startMyDay,
   statusText,
   statusTone,
@@ -318,6 +323,7 @@ function renderNowCard(working) {
       <div class="time-remaining">
         <strong>${escapeHtml(working.timeRemaining)}</strong>
       </div>
+      ${renderFocusModeControls(recommendation)}
       <div class="button-row">
         <button type="button" data-action="mark-done" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Done</button>
         <button type="button" data-action="snooze" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Snooze</button>
@@ -329,6 +335,62 @@ function renderNowCard(working) {
         ${!["recommendations", "guidance", "morningRoutine", "recoverySuggestions"].includes(recommendation.collection) ? `<button type="button" data-action="dismiss-item" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
       </div>
     </article>
+  `;
+}
+
+function renderFocusModeControls(recommendation) {
+  const focus = getFocusModeData();
+  const isThisNow = focus.collection === recommendation.collection && focus.itemId === recommendation.item.id;
+
+  if (focus.status === "running" && isThisNow) {
+    return `
+      <div class="focus-mode-panel">
+        <span>Focus Mode</span>
+        <strong>${escapeHtml(focus.timeRemaining)}</strong>
+        <div class="button-row">
+          <button type="button" data-action="pause-focus">Pause Focus</button>
+          <button type="button" data-action="end-focus">End Focus</button>
+          <button type="button" data-action="end-focus-done">End & Mark Done</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (focus.status === "paused" && isThisNow) {
+    return `
+      <div class="focus-mode-panel">
+        <span>Focus Mode paused</span>
+        <strong>${escapeHtml(focus.timeRemaining)}</strong>
+        <div class="button-row">
+          <button type="button" data-action="resume-focus">Start Focus</button>
+          <button type="button" data-action="end-focus">End Focus</button>
+          <button type="button" data-action="end-focus-done">End & Mark Done</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (focus.status !== "idle") {
+    return `
+      <div class="focus-mode-panel">
+        <span>Focus Mode active</span>
+        <strong>${escapeHtml(focus.title)} - ${escapeHtml(focus.timeRemaining)}</strong>
+        <div class="button-row">
+          ${focus.status === "running" ? `<button type="button" data-action="pause-focus">Pause Focus</button>` : `<button type="button" data-action="resume-focus">Start Focus</button>`}
+          <button type="button" data-action="end-focus">End Focus</button>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="focus-mode-panel">
+      <span>Focus Mode</span>
+      <strong>25:00</strong>
+      <div class="button-row">
+        <button type="button" data-action="start-focus" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Start Focus</button>
+      </div>
+    </div>
   `;
 }
 
@@ -840,11 +902,14 @@ function scheduleWorkingModeRefresh(activeView) {
     return;
   }
 
+  const focus = getFocusModeData();
+  const refreshMs = focus.status === "running" ? 1000 : 60000;
+
   workingModeTimer = setInterval(() => {
     if (getActiveView() === "working") {
       renderApp();
     }
-  }, 60000);
+  }, refreshMs);
 }
 
 app.addEventListener("click", (event) => {
@@ -868,6 +933,26 @@ app.addEventListener("click", (event) => {
   }
   if (action === "skip") {
     skipItem(collection, id);
+    renderApp();
+  }
+  if (action === "start-focus") {
+    startFocus(collection, id);
+    renderApp();
+  }
+  if (action === "pause-focus") {
+    pauseFocus();
+    renderApp();
+  }
+  if (action === "resume-focus") {
+    resumeFocus();
+    renderApp();
+  }
+  if (action === "end-focus") {
+    endFocus(false);
+    renderApp();
+  }
+  if (action === "end-focus-done") {
+    endFocus(true);
     renderApp();
   }
   if (action === "dismiss-recommendation") {
