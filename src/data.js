@@ -114,7 +114,7 @@ export const appState = {
     { id: "action-insurance", areaId: "finances", title: "Call insurance company", timingType: "flexible", preferredWindow: "Today", dueDate: "Today", status: "todo", priority: "High", estimatedEffortMinutes: 15 },
     { id: "action-electric", areaId: "finances", title: "Pay electric bill", timingType: "deadline", deadline: "Today", dueDate: "Today", status: "todo", priority: "High", estimatedEffortMinutes: 10 },
     { id: "action-doctor", areaId: "health", title: "Confirm doctor appointment", timingType: "deadline", deadline: "Tomorrow", dueDate: "Tomorrow", status: "todo", priority: "Medium", estimatedEffortMinutes: 10 },
-    { id: "action-client", areaId: "business", title: "Reply to client", timingType: "flexible", preferredWindow: "Today", dueDate: "Today", status: "waiting", priority: "Medium", estimatedEffortMinutes: 25 },
+    { id: "action-client", areaId: "business", title: "Reply to client", timingType: "flexible", preferredWindow: "Today", dueDate: "Today", status: "waiting", priority: "Medium", estimatedEffortMinutes: 25, workType: "revenue" },
   ],
   obligations: [
     { id: "ob-home-insurance", profileId: "home-profile", name: "Home insurance", dueDate: "In 43 days", status: "Needs review", urgency: "Soon" },

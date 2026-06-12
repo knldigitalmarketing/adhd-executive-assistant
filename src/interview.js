@@ -20,7 +20,7 @@ export const interviewQuestions = [
       { value: "start", label: "Starting tasks", rulesets: ["procrastination_breakdown", "starter_steps"] },
       { value: "stop", label: "Stopping or switching tasks", rulesets: ["task_switching_support", "transition_warnings"] },
       { value: "remember", label: "Remembering tasks", rulesets: ["memory_backup", "recurring_checkins"] },
-      { value: "choose", label: "Choosing what matters", rulesets: ["one_next_action", "decision_fatigue_reduction"] },
+      { value: "choose", label: "Choosing what matters", rulesets: ["one_next_action", "decision_fatigue_reduction", "decision_paralysis_support"] },
     ],
   },
   {
@@ -90,6 +90,17 @@ export const interviewQuestions = [
       { value: "focus", label: "Focus time", rulesets: ["deep_work_blocks"] },
       { value: "messages", label: "Messages", rulesets: ["communication_followup"] },
       { value: "priorities", label: "Unclear priorities", rulesets: ["priority_compression"] },
+    ],
+  },
+  {
+    id: "work-type",
+    category: "work",
+    field: "workType",
+    prompt: "What kind of work should I optimize for?",
+    onlyIf: { field: "wantsSupport", value: "yes" },
+    options: [
+      { value: "employee", label: "Employee work", rulesets: ["workday_priorities"] },
+      { value: "self_employed", label: "Self-employed or business owner", rulesets: ["self_employed"] },
     ],
   },
   {

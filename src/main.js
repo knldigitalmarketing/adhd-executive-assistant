@@ -212,7 +212,7 @@ function renderNowCard(working) {
     <article class="working-card now-card">
       <p class="eyebrow">Now</p>
       <h3>${escapeHtml(recommendation.title)}</h3>
-      <p>${escapeHtml(recommendation.why)}</p>
+      ${renderWhyList(recommendation.why)}
       <div class="time-remaining">
         <strong>${escapeHtml(working.timeRemaining)}</strong>
       </div>
@@ -260,7 +260,7 @@ function renderDecisionCard(recommendation) {
     <article class="next-card decision-card">
       <p class="eyebrow">Do This Next</p>
       <h3>${escapeHtml(recommendation.title)}</h3>
-      <p>${escapeHtml(recommendation.why)}</p>
+      ${renderWhyList(recommendation.why)}
       <dl class="decision-meta">
         <div><dt>Estimated effort</dt><dd>${recommendation.effort} min</dd></div>
         <div><dt>Priority score</dt><dd>${recommendation.score}</dd></div>
@@ -272,6 +272,23 @@ function renderDecisionCard(recommendation) {
         <button type="button" data-action="skip" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Skip</button>
       </div>
     </article>
+  `;
+}
+
+function renderWhyList(why) {
+  const reasons = String(why)
+    .split("\n")
+    .map((reason) => reason.trim())
+    .filter(Boolean);
+
+  if (reasons.length === 0) {
+    return "";
+  }
+
+  return `
+    <ul class="why-list">
+      ${reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}
+    </ul>
   `;
 }
 

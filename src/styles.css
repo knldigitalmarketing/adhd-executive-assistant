@@ -345,6 +345,15 @@ main {
   line-height: 1.55;
 }
 
+.why-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .now-card {
   border-left: 5px solid var(--green);
 }

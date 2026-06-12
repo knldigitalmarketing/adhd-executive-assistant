@@ -315,6 +315,7 @@ function getActionableCandidates() {
 
 function scoreCandidate(candidate) {
   const reasons = [];
+  const ruleEffects = [];
   const { item } = candidate;
   let score = 0;
 
@@ -364,6 +365,9 @@ function scoreCandidate(candidate) {
     reasons.push("recently skipped");
   }
 
+  const rulesetScore = applyRulesetEffects(item, ruleEffects);
+  score += rulesetScore;
+
   return {
     ...candidate,
     title: item.title ?? item.name,
@@ -371,9 +375,55 @@ function scoreCandidate(candidate) {
     effort,
     score,
     reasons,
-    why: formatWhy(reasons),
+    ruleEffects,
+    why: formatWhy(reasons, ruleEffects),
     isSkipped: skipped,
   };
+}
+
+function applyRulesetEffects(item, ruleEffects) {
+  const activeRulesets = new Set(state.interviewProfile?.activeRulesets ?? []);
+  let score = 0;
+
+  if (activeRulesets.has("time_blindness_support") && (item.timingType ?? inferTimingType(item)) === "scheduled") {
+    const minutesUntilStart = getRawMinutesUntilScheduledStart(item);
+    if (minutesUntilStart <= 15) {
+      score += 40;
+      ruleEffects.push("Time Blindness Support boost");
+    } else if (minutesUntilStart <= 30) {
+      score += 20;
+      ruleEffects.push("Time Blindness Support boost");
+    }
+  }
+
+  if (activeRulesets.has("decision_paralysis_support")) {
+    const effort = getEstimatedEffort(item);
+    if (effort <= 15) {
+      score += 10;
+      ruleEffects.push("Decision Paralysis Support favors the simplest action");
+    } else if (effort > 30) {
+      score -= 10;
+      ruleEffects.push("Decision Paralysis Support lowers complex actions");
+    }
+  }
+
+  if (activeRulesets.has("short_movement_blocks") && isMovementTask(item)) {
+    score += 10;
+    ruleEffects.push("Short Movement Blocks boost");
+  }
+
+  if (activeRulesets.has("self_employed")) {
+    if (item.workType === "revenue") {
+      score += 15;
+      ruleEffects.push("Self-employed revenue boost");
+    }
+    if (item.workType === "administrative") {
+      score -= 5;
+      ruleEffects.push("Self-employed admin penalty");
+    }
+  }
+
+  return score;
 }
 
 function getEstimatedEffort(item) {
@@ -406,12 +456,12 @@ function isDueToday(item) {
   return item.dueDate === "Today" || item.deadline === "Today" || item.preferredWindow === "Today";
 }
 
-function formatWhy(reasons) {
-  if (reasons.length === 0) {
+function formatWhy(reasons, ruleEffects = []) {
+  if (reasons.length === 0 && ruleEffects.length === 0) {
     return "It is the best available next action based on your visible commitments.";
   }
 
-  return `Selected because it is ${reasons.join(", ")}.`;
+  return [...reasons, ...ruleEffects].join("\n");
 }
 
 function getNextItem() {
@@ -606,6 +656,17 @@ function inferTimingType(item) {
     return "deadline";
   }
   return "flexible";
+}
+
+function isMovementTask(item) {
+  const title = String(item.title ?? item.name ?? "").toLowerCase();
+  return (
+    item.areaId === "fitness" ||
+    (item.areaId === "health" && title.includes("exercise")) ||
+    title.includes("walk") ||
+    title.includes("stretch") ||
+    title.includes("workout")
+  );
 }
 
 function isDeadlineWithinHours(item, hours) {
