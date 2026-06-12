@@ -574,6 +574,7 @@ export function getWorkingModeData() {
 export function getMorningBriefingData() {
   return {
     goalProgress: getGoalProgressSummary(),
+    tomorrowPlanning: getTomorrowPlanningData(),
     morningRoutine: getGeneratedMorningRoutine(),
     recoverySuggestions: getGeneratedRecoverySuggestions(),
     bigThings: getScoredActionableItems().slice(0, 3),
@@ -582,6 +583,24 @@ export function getMorningBriefingData() {
       .filter(isOpen)
       .sort((left, right) => getRawMinutesUntilScheduledStart(left) - getRawMinutesUntilScheduledStart(right)),
     potentialIssues: getPotentialIssues(),
+  };
+}
+
+export function getTomorrowPlanningData() {
+  const tomorrowItems = getTomorrowItems().filter(({ item }) => !isDone(item));
+  const carriedOver = tomorrowItems.filter(({ item }) => item.source === "End-of-Day Review");
+  const scheduledTomorrow = tomorrowItems
+    .filter(({ item }) => (item.timingType ?? inferTimingType(item)) === "scheduled")
+    .sort((left, right) => getRawMinutesUntilScheduledStart(left.item) - getRawMinutesUntilScheduledStart(right.item));
+  const topPriorities = tomorrowItems
+    .filter(({ item }) => (item.timingType ?? inferTimingType(item)) !== "scheduled")
+    .sort((left, right) => getPriorityWeight(right.item.priority) - getPriorityWeight(left.item.priority) || getEstimatedEffort(left.item) - getEstimatedEffort(right.item))
+    .slice(0, 3);
+
+  return {
+    carriedOver,
+    scheduledTomorrow,
+    topPriorities,
   };
 }
 
@@ -792,6 +811,19 @@ function getReviewableEntries() {
     title: entry.item.title ?? entry.item.name,
     status: statusText(entry.item),
   }));
+}
+
+function getTomorrowItems() {
+  return [
+    ...state.actions.map((item) => ({ collection: "actions", item })),
+    ...state.routines.map((item) => ({ collection: "routines", item })),
+    ...state.timeline.map((item) => ({ collection: "timeline", item })),
+    ...state.focusSessions.map((item) => ({ collection: "focusSessions", item })),
+  ].filter(({ item }) => isTomorrowItem(item));
+}
+
+function isTomorrowItem(item) {
+  return item.dueDate === "Tomorrow" || item.deadline === "Tomorrow" || item.preferredWindow === "Tomorrow";
 }
 
 function getCompletedTodayItems() {
@@ -1659,6 +1691,19 @@ function formatMinuteOfDay(minuteOfDay) {
 
 function getEstimatedEffort(item) {
   return Number(item.estimatedEffortMinutes ?? 30);
+}
+
+function getPriorityWeight(priority) {
+  if (priority === "High") {
+    return 3;
+  }
+  if (priority === "Medium") {
+    return 2;
+  }
+  if (priority === "Low") {
+    return 1;
+  }
+  return 0;
 }
 
 function isOverdue(item) {

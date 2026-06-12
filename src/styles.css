@@ -406,6 +406,17 @@ main {
   font-weight: 800;
 }
 
+.tomorrow-planning-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.tomorrow-planning-grid h4 {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+}
+
 .briefing-list span,
 .empty-copy {
   color: var(--muted);
@@ -889,6 +900,7 @@ dd {
   .working-grid,
   .morning-grid,
   .goal-progress-list,
+  .tomorrow-planning-grid,
   .add-task-form {
     grid-template-columns: 1fr;
   }

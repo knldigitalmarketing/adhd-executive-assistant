@@ -263,6 +263,13 @@ function renderMorningBriefing() {
         </div>
         ${renderGoalProgress(briefing.goalProgress)}
       </article>
+      <article class="panel morning-routine-panel">
+        <div class="panel-title">
+          <h3>Tomorrow Planning</h3>
+          ${pill(`${briefing.tomorrowPlanning.topPriorities.length} priorities`, "strong")}
+        </div>
+        ${renderTomorrowPlanning(briefing.tomorrowPlanning)}
+      </article>
       <div class="morning-grid">
         <article class="panel">
           <div class="panel-title">
@@ -303,6 +310,46 @@ function renderMorningBriefing() {
         </article>
       </div>
     </section>
+  `;
+}
+
+function renderTomorrowPlanning(plan) {
+  return `
+    <div class="tomorrow-planning-grid">
+      <div>
+        <h4>Carried over from yesterday</h4>
+        ${renderPlanningList(plan.carriedOver, "No carryovers yet.")}
+      </div>
+      <div>
+        <h4>Tomorrow's scheduled items</h4>
+        ${renderPlanningList(plan.scheduledTomorrow, "No scheduled items for tomorrow.")}
+      </div>
+      <div>
+        <h4>Tomorrow's top priorities</h4>
+        ${renderPlanningList(plan.topPriorities, "No top priorities selected yet.")}
+      </div>
+    </div>
+  `;
+}
+
+function renderPlanningList(items, emptyText) {
+  if (items.length === 0) {
+    return `<p class="empty-copy">${escapeHtml(emptyText)}</p>`;
+  }
+
+  return `
+    <ul class="briefing-list">
+      ${items
+        .map(
+          ({ item }) => `
+            <li>
+              <strong>${escapeHtml(item.title ?? item.name)}</strong>
+              <span>${escapeHtml(item.startTime ?? item.time ?? item.priority ?? "Tomorrow")}</span>
+            </li>
+          `,
+        )
+        .join("")}
+    </ul>
   `;
 }
 
