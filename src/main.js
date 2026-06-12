@@ -1,18 +1,28 @@
-import { interviewSteps, modelDefinitions, responsibilityAreas } from "./models.js";
+import { modelDefinitions, responsibilityAreas } from "./models.js";
 import {
   addTask,
+  answerInterviewQuestion,
+  doItNow,
+  editInterviewAnswer,
+  getDecisionRecommendation,
+  getActiveView,
+  getInterviewState,
   getOpenTodayActions,
   getState,
   getTodayStats,
+  getWorkingModeData,
   isDone,
   markDone,
   resetLocalData,
+  setActiveView,
+  skipItem,
   snoozeItem,
   statusText,
   statusTone,
 } from "./state.js";
 
 const app = document.querySelector("#app");
+let workingModeTimer = null;
 
 function areaMap() {
   return new Map(getState().responsibilityAreas.map((area) => [area.id, area]));
@@ -51,6 +61,7 @@ function renderHeader() {
       </div>
       <nav aria-label="Primary">
         <a href="#today">Today</a>
+        <a href="#working">Working</a>
         <a href="#onboarding">Onboarding</a>
         <a href="#dashboard">Dashboard</a>
         <a href="#timeline">Timeline</a>
@@ -63,7 +74,7 @@ function renderHeader() {
 
 function renderToday() {
   const stats = getTodayStats();
-  const next = stats.next;
+  const recommendation = getDecisionRecommendation();
 
   return `
     <section id="today" class="section today-section">
@@ -72,23 +83,13 @@ function renderToday() {
           <p class="eyebrow">Today</p>
           <h2>Do this next</h2>
         </div>
-        <button type="button" class="secondary-button" data-action="reset-local-data">Reset local data</button>
+        <div class="button-row">
+          <button type="button" data-action="start-working">Start My Day</button>
+          <button type="button" class="secondary-button" data-action="reset-local-data">Reset local data</button>
+        </div>
       </div>
       <div class="today-grid">
-        <article class="next-card">
-          <p class="eyebrow">Executive-function cue</p>
-          ${
-            next
-              ? `
-                <h3>${escapeHtml(next.title ?? next.name)}</h3>
-                <p>${escapeHtml(areaName(next.areaId))} - ${escapeHtml(next.priority ?? next.type ?? "Daily item")}</p>
-              `
-              : `
-                <h3>Nothing urgent is open.</h3>
-                <p>Your visible items are done or snoozed. Check the timeline when you are ready.</p>
-              `
-          }
-        </article>
+        ${renderDecisionCard(recommendation)}
         <article class="stat-card">
           <strong>${stats.open}</strong>
           <span>Open</span>
@@ -104,6 +105,105 @@ function renderToday() {
       </div>
       ${renderAddTaskForm()}
     </section>
+  `;
+}
+
+function renderWorkingMode() {
+  const working = getWorkingModeData();
+
+  return `
+    <section id="working" class="section working-mode">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Working Mode</p>
+          <h2>Stay with the next step</h2>
+        </div>
+        <button type="button" class="secondary-button" data-action="show-dashboard">Full dashboard</button>
+      </div>
+      <div class="working-grid">
+        ${renderNowCard(working)}
+        ${renderComingUpCard(working.comingUp)}
+      </div>
+    </section>
+  `;
+}
+
+function renderNowCard(working) {
+  const recommendation = working.now;
+  if (!recommendation) {
+    return `
+      <article class="working-card now-card">
+        <p class="eyebrow">Now</p>
+        <h3>Nothing actionable is waiting.</h3>
+        <p>Your visible items are complete.</p>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="working-card now-card">
+      <p class="eyebrow">Now</p>
+      <h3>${escapeHtml(recommendation.title)}</h3>
+      <p>${escapeHtml(recommendation.why)}</p>
+      <div class="time-remaining">
+        <strong>${escapeHtml(working.timeRemaining)}</strong>
+      </div>
+      <div class="button-row">
+        <button type="button" data-action="mark-done" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Done</button>
+        <button type="button" data-action="snooze" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Snooze</button>
+        <button type="button" data-action="skip" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Skip</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderComingUpCard(item) {
+  if (!item) {
+    return `
+      <article class="working-card coming-card">
+        <p class="eyebrow">Coming Up</p>
+        <h3>No scheduled item is waiting.</h3>
+        <p>The timeline has no open upcoming item.</p>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="working-card coming-card">
+      <p class="eyebrow">Coming Up</p>
+      <h3>${escapeHtml(item.title ?? item.name)}</h3>
+      <p>${escapeHtml(item.time ?? item.plannedEndTime ?? "Later today")} - ${escapeHtml(item.type ?? "Upcoming")}</p>
+    </article>
+  `;
+}
+
+function renderDecisionCard(recommendation) {
+  if (!recommendation) {
+    return `
+      <article class="next-card decision-card">
+        <p class="eyebrow">Do This Next</p>
+        <h3>Nothing actionable is waiting.</h3>
+        <p>Your visible items are complete.</p>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="next-card decision-card">
+      <p class="eyebrow">Do This Next</p>
+      <h3>${escapeHtml(recommendation.title)}</h3>
+      <p>${escapeHtml(recommendation.why)}</p>
+      <dl class="decision-meta">
+        <div><dt>Estimated effort</dt><dd>${recommendation.effort} min</dd></div>
+        <div><dt>Priority score</dt><dd>${recommendation.score}</dd></div>
+      </dl>
+      <div class="button-row">
+        <button type="button" data-action="do-it-now" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Do It Now</button>
+        <button type="button" data-action="mark-done" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Done</button>
+        <button type="button" data-action="snooze" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Snooze</button>
+        <button type="button" data-action="skip" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Skip</button>
+      </div>
+    </article>
   `;
 }
 
@@ -148,8 +248,8 @@ function renderAddTaskForm() {
 }
 
 function renderOnboarding() {
-  const state = getState();
-  const snapshot = state.selectedSnapshot;
+  const interview = getInterviewState();
+  const question = interview.currentQuestion;
 
   return `
     <section id="onboarding" class="section">
@@ -158,83 +258,83 @@ function renderOnboarding() {
           <p class="eyebrow">Onboarding</p>
           <h2>Life snapshot first</h2>
         </div>
+        <button type="button" data-action="start-working">Start My Day</button>
       </div>
       <div class="onboarding-grid">
-        <article class="panel interview-panel">
+        <article class="panel interview-panel conversation-panel">
           <div class="panel-title">
-            <h3>${interviewSteps[0].title}</h3>
-            ${pill("Required", "strong")}
+            <h3>Interview Engine V1</h3>
+            ${pill(`${interview.progress.answered}/${interview.progress.total} answered`, "strong")}
           </div>
-          <p>${interviewSteps[0].goal}</p>
-          <div class="basic-info">
-            <label>
-              <span>First Name</span>
-              <input type="text" value="${escapeHtml(state.user.firstName)}" />
-            </label>
-            <label>
-              <span>Time Zone</span>
-              <input type="text" value="${escapeHtml(state.user.timeZone)}" />
-            </label>
-            <label>
-              <span>Wake Time</span>
-              <input type="time" value="${escapeHtml(state.user.preferredWakeTime)}" />
-            </label>
-            <label>
-              <span>Bed Time</span>
-              <input type="time" value="${escapeHtml(state.user.preferredBedTime)}" />
-            </label>
-          </div>
-          <div class="checklist-grid">
-            ${interviewSteps[0].sections
-              .map(
-                (section) => `
-                  <fieldset>
-                    <legend>${section.name}</legend>
-                    ${section.options
-                      .map((option) => {
-                        const checked = snapshot[section.name]?.includes(option) ? "checked" : "";
-                        return `
-                          <label>
-                            <input type="checkbox" ${checked} />
-                            <span>${escapeHtml(option)}</span>
-                          </label>
-                        `;
-                      })
-                      .join("")}
-                  </fieldset>
-                `,
-              )
-              .join("")}
-          </div>
+          ${renderInterviewQuestion(question, interview.completed)}
         </article>
         <aside class="panel profile-panel">
-          <h3>Profiles created from snapshot</h3>
-          <p>Setup can be incomplete and still useful. Details are collected progressively.</p>
-          <ul class="profile-list">
-            ${state.profiles
-              .map(
-                (profile) => `
-                  <li>
-                    <strong>${escapeHtml(profile.name)}</strong>
-                    <span>${escapeHtml(profile.details.join(", "))}</span>
-                  </li>
-                `,
-              )
-              .join("")}
-          </ul>
-          <div class="adhd-profile">
-            <h3>ADHD profile prompts</h3>
-            <ul>
-              <li>What are the biggest things you forget?</li>
-              <li>What causes the most stress?</li>
-              <li>What tasks do you procrastinate most?</li>
-              <li>How often should reminders be sent?</li>
-              <li>What type of reminders work best?</li>
-            </ul>
-          </div>
+          <h3>Saved profile</h3>
+          <p>Answers are saved locally. You can leave and resume from the current question.</p>
+          ${renderSavedProfile(interview)}
         </aside>
       </div>
     </section>
+  `;
+}
+
+function renderInterviewQuestion(question, completed) {
+  if (completed || !question) {
+    return `
+      <div class="conversation-message">
+        <p class="eyebrow">Setup paused at useful</p>
+        <h3>Interview complete for V1.</h3>
+        <p>The assistant has enough information to activate initial rulesets. You can edit any answer from the review panel.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="conversation-message">
+      <p class="eyebrow">${escapeHtml(titleCase(question.category))}</p>
+      <h3>${escapeHtml(question.prompt)}</h3>
+    </div>
+    <div class="answer-options">
+      ${question.options
+        .map(
+          (option) => `
+            <button type="button" data-action="answer-interview" data-question-id="${question.id}" data-answer="${option.value}">
+              ${escapeHtml(option.label)}
+            </button>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderSavedProfile(interview) {
+  return `
+    <div class="review-list">
+      ${interview.answeredQuestions.map((question) => renderAnsweredQuestion(question, interview.profile)).join("") || "<p>No answers yet.</p>"}
+    </div>
+    <div class="ruleset-list">
+      <h3>Active rulesets</h3>
+      <div>
+        ${interview.profile.activeRulesets.map((ruleset) => pill(ruleset)).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderAnsweredQuestion(question, profile) {
+  const value = profile[question.category]?.[question.field];
+  const option = question.options.find((item) => item.value === value);
+
+  return `
+    <article class="review-item">
+      <div>
+        <span>${escapeHtml(titleCase(question.category))}</span>
+        <strong>${escapeHtml(question.prompt)}</strong>
+        <p>${escapeHtml(option?.label ?? value)}</p>
+      </div>
+      <button type="button" data-action="edit-interview" data-question-id="${question.id}">Edit</button>
+    </article>
   `;
 }
 
@@ -480,18 +580,41 @@ function renderModels() {
 }
 
 function renderApp() {
+  const activeView = getActiveView();
+  const fullDashboard = `
+    ${renderToday()}
+    ${renderOnboarding()}
+    ${renderBriefing()}
+    ${renderResponsibilityEngine()}
+    ${renderTimeline()}
+    ${renderFocus()}
+    ${renderModels()}
+  `;
+
   app.innerHTML = `
     ${renderHeader()}
     <main>
-      ${renderToday()}
-      ${renderOnboarding()}
-      ${renderBriefing()}
-      ${renderResponsibilityEngine()}
-      ${renderTimeline()}
-      ${renderFocus()}
-      ${renderModels()}
+      ${activeView === "working" ? renderWorkingMode() : fullDashboard}
     </main>
   `;
+  scheduleWorkingModeRefresh(activeView);
+}
+
+function scheduleWorkingModeRefresh(activeView) {
+  if (workingModeTimer) {
+    clearInterval(workingModeTimer);
+    workingModeTimer = null;
+  }
+
+  if (activeView !== "working") {
+    return;
+  }
+
+  workingModeTimer = setInterval(() => {
+    if (getActiveView() === "working") {
+      renderApp();
+    }
+  }, 60000);
 }
 
 app.addEventListener("click", (event) => {
@@ -505,12 +628,36 @@ app.addEventListener("click", (event) => {
     markDone(collection, id);
     renderApp();
   }
+  if (action === "do-it-now") {
+    doItNow(collection, id);
+    renderApp();
+  }
   if (action === "snooze") {
     snoozeItem(collection, id);
     renderApp();
   }
+  if (action === "skip") {
+    skipItem(collection, id);
+    renderApp();
+  }
   if (action === "reset-local-data") {
     resetLocalData();
+    renderApp();
+  }
+  if (action === "start-working") {
+    setActiveView("working");
+    renderApp();
+  }
+  if (action === "show-dashboard") {
+    setActiveView("dashboard");
+    renderApp();
+  }
+  if (action === "answer-interview") {
+    answerInterviewQuestion(button.dataset.questionId, button.dataset.answer);
+    renderApp();
+  }
+  if (action === "edit-interview") {
+    editInterviewAnswer(button.dataset.questionId);
     renderApp();
   }
 });

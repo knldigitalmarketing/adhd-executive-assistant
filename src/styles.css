@@ -240,6 +240,39 @@ main {
   color: var(--muted);
 }
 
+.decision-card {
+  display: grid;
+  gap: 14px;
+}
+
+.decision-card p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.decision-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.decision-meta div {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.decision-meta dt {
+  margin-bottom: 4px;
+  font-size: 0.78rem;
+}
+
+.decision-meta dd {
+  font-weight: 800;
+}
+
 .stat-card {
   display: grid;
   place-items: center;
@@ -256,6 +289,63 @@ main {
 .stat-card span {
   color: var(--muted);
   font-weight: 800;
+}
+
+.working-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.35fr) minmax(240px, 0.8fr);
+  gap: 16px;
+}
+
+.working-card {
+  display: grid;
+  gap: 16px;
+  min-height: 320px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.working-card h3 {
+  margin: 0;
+  font-size: clamp(1.4rem, 2.5vw, 2.3rem);
+}
+
+.working-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.now-card {
+  border-left: 5px solid var(--green);
+}
+
+.coming-card {
+  border-left: 5px solid var(--blue);
+}
+
+.time-remaining {
+  display: grid;
+  gap: 4px;
+  width: min(100%, 220px);
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.time-remaining span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.time-remaining strong {
+  font-size: 2rem;
 }
 
 .add-task-form {
@@ -346,6 +436,86 @@ label {
   margin: 12px 0 0;
   padding-left: 18px;
   color: var(--muted);
+}
+
+.conversation-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.conversation-message {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.conversation-message h3 {
+  margin: 0;
+  font-size: clamp(1.2rem, 2vw, 1.7rem);
+}
+
+.conversation-message p:last-child {
+  margin-bottom: 0;
+}
+
+.answer-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.answer-options button {
+  justify-content: flex-start;
+  min-height: 52px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.review-list {
+  display: grid;
+  gap: 10px;
+}
+
+.review-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.review-item span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--blue);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.review-item strong,
+.review-item p {
+  display: block;
+}
+
+.review-item p {
+  margin: 5px 0 0;
+  color: var(--muted);
+}
+
+.ruleset-list {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.ruleset-list div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
 }
 
 input[type="checkbox"] {
@@ -573,6 +743,7 @@ dd {
   .onboarding-grid,
   .briefing-grid,
   .today-grid,
+  .working-grid,
   .add-task-form {
     grid-template-columns: 1fr;
   }
