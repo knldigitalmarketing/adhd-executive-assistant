@@ -50,6 +50,8 @@ function mergeState(base, stored) {
     guidanceState: { ...base.guidanceState, ...stored.guidanceState },
     morningRoutineState: { ...base.morningRoutineState, ...stored.morningRoutineState },
     learningStats: { ...base.learningStats, ...stored.learningStats },
+    recoveryState: { ...base.recoveryState, ...stored.recoveryState },
+    recoveryHistory: arrayOrDefault(stored.recoveryHistory, base.recoveryHistory),
     responsibilityAreas: arrayOrDefault(stored.responsibilityAreas, base.responsibilityAreas),
     profiles: arrayOrDefault(stored.profiles, base.profiles),
     routines: arrayOrDefault(stored.routines, base.routines),

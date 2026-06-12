@@ -5,6 +5,7 @@ import {
   dismissRecommendation,
   dismissGuidance,
   dismissMorningRoutine,
+  dismissRecoverySuggestion,
   dismissItem,
   doItNow,
   editInterviewAnswer,
@@ -148,6 +149,13 @@ function renderMorningBriefing() {
         </div>
         ${renderMorningRoutineItems(briefing.morningRoutine)}
       </article>
+      <article class="panel morning-routine-panel">
+        <div class="panel-title">
+          <h3>Recovery Suggestions</h3>
+          ${pill(`${briefing.recoverySuggestions.length} active`, "strong")}
+        </div>
+        ${renderRecoverySuggestionItems(briefing.recoverySuggestions)}
+      </article>
       <div class="morning-grid">
         <article class="panel">
           <div class="panel-title">
@@ -188,6 +196,35 @@ function renderMorningBriefing() {
         </article>
       </div>
     </section>
+  `;
+}
+
+function renderRecoverySuggestionItems(items) {
+  if (items.length === 0) {
+    return `<p class="empty-copy">No recovery suggestions are needed right now.</p>`;
+  }
+
+  return `
+    <ul class="briefing-list morning-routine-list">
+      ${items
+        .map(
+          (item) => `
+            <li>
+              <div>
+                <strong>${escapeHtml(item.title)}</strong>
+                <span>${escapeHtml(item.recoveryAction)}</span>
+              </div>
+              <div class="item-actions">
+                ${pill(statusText(item), statusTone(item))}
+                <button type="button" data-action="mark-done" data-collection="recoverySuggestions" data-id="${escapeHtml(item.id)}">Done</button>
+                <button type="button" data-action="snooze" data-collection="recoverySuggestions" data-id="${escapeHtml(item.id)}">Snooze</button>
+                <button type="button" data-action="dismiss-recovery-suggestion" data-id="${escapeHtml(item.id)}">Dismiss</button>
+              </div>
+            </li>
+          `,
+        )
+        .join("")}
+    </ul>
   `;
 }
 
@@ -288,7 +325,8 @@ function renderNowCard(working) {
         ${recommendation.collection === "recommendations" ? `<button type="button" data-action="dismiss-recommendation" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
         ${recommendation.collection === "guidance" ? `<button type="button" data-action="dismiss-guidance" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
         ${recommendation.collection === "morningRoutine" ? `<button type="button" data-action="dismiss-morning-routine" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
-        ${!["recommendations", "guidance", "morningRoutine"].includes(recommendation.collection) ? `<button type="button" data-action="dismiss-item" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
+        ${recommendation.collection === "recoverySuggestions" ? `<button type="button" data-action="dismiss-recovery-suggestion" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
+        ${!["recommendations", "guidance", "morningRoutine", "recoverySuggestions"].includes(recommendation.collection) ? `<button type="button" data-action="dismiss-item" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
       </div>
     </article>
   `;
@@ -340,7 +378,8 @@ function renderDecisionCard(recommendation) {
         <button type="button" data-action="snooze" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Snooze</button>
         <button type="button" data-action="skip" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Skip</button>
         ${recommendation.collection === "morningRoutine" ? `<button type="button" data-action="dismiss-morning-routine" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
-        ${!["recommendations", "guidance", "morningRoutine"].includes(recommendation.collection) ? `<button type="button" data-action="dismiss-item" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
+        ${recommendation.collection === "recoverySuggestions" ? `<button type="button" data-action="dismiss-recovery-suggestion" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
+        ${!["recommendations", "guidance", "morningRoutine", "recoverySuggestions"].includes(recommendation.collection) ? `<button type="button" data-action="dismiss-item" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
       </div>
     </article>
   `;
@@ -841,6 +880,10 @@ app.addEventListener("click", (event) => {
   }
   if (action === "dismiss-morning-routine") {
     dismissMorningRoutine(id);
+    renderApp();
+  }
+  if (action === "dismiss-recovery-suggestion") {
+    dismissRecoverySuggestion(id);
     renderApp();
   }
   if (action === "dismiss-item") {

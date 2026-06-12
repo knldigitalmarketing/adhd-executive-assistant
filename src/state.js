@@ -100,6 +100,19 @@ export function editInterviewAnswer(questionId) {
 }
 
 export function markDone(collectionName, id) {
+  if (collectionName === "recoverySuggestions") {
+    recordItemEvent(collectionName, id, "done");
+    state.recoveryState[id] = {
+      ...state.recoveryState[id],
+      status: "done",
+      completed: true,
+      completedAt: new Date().toISOString(),
+    };
+    recordRecoveryHistory(id, "done");
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "morningRoutine") {
     recordItemEvent(collectionName, id, "done");
     state.morningRoutineState[id] = {
@@ -150,6 +163,17 @@ export function markDone(collectionName, id) {
 }
 
 export function doItNow(collectionName, id) {
+  if (collectionName === "recoverySuggestions") {
+    state.recoveryState[id] = {
+      ...state.recoveryState[id],
+      status: "doing",
+      startedAt: new Date().toISOString(),
+    };
+    recordRecoveryHistory(id, "doing");
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "morningRoutine") {
     state.morningRoutineState[id] = {
       ...state.morningRoutineState[id],
@@ -193,6 +217,11 @@ export function doItNow(collectionName, id) {
 }
 
 export function snoozeItem(collectionName, id) {
+  if (collectionName === "recoverySuggestions") {
+    snoozeRecoverySuggestion(id);
+    return;
+  }
+
   if (collectionName === "morningRoutine") {
     snoozeMorningRoutine(id);
     return;
@@ -250,7 +279,31 @@ export function snoozeMorningRoutine(id) {
   saveState(state);
 }
 
+export function snoozeRecoverySuggestion(id) {
+  recordItemEvent("recoverySuggestions", id, "snoozed");
+  state.recoveryState[id] = {
+    ...state.recoveryState[id],
+    status: "snoozed",
+    snoozedUntil: getSnoozeLabel(),
+  };
+  recordRecoveryHistory(id, "snoozed");
+  saveState(state);
+}
+
 export function skipItem(collectionName, id) {
+  if (collectionName === "recoverySuggestions") {
+    recordItemEvent(collectionName, id, "skipped");
+    state.recoveryState[id] = {
+      ...state.recoveryState[id],
+      status: "skipped",
+      completed: false,
+      skippedUntil: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    };
+    recordRecoveryHistory(id, "skipped");
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "morningRoutine") {
     recordItemEvent(collectionName, id, "skipped");
     state.morningRoutineState[id] = {
@@ -329,6 +382,17 @@ export function dismissMorningRoutine(id) {
   saveState(state);
 }
 
+export function dismissRecoverySuggestion(id) {
+  recordItemEvent("recoverySuggestions", id, "dismissed");
+  state.recoveryState[id] = {
+    ...state.recoveryState[id],
+    status: "dismissed",
+    dismissedAt: new Date().toISOString(),
+  };
+  recordRecoveryHistory(id, "dismissed");
+  saveState(state);
+}
+
 export function dismissItem(collectionName, id) {
   const item = findByCollection(collectionName, id);
   if (!item) {
@@ -404,6 +468,7 @@ export function getWorkingModeData() {
 export function getMorningBriefingData() {
   return {
     morningRoutine: getGeneratedMorningRoutine(),
+    recoverySuggestions: getGeneratedRecoverySuggestions(),
     bigThings: getScoredActionableItems().slice(0, 3),
     guidance: getGeneratedGuidance(),
     scheduledToday: getScheduledCandidates()
@@ -508,6 +573,7 @@ function allCompletableItems() {
     ...getGeneratedRecommendations(),
     ...getGeneratedGuidance(),
     ...getGeneratedMorningRoutine(),
+    ...getGeneratedRecoverySuggestions(),
   ];
 }
 
@@ -786,10 +852,60 @@ function createMorningRoutineItem(baseRoutine) {
   };
 }
 
+function getGeneratedRecoverySuggestions() {
+  recordMissedOpenItems();
+  const suggestions = [];
+
+  for (const [key, stats] of Object.entries(getLearningStats())) {
+    const avoidanceCount = getAvoidanceCount(stats);
+    if (avoidanceCount < 3 || key.startsWith("recoverySuggestions:")) {
+      continue;
+    }
+
+    const [sourceCollection, sourceId] = key.split(":");
+    const sourceItem = findByCollection(sourceCollection, sourceId);
+    if (sourceItem && isDone(sourceItem)) {
+      continue;
+    }
+
+    suggestions.push(createRecoverySuggestion({
+      id: `recovery-${sourceCollection}-${sourceId}`,
+      sourceCollection,
+      sourceId,
+      title: buildRecoveryTitle(stats, sourceItem),
+      category: sourceItem?.category ?? "Personal",
+      workType: sourceItem?.workType ?? "none",
+      priority: "Medium",
+      reason: buildRecoveryReason(stats),
+      recoveryAction: chooseRecoveryAction(stats, sourceItem),
+      avoidanceCount,
+    }));
+  }
+
+  return suggestions.filter((item) => !isDone(item));
+}
+
+function createRecoverySuggestion(baseSuggestion) {
+  const savedState = state.recoveryState?.[baseSuggestion.id] ?? {};
+  return {
+    areaId: "recovery",
+    estimatedEffortMinutes: 10,
+    type: "Recovery Suggestion",
+    source: "Learning",
+    timingType: "flexible",
+    dueDate: "Today",
+    preferredWindow: "Today",
+    workType: "none",
+    ...baseSuggestion,
+    ...savedState,
+  };
+}
+
 function getActionableCandidates() {
   const generatedRecommendations = getGeneratedRecommendations();
   const generatedGuidance = getGeneratedGuidance();
   const generatedMorningRoutine = getGeneratedMorningRoutine();
+  const generatedRecoverySuggestions = getGeneratedRecoverySuggestions();
 
   return [
     ...state.actions.map((item, index) => ({ collection: "actions", item, order: index })),
@@ -832,6 +948,19 @@ function getActionableCandidates() {
         generatedGuidance.length +
         index,
     })),
+    ...generatedRecoverySuggestions.map((item, index) => ({
+      collection: "recoverySuggestions",
+      item,
+      order:
+        state.actions.length +
+        state.routines.length +
+        state.timeline.length +
+        state.focusSessions.length +
+        generatedRecommendations.length +
+        generatedGuidance.length +
+        generatedMorningRoutine.length +
+        index,
+    })),
   ];
 }
 
@@ -861,6 +990,11 @@ function scoreCandidate(candidate) {
 
   if (item.type === "Morning Routine") {
     reasons.push(item.reason ?? "morning routine");
+  }
+
+  if (item.type === "Recovery Suggestion") {
+    reasons.push(item.reason ?? "recovery suggestion");
+    reasons.push(item.recoveryAction ?? "try a smaller recovery step");
   }
 
   const deadlineUrgency = getDeadlineUrgencyScore(item);
@@ -954,6 +1088,11 @@ function getAdaptiveEffect(collectionName, item) {
     }
   }
 
+  if (getAvoidanceCount(stats) >= 3 && collectionName !== "recoverySuggestions") {
+    score -= 25;
+    reasons.push("Recovery suggestion available, so this is not being pushed unchanged");
+  }
+
   return { score, reasons };
 }
 
@@ -1038,7 +1177,46 @@ function recordItemEvent(collectionName, id, eventName, item = null) {
     next.skipCount = Number(next.skipCount ?? 0) + 1;
   }
 
+  if (eventName === "missed") {
+    next.missedCount = Number(next.missedCount ?? 0) + 1;
+    next.lastMissedDate = getTodayKey();
+  }
+
   state.learningStats[key] = next;
+}
+
+function recordMissedOpenItems() {
+  const missableCollections = [
+    ["actions", state.actions],
+    ["routines", state.routines],
+    ["timeline", state.timeline],
+    ["focusSessions", state.focusSessions],
+  ];
+
+  let changed = false;
+  for (const [collectionName, items] of missableCollections) {
+    for (const item of items) {
+      if (!isOpen(item) || (item.timingType ?? inferTimingType(item)) !== "scheduled") {
+        continue;
+      }
+
+      if (getRawMinutesUntilScheduledStart(item) > -30) {
+        continue;
+      }
+
+      const key = getLearningKey(collectionName, item.id);
+      if (getLearningStats()[key]?.lastMissedDate === getTodayKey()) {
+        continue;
+      }
+
+      recordItemEvent(collectionName, item.id, "missed", item);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    saveState(state);
+  }
 }
 
 function createEmptyLearningStats(collectionName, id, item) {
@@ -1050,11 +1228,65 @@ function createEmptyLearningStats(collectionName, id, item) {
     snoozeCount: 0,
     dismissCount: 0,
     skipCount: 0,
+    missedCount: 0,
     preferredCompletionTime: null,
     preferredCompletionMinute: null,
     completionTimes: [],
     snoozeWindows: [],
   };
+}
+
+function recordRecoveryHistory(id, eventName) {
+  state.recoveryHistory = state.recoveryHistory ?? [];
+  state.recoveryHistory.push({
+    id: `history-${id}-${Date.now()}`,
+    recoveryId: id,
+    event: eventName,
+    at: new Date().toISOString(),
+  });
+  state.recoveryHistory = state.recoveryHistory.slice(-50);
+}
+
+function getAvoidanceCount(stats = {}) {
+  return Number(stats.snoozeCount ?? 0) + Number(stats.skipCount ?? 0) + Number(stats.missedCount ?? 0);
+}
+
+function buildRecoveryTitle(stats, sourceItem) {
+  return `Recovery: ${sourceItem?.title ?? sourceItem?.name ?? stats.title ?? "stuck task"}`;
+}
+
+function buildRecoveryReason(stats) {
+  const parts = [];
+  if (Number(stats.snoozeCount ?? 0) > 0) {
+    parts.push(`${stats.snoozeCount} snoozed`);
+  }
+  if (Number(stats.skipCount ?? 0) > 0) {
+    parts.push(`${stats.skipCount} skipped`);
+  }
+  if (Number(stats.missedCount ?? 0) > 0) {
+    parts.push(`${stats.missedCount} missed`);
+  }
+  return `Repeatedly delayed: ${parts.join(", ")}`;
+}
+
+function chooseRecoveryAction(stats, sourceItem) {
+  if (Number(stats.snoozeCount ?? 0) >= 2 && Number.isFinite(stats.preferredCompletionMinute)) {
+    return `Try it near ${formatMinuteOfDay(stats.preferredCompletionMinute)} instead.`;
+  }
+
+  if ((sourceItem?.timingType ?? inferTimingType(sourceItem ?? {})) !== "scheduled" && Number(stats.snoozeCount ?? 0) >= 2) {
+    return "Schedule it for a specific time.";
+  }
+
+  if (Number(stats.skipCount ?? 0) >= 2) {
+    return "Do only the first tiny step.";
+  }
+
+  if (Number(stats.missedCount ?? 0) >= 2) {
+    return "Move it to tomorrow or choose a new time.";
+  }
+
+  return "Break it into a smaller first step.";
 }
 
 function getLearningKey(collectionName, id) {
@@ -1384,6 +1616,8 @@ function createDemoState(demoId) {
   demoState.guidanceState = {};
   demoState.morningRoutineState = {};
   demoState.learningStats = {};
+  demoState.recoveryState = {};
+  demoState.recoveryHistory = [];
 
   if (demoId === "adhd-weight-loss") {
     demoState.interviewProfile = buildProfileWithRulesets({
@@ -1503,6 +1737,10 @@ function clone(value) {
 }
 
 function findByCollection(collectionName, id) {
+  if (collectionName === "recoverySuggestions") {
+    return getGeneratedRecoverySuggestions().find((item) => item.id === id);
+  }
+
   if (collectionName === "morningRoutine") {
     return getGeneratedMorningRoutine().find((item) => item.id === id);
   }
