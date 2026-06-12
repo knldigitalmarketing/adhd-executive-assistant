@@ -17,6 +17,7 @@ import {
 import {
   buildEndOfDayReviewData,
   buildGoalProgressSummary,
+  buildLifeAreaDashboardData,
   buildWeeklyReviewData,
   buildTomorrowPlanningData,
   completeEndOfDayReviewFromCarryoverIds,
@@ -632,6 +633,10 @@ export function getWeeklyReviewData() {
   return buildWeeklyReviewData(getProgressReviewContext());
 }
 
+export function getLifeAreaDashboardData() {
+  return buildLifeAreaDashboardData(getProgressReviewContext());
+}
+
 export function completeWeeklyReview() {
   saveWeeklyReviewSnapshot(getProgressReviewContext());
 }
@@ -760,6 +765,7 @@ function getProgressReviewContext() {
     isDone,
     isSnoozed,
     isSkipped,
+    isOverdue,
     statusText,
   };
 }

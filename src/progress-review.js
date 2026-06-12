@@ -82,6 +82,31 @@ export function buildWeeklyReviewData(context) {
   };
 }
 
+export function buildLifeAreaDashboardData(context) {
+  const areas = ["Health", "Fitness", "Work", "Money", "Relationships", "Personal"];
+  const weeklyProgress = getSevenDayGoalProgress(context.state);
+  const openEntries = getReviewableEntries(context).filter(({ item }) => !context.isDone(item));
+
+  return areas.map((area) => {
+    const areaEntries = openEntries.filter(({ item }) => getGoalAreaForItem(item) === area);
+    const activeTasks = areaEntries.filter(({ item }) => !context.isSnoozed(item) && !context.isSkipped(item));
+    const overdueItems = areaEntries.filter(({ item }) => context.isOverdue(item));
+    const weeklyCompletionCount = weeklyProgress[area] ?? 0;
+    const denominator = weeklyCompletionCount + activeTasks.length;
+    const progressPercentage = denominator === 0 ? 0 : Math.round((weeklyCompletionCount / denominator) * 100);
+
+    return {
+      area,
+      weeklyCompletionCount,
+      activeTaskCount: activeTasks.length,
+      overdueCount: overdueItems.length,
+      progressPercentage,
+      activeTasks: activeTasks.slice(0, 3).map(toLifeAreaDisplayItem),
+      overdueItems: overdueItems.slice(0, 3).map(toLifeAreaDisplayItem),
+    };
+  });
+}
+
 export function saveWeeklyReviewSnapshot(context) {
   const { state, saveState } = context;
   const review = buildWeeklyReviewData(context);
@@ -194,6 +219,15 @@ function getReviewableEntries({ state, getGeneratedRecommendations, getGenerated
     title: entry.item.title ?? entry.item.name,
     status: statusText(entry.item),
   }));
+}
+
+function toLifeAreaDisplayItem({ item, status }) {
+  return {
+    id: item.id,
+    title: item.title ?? item.name,
+    status,
+    priority: item.priority ?? "Medium",
+  };
 }
 
 function getTomorrowItems(state) {

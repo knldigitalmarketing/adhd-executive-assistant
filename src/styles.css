@@ -421,6 +421,55 @@ main {
   font-size: 0.9rem;
 }
 
+.life-area-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.life-area-card {
+  display: grid;
+  gap: 16px;
+}
+
+.life-area-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.life-area-metrics div {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.life-area-metrics dt {
+  margin-bottom: 4px;
+  font-size: 0.78rem;
+}
+
+.life-area-metrics dd {
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.life-area-lists {
+  display: grid;
+  gap: 14px;
+}
+
+.life-area-lists h4 {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+}
+
+.life-area-list li {
+  padding-block: 10px;
+}
+
 .briefing-list span,
 .empty-copy {
   color: var(--muted);
@@ -904,6 +953,7 @@ dd {
   .working-grid,
   .morning-grid,
   .goal-progress-list,
+  .life-area-grid,
   .tomorrow-planning-grid,
   .add-task-form {
     grid-template-columns: 1fr;

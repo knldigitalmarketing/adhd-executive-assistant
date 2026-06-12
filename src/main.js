@@ -17,6 +17,7 @@ import {
   getActiveView,
   getFocusModeData,
   getInterviewState,
+  getLifeAreaDashboardData,
   getMorningBriefingData,
   getOpenTodayActions,
   getState,
@@ -81,6 +82,7 @@ function renderHeader() {
         <a href="#working">Working</a>
         <a href="#review">Review</a>
         <a href="#onboarding">Onboarding</a>
+        <a href="#life-areas">Life Areas</a>
         <a href="#dashboard">Dashboard</a>
         <a href="#timeline">Timeline</a>
         <a href="#focus">Focus</a>
@@ -561,6 +563,7 @@ function renderWorkingMode() {
         </div>
         <div class="button-row">
           <button type="button" class="secondary-button" data-action="show-dashboard">Full dashboard</button>
+          <button type="button" class="secondary-button" data-action="show-life-areas">Life Areas</button>
           <button type="button" class="secondary-button" data-action="show-review">End-of-Day Review</button>
         </div>
       </div>
@@ -953,6 +956,84 @@ function renderBriefing() {
   `;
 }
 
+function renderLifeAreaDashboard() {
+  const areas = getLifeAreaDashboardData();
+
+  return `
+    <section id="life-areas" class="section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Life Area Dashboard</p>
+          <h2>Weekly balance</h2>
+        </div>
+      </div>
+      <div class="life-area-grid">
+        ${areas.map((area) => renderLifeAreaCard(area)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderLifeAreaCard(area) {
+  return `
+    <article class="panel life-area-card">
+      <div class="panel-title">
+        <h3>${escapeHtml(area.area)}</h3>
+        ${pill(`${area.progressPercentage}%`, area.overdueCount > 0 ? "warn" : "strong")}
+      </div>
+      <dl class="life-area-metrics">
+        <div>
+          <dt>Weekly completions</dt>
+          <dd>${area.weeklyCompletionCount}</dd>
+        </div>
+        <div>
+          <dt>Active tasks</dt>
+          <dd>${area.activeTaskCount}</dd>
+        </div>
+        <div>
+          <dt>Overdue</dt>
+          <dd>${area.overdueCount}</dd>
+        </div>
+        <div>
+          <dt>Progress</dt>
+          <dd>${area.progressPercentage}%</dd>
+        </div>
+      </dl>
+      <div class="life-area-lists">
+        <div>
+          <h4>Active</h4>
+          ${renderLifeAreaList(area.activeTasks, "No active items.")}
+        </div>
+        <div>
+          <h4>Overdue</h4>
+          ${renderLifeAreaList(area.overdueItems, "No overdue items.")}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderLifeAreaList(items, emptyText) {
+  if (items.length === 0) {
+    return `<p class="empty-copy">${escapeHtml(emptyText)}</p>`;
+  }
+
+  return `
+    <ul class="briefing-list life-area-list">
+      ${items
+        .map(
+          (item) => `
+            <li>
+              <strong>${escapeHtml(item.title)}</strong>
+              <span>${escapeHtml(item.status)} - ${escapeHtml(item.priority)} priority</span>
+            </li>
+          `,
+        )
+        .join("")}
+    </ul>
+  `;
+}
+
 function renderActionItem(action) {
   return `
     <li class="${isDone(action) ? "is-complete" : ""}">
@@ -1145,6 +1226,7 @@ function renderApp() {
     ${renderToday()}
     ${renderEndOfDayReview()}
     ${renderOnboarding()}
+    ${renderLifeAreaDashboard()}
     ${renderBriefing()}
     ${renderResponsibilityEngine()}
     ${renderTimeline()}
@@ -1156,7 +1238,7 @@ function renderApp() {
     ${renderHeader()}
     ${renderTestModePanel()}
     <main>
-      ${activeView === "briefing" ? renderMorningBriefing() : activeView === "working" ? renderWorkingMode() : activeView === "review" ? renderEndOfDayReview() : fullDashboard}
+      ${activeView === "briefing" ? renderMorningBriefing() : activeView === "working" ? renderWorkingMode() : activeView === "review" ? renderEndOfDayReview() : activeView === "life-areas" ? renderLifeAreaDashboard() : fullDashboard}
     </main>
   `;
   scheduleWorkingModeRefresh(activeView);
@@ -1263,6 +1345,10 @@ app.addEventListener("click", (event) => {
   }
   if (action === "show-review") {
     setActiveView("review");
+    renderApp();
+  }
+  if (action === "show-life-areas") {
+    setActiveView("life-areas");
     renderApp();
   }
   if (action === "complete-weekly-review") {
