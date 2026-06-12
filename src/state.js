@@ -17,6 +17,11 @@ export function getState() {
   return state;
 }
 
+export function getLearningStats() {
+  state.learningStats = state.learningStats ?? {};
+  return state.learningStats;
+}
+
 export function getActiveView() {
   if (state.ui?.lastMorningBriefingDate !== getTodayKey()) {
     return "briefing";
@@ -96,6 +101,7 @@ export function editInterviewAnswer(questionId) {
 
 export function markDone(collectionName, id) {
   if (collectionName === "morningRoutine") {
+    recordItemEvent(collectionName, id, "done");
     state.morningRoutineState[id] = {
       ...state.morningRoutineState[id],
       status: "done",
@@ -107,6 +113,7 @@ export function markDone(collectionName, id) {
   }
 
   if (collectionName === "guidance") {
+    recordItemEvent(collectionName, id, "done");
     state.guidanceState[id] = {
       ...state.guidanceState[id],
       status: "done",
@@ -118,6 +125,7 @@ export function markDone(collectionName, id) {
   }
 
   if (collectionName === "recommendations") {
+    recordItemEvent(collectionName, id, "done");
     state.recommendationState[id] = {
       ...state.recommendationState[id],
       status: "done",
@@ -133,6 +141,7 @@ export function markDone(collectionName, id) {
     return;
   }
 
+  recordItemEvent(collectionName, id, "done", item);
   item.status = "done";
   item.completed = true;
   item.completedAt = new Date().toISOString();
@@ -204,6 +213,7 @@ export function snoozeItem(collectionName, id) {
     return;
   }
 
+  recordItemEvent(collectionName, id, "snoozed", item);
   item.status = "snoozed";
   item.completed = false;
   item.snoozedUntil = getSnoozeLabel();
@@ -211,6 +221,7 @@ export function snoozeItem(collectionName, id) {
 }
 
 export function snoozeRecommendation(id) {
+  recordItemEvent("recommendations", id, "snoozed");
   state.recommendationState[id] = {
     ...state.recommendationState[id],
     status: "snoozed",
@@ -220,6 +231,7 @@ export function snoozeRecommendation(id) {
 }
 
 export function snoozeGuidance(id) {
+  recordItemEvent("guidance", id, "snoozed");
   state.guidanceState[id] = {
     ...state.guidanceState[id],
     status: "snoozed",
@@ -229,6 +241,7 @@ export function snoozeGuidance(id) {
 }
 
 export function snoozeMorningRoutine(id) {
+  recordItemEvent("morningRoutine", id, "snoozed");
   state.morningRoutineState[id] = {
     ...state.morningRoutineState[id],
     status: "snoozed",
@@ -239,6 +252,7 @@ export function snoozeMorningRoutine(id) {
 
 export function skipItem(collectionName, id) {
   if (collectionName === "morningRoutine") {
+    recordItemEvent(collectionName, id, "skipped");
     state.morningRoutineState[id] = {
       ...state.morningRoutineState[id],
       status: "skipped",
@@ -250,6 +264,7 @@ export function skipItem(collectionName, id) {
   }
 
   if (collectionName === "guidance") {
+    recordItemEvent(collectionName, id, "skipped");
     state.guidanceState[id] = {
       ...state.guidanceState[id],
       status: "skipped",
@@ -261,6 +276,7 @@ export function skipItem(collectionName, id) {
   }
 
   if (collectionName === "recommendations") {
+    recordItemEvent(collectionName, id, "skipped");
     state.recommendationState[id] = {
       ...state.recommendationState[id],
       status: "skipped",
@@ -276,6 +292,7 @@ export function skipItem(collectionName, id) {
     return;
   }
 
+  recordItemEvent(collectionName, id, "skipped", item);
   item.status = "skipped";
   item.completed = false;
   item.skippedUntil = new Date(Date.now() + 30 * 60 * 1000).toISOString();
@@ -283,6 +300,7 @@ export function skipItem(collectionName, id) {
 }
 
 export function dismissRecommendation(id) {
+  recordItemEvent("recommendations", id, "dismissed");
   state.recommendationState[id] = {
     ...state.recommendationState[id],
     status: "dismissed",
@@ -292,6 +310,7 @@ export function dismissRecommendation(id) {
 }
 
 export function dismissGuidance(id) {
+  recordItemEvent("guidance", id, "dismissed");
   state.guidanceState[id] = {
     ...state.guidanceState[id],
     status: "dismissed",
@@ -301,11 +320,24 @@ export function dismissGuidance(id) {
 }
 
 export function dismissMorningRoutine(id) {
+  recordItemEvent("morningRoutine", id, "dismissed");
   state.morningRoutineState[id] = {
     ...state.morningRoutineState[id],
     status: "dismissed",
     dismissedAt: new Date().toISOString(),
   };
+  saveState(state);
+}
+
+export function dismissItem(collectionName, id) {
+  const item = findByCollection(collectionName, id);
+  if (!item) {
+    return;
+  }
+
+  recordItemEvent(collectionName, id, "dismissed", item);
+  item.status = "dismissed";
+  item.dismissedAt = new Date().toISOString();
   saveState(state);
 }
 
@@ -875,6 +907,9 @@ function scoreCandidate(candidate) {
   const rulesetScore = applyRulesetEffects(item, ruleEffects);
   score += rulesetScore;
 
+  const adaptiveEffect = getAdaptiveEffect(candidate.collection, item);
+  score += adaptiveEffect.score;
+
   return {
     ...candidate,
     title: item.title ?? item.name,
@@ -883,9 +918,43 @@ function scoreCandidate(candidate) {
     score,
     reasons,
     ruleEffects,
-    why: formatWhy(reasons, ruleEffects),
+    why: formatWhy(reasons, [...ruleEffects, ...adaptiveEffect.reasons]),
     isSkipped: skipped,
   };
+}
+
+function getAdaptiveEffect(collectionName, item) {
+  const stats = getLearningStats()[getLearningKey(collectionName, item.id)];
+  if (!stats) {
+    return { score: 0, reasons: [] };
+  }
+
+  const reasons = [];
+  let score = 0;
+
+  if (stats.dismissCount >= 2) {
+    const penalty = Math.min(stats.dismissCount * 5, 20);
+    score -= penalty;
+    reasons.push("Often dismissed, so it is shown less strongly");
+  }
+
+  const currentMinute = getCurrentMinuteOfDay();
+  const snoozeCount = getWindowCount(stats.snoozeWindows, currentMinute, 60);
+  if (snoozeCount >= 2) {
+    const penalty = Math.min(4 + snoozeCount * 2, 12);
+    score -= penalty;
+    reasons.push("Often snoozed around this time");
+  }
+
+  if (stats.completionCount >= 2 && Number.isFinite(stats.preferredCompletionMinute)) {
+    const distance = getMinuteDistance(currentMinute, stats.preferredCompletionMinute);
+    if (distance <= 60) {
+      score += Math.min(4 + stats.completionCount * 2, 12);
+      reasons.push(`Usually completed around ${formatMinuteOfDay(stats.preferredCompletionMinute)}.`);
+    }
+  }
+
+  return { score, reasons };
 }
 
 function applyRulesetEffects(item, ruleEffects) {
@@ -931,6 +1000,104 @@ function applyRulesetEffects(item, ruleEffects) {
   }
 
   return score;
+}
+
+function recordItemEvent(collectionName, id, eventName, item = null) {
+  state.learningStats = state.learningStats ?? {};
+
+  const trackedItem = item ?? findByCollection(collectionName, id);
+  const key = getLearningKey(collectionName, id);
+  const now = new Date();
+  const minuteOfDay = now.getHours() * 60 + now.getMinutes();
+  const existing = state.learningStats[key] ?? createEmptyLearningStats(collectionName, id, trackedItem);
+  const next = {
+    ...existing,
+    collection: collectionName,
+    itemId: id,
+    title: trackedItem?.title ?? trackedItem?.name ?? existing.title ?? id,
+    updatedAt: now.toISOString(),
+  };
+
+  if (eventName === "done") {
+    next.completionCount = Number(next.completionCount ?? 0) + 1;
+    next.completionTimes = appendRecentMinute(next.completionTimes, minuteOfDay);
+    next.preferredCompletionTime = formatMinuteOfDay(getAverageMinute(next.completionTimes));
+    next.preferredCompletionMinute = getAverageMinute(next.completionTimes);
+  }
+
+  if (eventName === "snoozed") {
+    next.snoozeCount = Number(next.snoozeCount ?? 0) + 1;
+    next.snoozeWindows = appendRecentMinute(next.snoozeWindows, minuteOfDay);
+  }
+
+  if (eventName === "dismissed") {
+    next.dismissCount = Number(next.dismissCount ?? 0) + 1;
+  }
+
+  if (eventName === "skipped") {
+    next.skipCount = Number(next.skipCount ?? 0) + 1;
+  }
+
+  state.learningStats[key] = next;
+}
+
+function createEmptyLearningStats(collectionName, id, item) {
+  return {
+    collection: collectionName,
+    itemId: id,
+    title: item?.title ?? item?.name ?? id,
+    completionCount: 0,
+    snoozeCount: 0,
+    dismissCount: 0,
+    skipCount: 0,
+    preferredCompletionTime: null,
+    preferredCompletionMinute: null,
+    completionTimes: [],
+    snoozeWindows: [],
+  };
+}
+
+function getLearningKey(collectionName, id) {
+  return `${collectionName}:${id}`;
+}
+
+function appendRecentMinute(values = [], minuteOfDay) {
+  return [...values, minuteOfDay].slice(-10);
+}
+
+function getAverageMinute(values = []) {
+  if (values.length === 0) {
+    return null;
+  }
+
+  return Math.round(values.reduce((sum, value) => sum + Number(value), 0) / values.length);
+}
+
+function getCurrentMinuteOfDay() {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
+
+function getWindowCount(values = [], targetMinute, windowMinutes) {
+  return values.filter((value) => getMinuteDistance(Number(value), targetMinute) <= windowMinutes).length;
+}
+
+function getMinuteDistance(left, right) {
+  const distance = Math.abs(Number(left) - Number(right));
+  return Math.min(distance, 1440 - distance);
+}
+
+function formatMinuteOfDay(minuteOfDay) {
+  if (!Number.isFinite(minuteOfDay)) {
+    return "";
+  }
+
+  const normalized = ((Math.round(minuteOfDay) % 1440) + 1440) % 1440;
+  const hours24 = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+  const period = hours24 >= 12 ? "PM" : "AM";
+  const hours12 = hours24 % 12 || 12;
+  return `${hours12}:${String(minutes).padStart(2, "0")} ${period}`;
 }
 
 function getEstimatedEffort(item) {
@@ -1216,6 +1383,7 @@ function createDemoState(demoId) {
   demoState.recommendationState = {};
   demoState.guidanceState = {};
   demoState.morningRoutineState = {};
+  demoState.learningStats = {};
 
   if (demoId === "adhd-weight-loss") {
     demoState.interviewProfile = buildProfileWithRulesets({
