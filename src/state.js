@@ -1,4 +1,5 @@
 import { appState as defaultState } from "./data.js";
+import { scoreActionableCandidate } from "./decision.js";
 import {
   buildProfileWithRulesets,
   ensureProfileShape,
@@ -8,6 +9,26 @@ import {
   getVisibleQuestions,
   pruneHiddenAnswers,
 } from "./interview.js";
+import {
+  buildGeneratedGuidance,
+  buildGeneratedMorningRoutine,
+  buildGeneratedRecommendations,
+} from "./guidance-routines.js";
+import {
+  buildEndOfDayReviewData,
+  buildGoalProgressSummary,
+  buildTomorrowPlanningData,
+  completeEndOfDayReviewFromCarryoverIds,
+  getGoalAreaForItem,
+  recordGoalProgressEntry,
+} from "./progress-review.js";
+import {
+  buildGeneratedRecoverySuggestions,
+  computeAdaptiveEffect,
+  recordLearningEvent,
+  recordMissedItems,
+  recordRecoveryHistoryEntry,
+} from "./recovery-adaptation.js";
 import { clearState, loadState, saveState } from "./storage.js";
 
 let state = loadState(defaultState);
@@ -587,106 +608,26 @@ export function getMorningBriefingData() {
 }
 
 export function getTomorrowPlanningData() {
-  const tomorrowItems = getTomorrowItems().filter(({ item }) => !isDone(item));
-  const carriedOver = tomorrowItems.filter(({ item }) => item.source === "End-of-Day Review");
-  const scheduledTomorrow = tomorrowItems
-    .filter(({ item }) => (item.timingType ?? inferTimingType(item)) === "scheduled")
-    .sort((left, right) => getRawMinutesUntilScheduledStart(left.item) - getRawMinutesUntilScheduledStart(right.item));
-  const topPriorities = tomorrowItems
-    .filter(({ item }) => (item.timingType ?? inferTimingType(item)) !== "scheduled")
-    .sort((left, right) => getPriorityWeight(right.item.priority) - getPriorityWeight(left.item.priority) || getEstimatedEffort(left.item) - getEstimatedEffort(right.item))
-    .slice(0, 3);
-
-  return {
-    carriedOver,
-    scheduledTomorrow,
-    topPriorities,
-  };
+  return buildTomorrowPlanningData({
+    state,
+    isDone,
+    inferTimingType,
+    getRawMinutesUntilScheduledStart,
+    getEstimatedEffort,
+    getPriorityWeight,
+  });
 }
 
 export function getEndOfDayReviewData() {
-  const todayKey = getTodayKey();
-  const completed = getCompletedTodayItems();
-  const deferred = getDeferredTodayItems();
-
-  return {
-    date: todayKey,
-    completed,
-    deferred,
-    review: state.endOfDayReviews?.[todayKey] ?? null,
-  };
+  return buildEndOfDayReviewData(getProgressReviewContext());
 }
 
 export function completeEndOfDayReview(carryoverIds = []) {
-  const todayKey = getTodayKey();
-  const deferredItems = getDeferredTodayItems();
-  const carryoverSet = new Set(carryoverIds);
-  const createdCarryovers = [];
-
-  for (const entry of deferredItems) {
-    if (!carryoverSet.has(entry.key)) {
-      continue;
-    }
-
-    const item = entry.item;
-    const carryover = {
-      id: `carryover-${Date.now()}-${createdCarryovers.length}`,
-      areaId: item.areaId ?? "projects",
-      title: item.title ?? item.name,
-      category: item.category ?? getGoalArea(item),
-      workType: item.workType ?? "none",
-      timingType: "flexible",
-      preferredWindow: "Tomorrow",
-      dueDate: "Tomorrow",
-      status: "todo",
-      priority: item.priority ?? "Medium",
-      estimatedEffortMinutes: Number(item.estimatedEffortMinutes ?? 15),
-      source: "End-of-Day Review",
-      carriedFrom: entry.key,
-      createdAt: new Date().toISOString(),
-    };
-    state.actions.unshift(carryover);
-    createdCarryovers.push(carryover.id);
-  }
-
-  state.endOfDayReviews = state.endOfDayReviews ?? {};
-  state.endOfDayReviews[todayKey] = {
-    completedAt: new Date().toISOString(),
-    completedCount: getCompletedTodayItems().length,
-    deferredCount: deferredItems.length,
-    carryoverIds: createdCarryovers,
-  };
-  saveState(state);
+  completeEndOfDayReviewFromCarryoverIds(getProgressReviewContext(), carryoverIds);
 }
 
 export function getGoalProgressSummary() {
-  const areas = ["Health", "Fitness", "Work", "Money", "Relationships", "Personal"];
-  const weekStart = getWeekStartDate(new Date());
-  const counts = Object.fromEntries(areas.map((area) => [area, 0]));
-
-  for (const entry of state.progressHistory ?? []) {
-    const completedAt = new Date(entry.completedAt);
-    if (Number.isNaN(completedAt.getTime()) || completedAt < weekStart) {
-      continue;
-    }
-
-    if (counts[entry.goalArea] !== undefined) {
-      counts[entry.goalArea] += 1;
-    }
-  }
-
-  const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
-  const strongestArea = areas.reduce((best, area) => (counts[area] > counts[best] ? area : best), areas[0]);
-
-  return {
-    counts,
-    total,
-    weekStart: weekStart.toISOString().slice(0, 10),
-    summary:
-      total === 0
-        ? "No completions logged yet this week."
-        : `${total} completion${total === 1 ? "" : "s"} logged this week. Strongest area: ${strongestArea}.`,
-  };
+  return buildGoalProgressSummary({ state, getTodayKey });
 }
 
 export function formatTimeRemaining(minutesUntilDue) {
@@ -795,422 +736,45 @@ function allCompletableItems() {
   ];
 }
 
-function getReviewableEntries() {
-  return [
-    ...state.actions.map((item) => ({ collection: "actions", item })),
-    ...state.routines.map((item) => ({ collection: "routines", item })),
-    ...state.timeline.map((item) => ({ collection: "timeline", item })),
-    ...state.focusSessions.map((item) => ({ collection: "focusSessions", item })),
-    ...getGeneratedRecommendations().map((item) => ({ collection: "recommendations", item })),
-    ...getGeneratedGuidance().map((item) => ({ collection: "guidance", item })),
-    ...getGeneratedMorningRoutine().map((item) => ({ collection: "morningRoutine", item })),
-    ...getGeneratedRecoverySuggestions().map((item) => ({ collection: "recoverySuggestions", item })),
-  ].map((entry) => ({
-    ...entry,
-    key: `${entry.collection}:${entry.item.id}`,
-    title: entry.item.title ?? entry.item.name,
-    status: statusText(entry.item),
-  }));
-}
-
-function getTomorrowItems() {
-  return [
-    ...state.actions.map((item) => ({ collection: "actions", item })),
-    ...state.routines.map((item) => ({ collection: "routines", item })),
-    ...state.timeline.map((item) => ({ collection: "timeline", item })),
-    ...state.focusSessions.map((item) => ({ collection: "focusSessions", item })),
-  ].filter(({ item }) => isTomorrowItem(item));
-}
-
-function isTomorrowItem(item) {
-  return item.dueDate === "Tomorrow" || item.deadline === "Tomorrow" || item.preferredWindow === "Tomorrow";
-}
-
-function getCompletedTodayItems() {
-  return [
-    ...getReviewableEntries().filter(({ item }) => isDone(item) && isToday(item.completedAt)),
-    ...(state.progressHistory ?? [])
-      .filter((entry) => isToday(entry.completedAt))
-      .map((entry) => ({
-        collection: entry.collection,
-        key: `${entry.collection}:${entry.itemId}`,
-        title: entry.title,
-        status: "Done",
-        item: {
-          id: entry.itemId,
-          title: entry.title,
-          category: entry.goalArea,
-          completedAt: entry.completedAt,
-        },
-      })),
-  ].filter(uniqueByKey);
-}
-
-function getDeferredTodayItems() {
-  const learnedMisses = Object.entries(getLearningStats())
-    .filter(([, stats]) => stats.lastMissedDate === getTodayKey())
-    .map(([key, stats]) => {
-      const [collection, id] = key.split(":");
-      return {
-        collection,
-        key,
-        title: stats.title ?? id,
-        status: "Missed",
-        item: findByCollection(collection, id) ?? {
-          id,
-          title: stats.title ?? id,
-          category: "Personal",
-          priority: "Medium",
-          estimatedEffortMinutes: 15,
-        },
-      };
-    });
-
-  return [
-    ...getReviewableEntries().filter(({ item }) => isSnoozed(item) || isSkipped(item)),
-    ...learnedMisses,
-  ].filter(uniqueByKey);
-}
-
-function uniqueByKey(entry, index, entries) {
-  return entries.findIndex((candidate) => candidate.key === entry.key) === index;
-}
-
-function isToday(value) {
-  if (!value) {
-    return false;
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return false;
-  }
-
-  return date.toISOString().slice(0, 10) === getTodayKey();
+function getProgressReviewContext() {
+  return {
+    state,
+    saveState,
+    getTodayKey,
+    getLearningStats,
+    getGeneratedRecommendations,
+    getGeneratedGuidance,
+    getGeneratedMorningRoutine,
+    getGeneratedRecoverySuggestions,
+    findByCollection,
+    isDone,
+    isSnoozed,
+    isSkipped,
+    statusText,
+  };
 }
 
 export function getGeneratedMorningRoutine() {
-  const profile = state.interviewProfile ?? {};
-  const activeRulesets = new Set(profile.activeRulesets ?? []);
-  const routine = [];
-  const dayPart = getDayPart();
-
-  if (dayPart !== "morning") {
-    return [];
-  }
-
-  if (profile.fitness?.goal === "weight_loss" || activeRulesets.has("weight_loss_support")) {
-    routine.push(createMorningRoutineItem({
-      id: "morning-weight-loss-water",
-      title: "Drink water",
-      category: "Health",
-      priority: "High",
-      reason: "Weight Loss morning routine",
-    }));
-    routine.push(createMorningRoutineItem({
-      id: "morning-weight-loss-walk",
-      title: "Morning walk",
-      category: "Fitness",
-      priority: "Medium",
-      reason: "Weight Loss morning routine",
-    }));
-  }
-
-  if (profile.fitness?.goal === "muscle_gain" || activeRulesets.has("muscle_gain_support")) {
-    routine.push(createMorningRoutineItem({
-      id: "morning-muscle-water",
-      title: "Drink water",
-      category: "Health",
-      priority: "High",
-      reason: "Muscle Gain morning routine",
-    }));
-    routine.push(createMorningRoutineItem({
-      id: "morning-muscle-protein",
-      title: "Protein intake",
-      category: "Health",
-      priority: "Medium",
-      reason: "Muscle Gain morning routine",
-    }));
-  }
-
-  if (profile.adhd?.busyFailureMode || activeRulesets.has("time_blindness_support") || activeRulesets.has("decision_paralysis_support")) {
-    routine.push(createMorningRoutineItem({
-      id: "morning-adhd-planning-review",
-      title: "Morning planning review",
-      category: "Personal",
-      priority: "High",
-      reason: "ADHD morning routine",
-    }));
-  }
-
-  if (profile.work?.workType === "self_employed" || activeRulesets.has("self_employed")) {
-    routine.push(createMorningRoutineItem({
-      id: "morning-self-employed-revenue",
-      title: "Review revenue opportunities",
-      category: "Work",
-      workType: "revenue",
-      priority: "High",
-      reason: "Self-employed morning routine",
-    }));
-  }
-
-  return routine.filter((item) => !isDone(item));
+  return buildGeneratedMorningRoutine({ state, isDone, getDayPart });
 }
 
 function getGeneratedGuidance() {
-  const profile = state.interviewProfile ?? {};
-  const activeRulesets = new Set(profile.activeRulesets ?? []);
-  const guidance = [];
-  const dayPart = getDayPart();
-
-  if (dayPart === "morning" && (profile.adhd?.busyFailureMode || activeRulesets.has("time_blindness_support") || activeRulesets.has("decision_paralysis_support"))) {
-    guidance.push(createGuidance({
-      id: "guide-adhd-morning-planning",
-      title: "Do a quick morning plan",
-      category: "Personal",
-      priority: "High",
-      preferredWindow: "Today",
-      reason: "ADHD morning planning guidance",
-    }));
-  }
-
-  if (activeRulesets.has("time_blindness_support")) {
-    guidance.push(createGuidance({
-      id: "guide-adhd-transition",
-      title: "Check the next transition",
-      category: "Personal",
-      priority: "Medium",
-      preferredWindow: "Today",
-      reason: "ADHD transition guidance",
-    }));
-  }
-
-  if (profile.fitness?.goal === "weight_loss" || activeRulesets.has("weight_loss_support")) {
-    guidance.push(createGuidance({
-      id: "guide-weight-loss-water",
-      title: "Drink water early today",
-      category: "Health",
-      priority: "Medium",
-      preferredWindow: "Today",
-      reason: "Weight Loss water guidance",
-    }));
-    if (dayPart === "morning") {
-      guidance.push(createGuidance({
-        id: "guide-weight-loss-walk",
-        title: "Take a short morning walk",
-        category: "Fitness",
-        priority: "Medium",
-        preferredWindow: "Today",
-        reason: "Weight Loss movement guidance",
-      }));
-    }
-  }
-
-  if (profile.fitness?.goal === "muscle_gain" || activeRulesets.has("muscle_gain_support")) {
-    guidance.push(createGuidance({
-      id: "guide-muscle-protein",
-      title: "Plan protein with your next meal",
-      category: "Health",
-      priority: "Medium",
-      preferredWindow: "Today",
-      reason: "Muscle Gain protein guidance",
-    }));
-    guidance.push(createGuidance({
-      id: "guide-muscle-recovery",
-      title: "Check recovery before training",
-      category: "Fitness",
-      priority: "Medium",
-      preferredWindow: "Today",
-      reason: "Muscle Gain recovery guidance",
-    }));
-  }
-
-  if (profile.work?.workType === "self_employed" || activeRulesets.has("self_employed")) {
-    guidance.push(createGuidance({
-      id: "guide-self-employed-revenue",
-      title: "Review revenue-producing work",
-      category: "Work",
-      workType: "revenue",
-      priority: "High",
-      preferredWindow: "Today",
-      reason: "Self-employed revenue guidance",
-    }));
-    guidance.push(createGuidance({
-      id: "guide-self-employed-followup",
-      title: "Pick one follow-up to send",
-      category: "Work",
-      workType: "follow_up",
-      priority: "Medium",
-      preferredWindow: "Today",
-      reason: "Self-employed follow-up guidance",
-    }));
-  }
-
-  return guidance.filter((item) => !isDone(item));
+  return buildGeneratedGuidance({ state, isDone, getDayPart });
 }
 
 function getGeneratedRecommendations() {
-  const profile = state.interviewProfile ?? {};
-  const activeRulesets = new Set(profile.activeRulesets ?? []);
-  const recommendations = [];
-
-  if (profile.fitness?.goal === "weight_loss" || activeRulesets.has("weight_loss_support")) {
-    recommendations.push(createRecommendation({
-      id: "rec-weight-loss-water",
-      title: "Drink water this morning",
-      category: "Health",
-      priority: "Medium",
-      timingType: "flexible",
-      preferredWindow: "Today",
-      dueDate: "Today",
-      reason: "Weight Loss support",
-    }));
-    recommendations.push(createRecommendation({
-      id: "rec-weight-loss-walk",
-      title: "Take a short morning walk",
-      category: "Fitness",
-      priority: "Medium",
-      timingType: "flexible",
-      preferredWindow: "Today",
-      dueDate: "Today",
-      reason: "Weight Loss support",
-    }));
-  }
-
-  if (profile.fitness?.goal === "muscle_gain" || activeRulesets.has("muscle_gain_support")) {
-    recommendations.push(createRecommendation({
-      id: "rec-muscle-protein",
-      title: "Plan protein with your next meal",
-      category: "Health",
-      priority: "Medium",
-      timingType: "flexible",
-      preferredWindow: "Today",
-      dueDate: "Today",
-      reason: "Muscle Gain support",
-    }));
-  }
-
-  if (profile.adhd?.busyFailureMode || activeRulesets.has("time_blindness_support") || activeRulesets.has("decision_paralysis_support")) {
-    recommendations.push(createRecommendation({
-      id: "rec-adhd-morning-plan",
-      title: "Review the day before starting",
-      category: "Personal",
-      priority: "High",
-      timingType: "flexible",
-      preferredWindow: "Today",
-      dueDate: "Today",
-      reason: "ADHD support",
-    }));
-  }
-
-  if (profile.work?.workType === "self_employed" || activeRulesets.has("self_employed")) {
-    recommendations.push(createRecommendation({
-      id: "rec-self-employed-revenue-review",
-      title: "Review one revenue-producing task",
-      category: "Work",
-      workType: "revenue",
-      priority: "High",
-      timingType: "flexible",
-      preferredWindow: "Today",
-      dueDate: "Today",
-      reason: "Self-employed support",
-    }));
-  }
-
-  return recommendations.filter((item) => !isDone(item));
-}
-
-function createRecommendation(baseRecommendation) {
-  const savedState = state.recommendationState?.[baseRecommendation.id] ?? {};
-  return {
-    areaId: "recommendations",
-    estimatedEffortMinutes: 10,
-    type: "Recommendation",
-    source: "Profile",
-    workType: "none",
-    ...baseRecommendation,
-    ...savedState,
-  };
-}
-
-function createGuidance(baseGuidance) {
-  const savedState = state.guidanceState?.[baseGuidance.id] ?? {};
-  return {
-    areaId: "guidance",
-    estimatedEffortMinutes: 10,
-    type: "Guidance",
-    source: "Ruleset",
-    timingType: "flexible",
-    dueDate: "Today",
-    workType: "none",
-    ...baseGuidance,
-    ...savedState,
-  };
-}
-
-function createMorningRoutineItem(baseRoutine) {
-  const savedState = state.morningRoutineState?.[baseRoutine.id] ?? {};
-  return {
-    areaId: "morningRoutine",
-    estimatedEffortMinutes: 10,
-    type: "Morning Routine",
-    source: "Ruleset",
-    timingType: "flexible",
-    dueDate: "Today",
-    preferredWindow: "Today",
-    workType: "none",
-    ...baseRoutine,
-    ...savedState,
-  };
+  return buildGeneratedRecommendations({ state, isDone });
 }
 
 function getGeneratedRecoverySuggestions() {
   recordMissedOpenItems();
-  const suggestions = [];
-
-  for (const [key, stats] of Object.entries(getLearningStats())) {
-    const avoidanceCount = getAvoidanceCount(stats);
-    if (avoidanceCount < 3 || key.startsWith("recoverySuggestions:")) {
-      continue;
-    }
-
-    const [sourceCollection, sourceId] = key.split(":");
-    const sourceItem = findByCollection(sourceCollection, sourceId);
-    if (sourceItem && isDone(sourceItem)) {
-      continue;
-    }
-
-    suggestions.push(createRecoverySuggestion({
-      id: `recovery-${sourceCollection}-${sourceId}`,
-      sourceCollection,
-      sourceId,
-      title: buildRecoveryTitle(stats, sourceItem),
-      category: sourceItem?.category ?? "Personal",
-      workType: sourceItem?.workType ?? "none",
-      priority: "Medium",
-      reason: buildRecoveryReason(stats),
-      recoveryAction: chooseRecoveryAction(stats, sourceItem),
-      avoidanceCount,
-    }));
-  }
-
-  return suggestions.filter((item) => !isDone(item));
-}
-
-function createRecoverySuggestion(baseSuggestion) {
-  const savedState = state.recoveryState?.[baseSuggestion.id] ?? {};
-  return {
-    areaId: "recovery",
-    estimatedEffortMinutes: 10,
-    type: "Recovery Suggestion",
-    source: "Learning",
-    timingType: "flexible",
-    dueDate: "Today",
-    preferredWindow: "Today",
-    workType: "none",
-    ...baseSuggestion,
-    ...savedState,
-  };
+  return buildGeneratedRecoverySuggestions({
+    state,
+    getLearningStats,
+    findByCollection,
+    isDone,
+    inferTimingType,
+  });
 }
 
 function getActionableCandidates() {
@@ -1277,416 +841,64 @@ function getActionableCandidates() {
 }
 
 function scoreCandidate(candidate) {
-  const reasons = [];
-  const ruleEffects = [];
-  const { item } = candidate;
-  let score = 0;
+  return scoreActionableCandidate(getDecisionContext(), candidate);
+}
 
-  if (isOverdue(item)) {
-    score += 100;
-    reasons.push("overdue");
-  }
-
-  if (isDueToday(item)) {
-    score += 50;
-    reasons.push("due today");
-  }
-
-  if (item.type === "Recommendation") {
-    reasons.push(item.reason ?? "profile recommendation");
-  }
-
-  if (item.type === "Guidance") {
-    reasons.push(item.reason ?? "ruleset guidance");
-  }
-
-  if (item.type === "Morning Routine") {
-    reasons.push(item.reason ?? "morning routine");
-  }
-
-  if (item.type === "Recovery Suggestion") {
-    reasons.push(item.reason ?? "recovery suggestion");
-    reasons.push(item.recoveryAction ?? "try a smaller recovery step");
-  }
-
-  const deadlineUrgency = getDeadlineUrgencyScore(item);
-  if (deadlineUrgency > 0) {
-    score += deadlineUrgency;
-    reasons.push("deadline approaching");
-  }
-
-  if (item.priority === "High") {
-    score += 25;
-    reasons.push("high priority");
-  }
-
-  if (item.priority === "High" && isHealthTask(item)) {
-    score += 5;
-    reasons.push("health importance boost");
-  }
-
-  if (item.priority === "Medium") {
-    score += 10;
-    reasons.push("medium priority");
-  }
-
-  const effort = getEstimatedEffort(item);
-  if (effort <= 15) {
-    score += 15;
-    reasons.push("quick to finish");
-  } else if (effort <= 30) {
-    score += 10;
-    reasons.push("manageable effort");
-  }
-
-  if (isSnoozed(item)) {
-    score -= 20;
-    reasons.push("currently snoozed");
-  }
-
-  const skipped = isSkipped(item);
-  if (skipped) {
-    score -= 30;
-    reasons.push("recently skipped");
-  }
-
-  const rulesetScore = applyRulesetEffects(item, ruleEffects);
-  score += rulesetScore;
-
-  const adaptiveEffect = getAdaptiveEffect(candidate.collection, item);
-  score += adaptiveEffect.score;
-
+function getDecisionContext() {
   return {
-    ...candidate,
-    title: item.title ?? item.name,
-    areaId: item.areaId,
-    effort,
-    score,
-    reasons,
-    ruleEffects,
-    why: formatWhy(reasons, [...ruleEffects, ...adaptiveEffect.reasons]),
-    isSkipped: skipped,
+    state,
+    isOverdue,
+    isDueToday,
+    isHealthTask,
+    isSnoozed,
+    isSkipped,
+    isMovementTask,
+    inferTimingType,
+    getRawMinutesUntilScheduledStart,
+    getDeadlineUrgencyScore,
+    getEstimatedEffort,
+    getAdaptiveEffect,
+    formatWhy,
   };
 }
 
 function getAdaptiveEffect(collectionName, item) {
-  const stats = getLearningStats()[getLearningKey(collectionName, item.id)];
-  if (!stats) {
-    return { score: 0, reasons: [] };
-  }
-
-  const reasons = [];
-  let score = 0;
-
-  if (stats.dismissCount >= 2) {
-    const penalty = Math.min(stats.dismissCount * 5, 20);
-    score -= penalty;
-    reasons.push("Often dismissed, so it is shown less strongly");
-  }
-
-  const currentMinute = getCurrentMinuteOfDay();
-  const snoozeCount = getWindowCount(stats.snoozeWindows, currentMinute, 60);
-  if (snoozeCount >= 2) {
-    const penalty = Math.min(4 + snoozeCount * 2, 12);
-    score -= penalty;
-    reasons.push("Often snoozed around this time");
-  }
-
-  if (stats.completionCount >= 2 && Number.isFinite(stats.preferredCompletionMinute)) {
-    const distance = getMinuteDistance(currentMinute, stats.preferredCompletionMinute);
-    if (distance <= 60) {
-      score += Math.min(4 + stats.completionCount * 2, 12);
-      reasons.push(`Usually completed around ${formatMinuteOfDay(stats.preferredCompletionMinute)}.`);
-    }
-  }
-
-  if (getAvoidanceCount(stats) >= 3 && collectionName !== "recoverySuggestions") {
-    score -= 25;
-    reasons.push("Recovery suggestion available, so this is not being pushed unchanged");
-  }
-
-  return { score, reasons };
-}
-
-function applyRulesetEffects(item, ruleEffects) {
-  const activeRulesets = new Set(state.interviewProfile?.activeRulesets ?? []);
-  let score = 0;
-
-  if (activeRulesets.has("time_blindness_support") && (item.timingType ?? inferTimingType(item)) === "scheduled") {
-    const minutesUntilStart = getRawMinutesUntilScheduledStart(item);
-    if (minutesUntilStart <= 15) {
-      score += 40;
-      ruleEffects.push("Time Blindness Support boost");
-    } else if (minutesUntilStart <= 30) {
-      score += 20;
-      ruleEffects.push("Time Blindness Support boost");
-    }
-  }
-
-  if (activeRulesets.has("decision_paralysis_support")) {
-    const effort = getEstimatedEffort(item);
-    if (effort <= 15) {
-      score += 10;
-      ruleEffects.push("Decision Paralysis Support favors the simplest action");
-    } else if (effort > 30) {
-      score -= 10;
-      ruleEffects.push("Decision Paralysis Support lowers complex actions");
-    }
-  }
-
-  if (activeRulesets.has("short_movement_blocks") && isMovementTask(item)) {
-    score += 10;
-    ruleEffects.push("Short Movement Blocks boost");
-  }
-
-  if (activeRulesets.has("self_employed")) {
-    if (item.category === "Work" && item.workType === "revenue") {
-      score += 15;
-      ruleEffects.push("Self-employed revenue boost");
-    }
-    if (item.category === "Work" && (item.workType === "admin" || item.workType === "administrative")) {
-      score -= 5;
-      ruleEffects.push("Self-employed admin penalty");
-    }
-  }
-
-  return score;
+  return computeAdaptiveEffect({ collectionName, item, getLearningStats, getCurrentMinuteOfDay });
 }
 
 function recordItemEvent(collectionName, id, eventName, item = null) {
-  state.learningStats = state.learningStats ?? {};
-
-  const trackedItem = item ?? findByCollection(collectionName, id);
-  const key = getLearningKey(collectionName, id);
-  const now = new Date();
-  const minuteOfDay = now.getHours() * 60 + now.getMinutes();
-  const existing = state.learningStats[key] ?? createEmptyLearningStats(collectionName, id, trackedItem);
-  const next = {
-    ...existing,
-    collection: collectionName,
-    itemId: id,
-    title: trackedItem?.title ?? trackedItem?.name ?? existing.title ?? id,
-    updatedAt: now.toISOString(),
-  };
-
-  if (eventName === "done") {
-    next.completionCount = Number(next.completionCount ?? 0) + 1;
-    next.completionTimes = appendRecentMinute(next.completionTimes, minuteOfDay);
-    next.preferredCompletionTime = formatMinuteOfDay(getAverageMinute(next.completionTimes));
-    next.preferredCompletionMinute = getAverageMinute(next.completionTimes);
-  }
-
-  if (eventName === "snoozed") {
-    next.snoozeCount = Number(next.snoozeCount ?? 0) + 1;
-    next.snoozeWindows = appendRecentMinute(next.snoozeWindows, minuteOfDay);
-  }
-
-  if (eventName === "dismissed") {
-    next.dismissCount = Number(next.dismissCount ?? 0) + 1;
-  }
-
-  if (eventName === "skipped") {
-    next.skipCount = Number(next.skipCount ?? 0) + 1;
-  }
-
-  if (eventName === "missed") {
-    next.missedCount = Number(next.missedCount ?? 0) + 1;
-    next.lastMissedDate = getTodayKey();
-  }
-
-  state.learningStats[key] = next;
+  recordLearningEvent({ state, collectionName, id, eventName, item, findByCollection, getTodayKey });
 }
 
 function recordGoalProgress(collectionName, id, item = null) {
   const trackedItem = item ?? findByCollection(collectionName, id);
-  state.progressHistory = state.progressHistory ?? [];
-  state.progressHistory.push({
-    id: `progress-${collectionName}-${id}-${Date.now()}`,
-    collection: collectionName,
-    itemId: id,
-    title: trackedItem?.title ?? trackedItem?.name ?? id,
-    goalArea: getGoalArea(trackedItem),
-    completedAt: new Date().toISOString(),
-  });
-  state.progressHistory = state.progressHistory.slice(-250);
+  recordGoalProgressEntry({ state, collectionName, id, item: trackedItem });
 }
 
 function getGoalArea(item = {}) {
-  const raw = String(item.category ?? item.areaId ?? "").toLowerCase();
-  const title = String(item.title ?? item.name ?? "").toLowerCase();
-
-  if (raw.includes("health") || title.includes("medication") || title.includes("doctor")) {
-    return "Health";
-  }
-  if (raw.includes("fitness") || title.includes("exercise") || title.includes("walk") || title.includes("workout")) {
-    return "Fitness";
-  }
-  if (raw.includes("work") || raw.includes("business") || title.includes("client") || title.includes("revenue")) {
-    return "Work";
-  }
-  if (raw.includes("money") || raw.includes("finance") || raw.includes("finances") || title.includes("bill") || title.includes("invoice")) {
-    return "Money";
-  }
-  if (raw.includes("relationship") || raw.includes("family")) {
-    return "Relationships";
-  }
-
-  return "Personal";
-}
-
-function getWeekStartDate(date) {
-  const weekStart = new Date(date);
-  weekStart.setHours(0, 0, 0, 0);
-  const daysSinceMonday = (weekStart.getDay() + 6) % 7;
-  weekStart.setDate(weekStart.getDate() - daysSinceMonday);
-  return weekStart;
+  return getGoalAreaForItem(item);
 }
 
 function recordMissedOpenItems() {
-  const missableCollections = [
-    ["actions", state.actions],
-    ["routines", state.routines],
-    ["timeline", state.timeline],
-    ["focusSessions", state.focusSessions],
-  ];
-
-  let changed = false;
-  for (const [collectionName, items] of missableCollections) {
-    for (const item of items) {
-      if (!isOpen(item) || (item.timingType ?? inferTimingType(item)) !== "scheduled") {
-        continue;
-      }
-
-      if (getRawMinutesUntilScheduledStart(item) > -30) {
-        continue;
-      }
-
-      const key = getLearningKey(collectionName, item.id);
-      if (getLearningStats()[key]?.lastMissedDate === getTodayKey()) {
-        continue;
-      }
-
-      recordItemEvent(collectionName, item.id, "missed", item);
-      changed = true;
-    }
-  }
-
-  if (changed) {
-    saveState(state);
-  }
-}
-
-function createEmptyLearningStats(collectionName, id, item) {
-  return {
-    collection: collectionName,
-    itemId: id,
-    title: item?.title ?? item?.name ?? id,
-    completionCount: 0,
-    snoozeCount: 0,
-    dismissCount: 0,
-    skipCount: 0,
-    missedCount: 0,
-    preferredCompletionTime: null,
-    preferredCompletionMinute: null,
-    completionTimes: [],
-    snoozeWindows: [],
-  };
+  recordMissedItems({
+    state,
+    isOpen,
+    inferTimingType,
+    getRawMinutesUntilScheduledStart,
+    getLearningStats,
+    getTodayKey,
+    recordItemEvent,
+    saveState,
+  });
 }
 
 function recordRecoveryHistory(id, eventName) {
-  state.recoveryHistory = state.recoveryHistory ?? [];
-  state.recoveryHistory.push({
-    id: `history-${id}-${Date.now()}`,
-    recoveryId: id,
-    event: eventName,
-    at: new Date().toISOString(),
-  });
-  state.recoveryHistory = state.recoveryHistory.slice(-50);
-}
-
-function getAvoidanceCount(stats = {}) {
-  return Number(stats.snoozeCount ?? 0) + Number(stats.skipCount ?? 0) + Number(stats.missedCount ?? 0);
-}
-
-function buildRecoveryTitle(stats, sourceItem) {
-  return `Recovery: ${sourceItem?.title ?? sourceItem?.name ?? stats.title ?? "stuck task"}`;
-}
-
-function buildRecoveryReason(stats) {
-  const parts = [];
-  if (Number(stats.snoozeCount ?? 0) > 0) {
-    parts.push(`${stats.snoozeCount} snoozed`);
-  }
-  if (Number(stats.skipCount ?? 0) > 0) {
-    parts.push(`${stats.skipCount} skipped`);
-  }
-  if (Number(stats.missedCount ?? 0) > 0) {
-    parts.push(`${stats.missedCount} missed`);
-  }
-  return `Repeatedly delayed: ${parts.join(", ")}`;
-}
-
-function chooseRecoveryAction(stats, sourceItem) {
-  if (Number(stats.snoozeCount ?? 0) >= 2 && Number.isFinite(stats.preferredCompletionMinute)) {
-    return `Try it near ${formatMinuteOfDay(stats.preferredCompletionMinute)} instead.`;
-  }
-
-  if ((sourceItem?.timingType ?? inferTimingType(sourceItem ?? {})) !== "scheduled" && Number(stats.snoozeCount ?? 0) >= 2) {
-    return "Schedule it for a specific time.";
-  }
-
-  if (Number(stats.skipCount ?? 0) >= 2) {
-    return "Do only the first tiny step.";
-  }
-
-  if (Number(stats.missedCount ?? 0) >= 2) {
-    return "Move it to tomorrow or choose a new time.";
-  }
-
-  return "Break it into a smaller first step.";
-}
-
-function getLearningKey(collectionName, id) {
-  return `${collectionName}:${id}`;
-}
-
-function appendRecentMinute(values = [], minuteOfDay) {
-  return [...values, minuteOfDay].slice(-10);
-}
-
-function getAverageMinute(values = []) {
-  if (values.length === 0) {
-    return null;
-  }
-
-  return Math.round(values.reduce((sum, value) => sum + Number(value), 0) / values.length);
+  recordRecoveryHistoryEntry({ state, id, eventName });
 }
 
 function getCurrentMinuteOfDay() {
   const now = new Date();
   return now.getHours() * 60 + now.getMinutes();
-}
-
-function getWindowCount(values = [], targetMinute, windowMinutes) {
-  return values.filter((value) => getMinuteDistance(Number(value), targetMinute) <= windowMinutes).length;
-}
-
-function getMinuteDistance(left, right) {
-  const distance = Math.abs(Number(left) - Number(right));
-  return Math.min(distance, 1440 - distance);
-}
-
-function formatMinuteOfDay(minuteOfDay) {
-  if (!Number.isFinite(minuteOfDay)) {
-    return "";
-  }
-
-  const normalized = ((Math.round(minuteOfDay) % 1440) + 1440) % 1440;
-  const hours24 = Math.floor(normalized / 60);
-  const minutes = normalized % 60;
-  const period = hours24 >= 12 ? "PM" : "AM";
-  const hours12 = hours24 % 12 || 12;
-  return `${hours12}:${String(minutes).padStart(2, "0")} ${period}`;
 }
 
 function getEstimatedEffort(item) {
