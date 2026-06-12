@@ -30,12 +30,14 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
 input[type="text"],
-input[type="time"] {
+input[type="time"],
+select {
   width: 100%;
   min-height: 40px;
   padding: 0 10px;
@@ -92,6 +94,15 @@ nav a {
 button {
   padding: 0 12px;
   cursor: pointer;
+}
+
+button:hover,
+nav a:hover {
+  border-color: var(--blue);
+}
+
+.secondary-button {
+  color: var(--muted);
 }
 
 main {
@@ -192,6 +203,81 @@ main {
   background: #e6f2ee;
   border-color: #b9d9cd;
   color: var(--green);
+}
+
+.pill-snooze {
+  background: #eef1f8;
+  border-color: #cfd7ea;
+  color: #455a86;
+}
+
+.today-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.8fr) repeat(3, minmax(120px, 0.45fr));
+  gap: 16px;
+}
+
+.next-card,
+.stat-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.next-card {
+  padding: 22px;
+  border-left: 5px solid var(--green);
+}
+
+.next-card h3 {
+  margin: 0;
+  font-size: clamp(1.25rem, 2vw, 1.9rem);
+}
+
+.next-card p:last-child {
+  margin-bottom: 0;
+  color: var(--muted);
+}
+
+.stat-card {
+  display: grid;
+  place-items: center;
+  min-height: 126px;
+  padding: 18px;
+  text-align: center;
+}
+
+.stat-card strong {
+  font-size: 2.25rem;
+  line-height: 1;
+}
+
+.stat-card span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.add-task-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) minmax(140px, 0.7fr) minmax(120px, 0.6fr) minmax(120px, 0.6fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.add-task-form label {
+  display: block;
+  min-height: 0;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.add-task-form button {
+  min-width: 82px;
+  background: var(--ink);
+  color: var(--surface);
 }
 
 .onboarding-grid {
@@ -309,8 +395,9 @@ input[type="checkbox"] {
 }
 
 .task-list li {
-  grid-template-columns: 14px 1fr;
+  grid-template-columns: 14px 1fr auto;
   align-items: start;
+  column-gap: 10px;
 }
 
 .task-dot {
@@ -322,9 +409,35 @@ input[type="checkbox"] {
 }
 
 .compact-list li {
-  grid-template-columns: minmax(72px, 0.7fr) minmax(120px, 1fr) auto;
+  grid-template-columns: minmax(72px, 0.7fr) minmax(120px, 1fr) minmax(150px, auto);
   align-items: center;
   column-gap: 10px;
+}
+
+.item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.item-actions button,
+.button-row button {
+  min-height: 32px;
+  padding: 0 9px;
+  font-size: 0.82rem;
+}
+
+.is-complete {
+  opacity: 0.68;
+}
+
+.is-complete strong {
+  text-decoration: line-through;
+}
+
+.empty-item {
+  color: var(--muted);
 }
 
 .area-grid,
@@ -376,8 +489,9 @@ input[type="checkbox"] {
 
 .timeline li {
   display: grid;
-  grid-template-columns: 112px 1fr;
+  grid-template-columns: 112px 1fr auto;
   gap: 18px;
+  align-items: center;
   padding: 17px 20px;
   border-bottom: 1px solid var(--line);
 }
@@ -457,7 +571,9 @@ dd {
   }
 
   .onboarding-grid,
-  .briefing-grid {
+  .briefing-grid,
+  .today-grid,
+  .add-task-form {
     grid-template-columns: 1fr;
   }
 
@@ -477,6 +593,7 @@ dd {
 
   .compact-list li,
   .timeline li,
+  .task-list li,
   .focus-card dl div {
     grid-template-columns: 1fr;
   }
@@ -488,5 +605,9 @@ dd {
   .panel-title {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .item-actions {
+    justify-content: flex-start;
   }
 }
