@@ -297,6 +297,32 @@ main {
   gap: 16px;
 }
 
+.morning-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.briefing-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.briefing-list li {
+  display: grid;
+  gap: 4px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.briefing-list span,
+.empty-copy {
+  color: var(--muted);
+}
+
 .working-card {
   display: grid;
   gap: 16px;
@@ -744,6 +770,7 @@ dd {
   .briefing-grid,
   .today-grid,
   .working-grid,
+  .morning-grid,
   .add-task-form {
     grid-template-columns: 1fr;
   }

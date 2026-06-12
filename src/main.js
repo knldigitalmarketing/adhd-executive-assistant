@@ -1,4 +1,4 @@
-import { modelDefinitions, responsibilityAreas } from "./models.js";
+import { modelDefinitions } from "./models.js";
 import {
   addTask,
   answerInterviewQuestion,
@@ -7,6 +7,7 @@ import {
   getDecisionRecommendation,
   getActiveView,
   getInterviewState,
+  getMorningBriefingData,
   getOpenTodayActions,
   getState,
   getTodayStats,
@@ -17,6 +18,7 @@ import {
   setActiveView,
   skipItem,
   snoozeItem,
+  startMyDay,
   statusText,
   statusTone,
 } from "./state.js";
@@ -108,6 +110,72 @@ function renderToday() {
   `;
 }
 
+function renderMorningBriefing() {
+  const briefing = getMorningBriefingData();
+
+  return `
+    <section id="briefing" class="section briefing-screen">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Morning Briefing</p>
+          <h2>Orient the day</h2>
+        </div>
+        <button type="button" data-action="start-working">Start My Day</button>
+      </div>
+      <div class="morning-grid">
+        <article class="panel">
+          <div class="panel-title">
+            <h3>Today's Big Things</h3>
+            ${pill(`${briefing.bigThings.length} max 3`, "strong")}
+          </div>
+          ${renderBriefingItems(
+            briefing.bigThings.map((item) => ({
+              title: item.title,
+              detail: `${item.why} Score ${item.score}`,
+            })),
+            "No major actions are waiting.",
+          )}
+        </article>
+        <article class="panel">
+          <h3>Scheduled Today</h3>
+          ${renderBriefingItems(
+            briefing.scheduledToday.map((item) => ({
+              title: item.title ?? item.name,
+              detail: item.startTime ?? item.time ?? "Today",
+            })),
+            "No scheduled items are waiting.",
+          )}
+        </article>
+        <article class="panel">
+          <h3>Potential Issues</h3>
+          ${renderBriefingItems(briefing.potentialIssues, "No obvious issues found.")}
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function renderBriefingItems(items, emptyText) {
+  if (items.length === 0) {
+    return `<p class="empty-copy">${escapeHtml(emptyText)}</p>`;
+  }
+
+  return `
+    <ul class="briefing-list">
+      ${items
+        .map(
+          (item) => `
+            <li>
+              <strong>${escapeHtml(item.title)}</strong>
+              <span>${escapeHtml(item.detail)}</span>
+            </li>
+          `,
+        )
+        .join("")}
+    </ul>
+  `;
+}
+
 function renderWorkingMode() {
   const working = getWorkingModeData();
 
@@ -172,7 +240,7 @@ function renderComingUpCard(item) {
     <article class="working-card coming-card">
       <p class="eyebrow">Coming Up</p>
       <h3>${escapeHtml(item.title ?? item.name)}</h3>
-      <p>${escapeHtml(item.time ?? item.plannedEndTime ?? "Later today")} - ${escapeHtml(item.type ?? "Upcoming")}</p>
+      <p>${escapeHtml(item.startTime ?? item.time ?? item.plannedEndTime ?? "Later today")} - ${escapeHtml(item.type ?? item.timingType ?? "Upcoming")}</p>
     </article>
   `;
 }
@@ -208,26 +276,26 @@ function renderDecisionCard(recommendation) {
 }
 
 function renderAddTaskForm() {
-  const options = responsibilityAreas
-    .filter((area) => area !== "Other")
-    .map((area) => {
-      const areaId = area.toLowerCase().replaceAll(" ", "-");
-      return `<option value="${areaId}">${area}</option>`;
-    })
-    .join("");
-
   return `
     <form class="panel add-task-form" data-action="add-task">
       <div>
-        <label for="task-title">Add Task</label>
+        <label for="task-title">What?</label>
         <input id="task-title" name="title" type="text" placeholder="What needs action?" required />
       </div>
       <div>
-        <label for="task-area">Area</label>
-        <select id="task-area" name="areaId">${options}</select>
+        <label for="task-when">When?</label>
+        <select id="task-when" name="when">
+          <option selected>Today</option>
+          <option>Tomorrow</option>
+          <option>This week</option>
+          <option>9:00 AM</option>
+          <option>10:30 AM</option>
+          <option>1:00 PM</option>
+          <option>3:00 PM</option>
+        </select>
       </div>
       <div>
-        <label for="task-priority">Priority</label>
+        <label for="task-priority">Importance?</label>
         <select id="task-priority" name="priority">
           <option>High</option>
           <option selected>Medium</option>
@@ -235,13 +303,14 @@ function renderAddTaskForm() {
         </select>
       </div>
       <div>
-        <label for="task-due">Due</label>
-        <select id="task-due" name="dueDate">
-          <option selected>Today</option>
-          <option>Tomorrow</option>
-          <option>This week</option>
+        <label for="task-timing">Timing type</label>
+        <select id="task-timing" name="timingType">
+          <option value="flexible" selected>Flexible</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="deadline">Deadline</option>
         </select>
       </div>
+      <input type="hidden" name="areaId" value="projects" />
       <button type="submit">Add</button>
     </form>
   `;
@@ -594,7 +663,7 @@ function renderApp() {
   app.innerHTML = `
     ${renderHeader()}
     <main>
-      ${activeView === "working" ? renderWorkingMode() : fullDashboard}
+      ${activeView === "briefing" ? renderMorningBriefing() : activeView === "working" ? renderWorkingMode() : fullDashboard}
     </main>
   `;
   scheduleWorkingModeRefresh(activeView);
@@ -645,7 +714,7 @@ app.addEventListener("click", (event) => {
     renderApp();
   }
   if (action === "start-working") {
-    setActiveView("working");
+    startMyDay();
     renderApp();
   }
   if (action === "show-dashboard") {

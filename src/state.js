@@ -18,11 +18,24 @@ export function getState() {
 }
 
 export function getActiveView() {
+  if (state.ui?.lastMorningBriefingDate !== getTodayKey()) {
+    return "briefing";
+  }
+
   return state.ui?.activeView ?? "working";
 }
 
 export function setActiveView(activeView) {
   state.ui = { ...state.ui, activeView };
+  saveState(state);
+}
+
+export function startMyDay() {
+  state.ui = {
+    ...state.ui,
+    activeView: "working",
+    lastMorningBriefingDate: getTodayKey(),
+  };
   saveState(state);
 }
 
@@ -133,16 +146,31 @@ export function addTask(formData) {
   }
 
   const areaId = String(formData.get("areaId") ?? "projects");
-  state.actions.unshift({
+  const timingType = String(formData.get("timingType") ?? "flexible");
+  const when = String(formData.get("when") ?? "Today");
+  const task = {
     id: `action-${Date.now()}`,
     areaId,
     title,
-      dueDate: String(formData.get("dueDate") ?? "Today"),
-      status: "todo",
-      priority: String(formData.get("priority") ?? "Medium"),
-      estimatedEffortMinutes: 15,
-      createdAt: new Date().toISOString(),
-    });
+    timingType,
+    status: "todo",
+    priority: String(formData.get("priority") ?? "Medium"),
+    estimatedEffortMinutes: 15,
+    createdAt: new Date().toISOString(),
+  };
+
+  if (timingType === "scheduled") {
+    task.startTime = when;
+    task.dueDate = "Today";
+  } else if (timingType === "deadline") {
+    task.deadline = when;
+    task.dueDate = when;
+  } else {
+    task.preferredWindow = when;
+    task.dueDate = when;
+  }
+
+  state.actions.unshift(task);
   saveState(state);
 }
 
@@ -164,6 +192,16 @@ export function getWorkingModeData() {
     now: recommendation,
     comingUp,
     timeRemaining: recommendation ? getTimeRemainingLabel(comingUp) : "Time Remaining: Due now",
+  };
+}
+
+export function getMorningBriefingData() {
+  return {
+    bigThings: getScoredActionableItems().slice(0, 3),
+    scheduledToday: getScheduledCandidates()
+      .filter(isOpen)
+      .sort((left, right) => getRawMinutesUntilScheduledStart(left) - getRawMinutesUntilScheduledStart(right)),
+    potentialIssues: getPotentialIssues(),
   };
 }
 
@@ -189,6 +227,7 @@ export function formatTimeRemaining(minutesUntilDue) {
 export function getScoredActionableItems() {
   return getActionableCandidates()
     .filter((candidate) => !isDone(candidate.item))
+    .filter((candidate) => isEligibleCandidate(candidate.item))
     .map(scoreCandidate)
     .sort((left, right) => right.score - left.score || left.order - right.order);
 }
@@ -289,6 +328,12 @@ function scoreCandidate(candidate) {
     reasons.push("due today");
   }
 
+  const deadlineUrgency = getDeadlineUrgencyScore(item);
+  if (deadlineUrgency > 0) {
+    score += deadlineUrgency;
+    reasons.push("deadline approaching");
+  }
+
   if (item.priority === "High") {
     score += 25;
     reasons.push("high priority");
@@ -336,15 +381,17 @@ function getEstimatedEffort(item) {
 }
 
 function isOverdue(item) {
-  if (item.dueDate === "Overdue") {
+  const dueValue = item.deadline ?? item.dueDate;
+
+  if (dueValue === "Overdue") {
     return true;
   }
 
-  if (!item.dueDate || item.dueDate === "Today" || item.dueDate === "Tomorrow" || item.dueDate === "This week") {
+  if (!dueValue || dueValue === "Today" || dueValue === "Tomorrow" || dueValue === "This week") {
     return false;
   }
 
-  const due = new Date(item.dueDate);
+  const due = new Date(dueValue);
   if (Number.isNaN(due.getTime())) {
     return false;
   }
@@ -356,7 +403,7 @@ function isOverdue(item) {
 }
 
 function isDueToday(item) {
-  return item.dueDate === "Today" || "time" in item || item.type === "Focus Session";
+  return item.dueDate === "Today" || item.deadline === "Today" || item.preferredWindow === "Today";
 }
 
 function formatWhy(reasons) {
@@ -371,16 +418,79 @@ function getNextItem() {
   return getDecisionRecommendation()?.item ?? null;
 }
 
+function getPotentialIssues() {
+  const issues = [];
+  const actionableItems = getActionableCandidates().map((candidate) => candidate.item);
+
+  for (const item of actionableItems) {
+    if (isDone(item)) {
+      continue;
+    }
+
+    if (isOverdue(item)) {
+      issues.push({
+        id: `${item.id}-overdue`,
+        title: item.title ?? item.name,
+        detail: "Overdue",
+      });
+    } else if ((item.timingType ?? inferTimingType(item)) === "deadline" && isDeadlineWithinHours(item, 48)) {
+      issues.push({
+        id: `${item.id}-deadline`,
+        title: item.title ?? item.name,
+        detail: "Deadline approaching within 48 hours",
+      });
+    }
+  }
+
+  for (const conflict of getScheduledConflicts()) {
+    issues.push(conflict);
+  }
+
+  return issues;
+}
+
+function getScheduledConflicts() {
+  const scheduled = getScheduledCandidates()
+    .filter(isOpen)
+    .map((item) => ({ item, start: parseTodayTime(item.startTime ?? item.time) }))
+    .filter((entry) => entry.start)
+    .sort((left, right) => left.start.getTime() - right.start.getTime());
+
+  const conflicts = [];
+  for (let index = 1; index < scheduled.length; index += 1) {
+    const previous = scheduled[index - 1];
+    const current = scheduled[index];
+    const previousDuration = Number(previous.item.estimatedEffortMinutes ?? 30);
+    const previousEnd = previous.start.getTime() + previousDuration * 60000;
+
+    if (current.start.getTime() < previousEnd) {
+      conflicts.push({
+        id: `${previous.item.id}-${current.item.id}-conflict`,
+        title: `${previous.item.title ?? previous.item.name} / ${current.item.title ?? current.item.name}`,
+        detail: "Scheduled tasks may overlap",
+      });
+    }
+  }
+
+  return conflicts;
+}
+
 function getNextUpcomingItem(currentItemId) {
-  return state.timeline.find((item) => item.id !== currentItemId && isOpen(item)) ?? null;
+  const scheduled = getScheduledCandidates().filter((item) => item.id !== currentItemId && isOpen(item));
+  const future = scheduled
+    .filter((item) => getRawMinutesUntilScheduledStart(item) > 0)
+    .sort((left, right) => getRawMinutesUntilScheduledStart(left) - getRawMinutesUntilScheduledStart(right));
+
+  return future[0] ?? scheduled.sort((left, right) => getMinutesUntilScheduledStart(left) - getMinutesUntilScheduledStart(right))[0] ?? null;
 }
 
 function getTimeRemainingLabel(comingUp) {
-  if (!comingUp?.time) {
+  const startTime = comingUp?.startTime ?? comingUp?.time;
+  if (!startTime) {
     return "Time Remaining: Due now";
   }
 
-  return formatTimeRemaining(getMinutesUntilTime(comingUp.time));
+  return formatTimeRemaining(getMinutesUntilTime(startTime));
 }
 
 function getMinutesUntilTime(timeText) {
@@ -412,6 +522,108 @@ function parseTodayTime(timeText) {
   const target = new Date();
   target.setHours(hours, minutes, 0, 0);
   return target;
+}
+
+function isEligibleCandidate(item) {
+  const timingType = item.timingType ?? inferTimingType(item);
+
+  if (timingType === "scheduled") {
+    return getMinutesUntilScheduledStart(item) <= 15;
+  }
+
+  if (timingType === "flexible") {
+    return !item.preferredWindow || item.preferredWindow === "Today" || item.dueDate === "Today";
+  }
+
+  if (timingType === "deadline") {
+    return true;
+  }
+
+  return true;
+}
+
+function getDeadlineUrgencyScore(item) {
+  if ((item.timingType ?? inferTimingType(item)) !== "deadline") {
+    return 0;
+  }
+
+  if (isOverdue(item)) {
+    return 0;
+  }
+
+  const deadline = item.deadline ?? item.dueDate;
+  if (deadline === "Today") {
+    return 40;
+  }
+  if (deadline === "Tomorrow") {
+    return 20;
+  }
+  if (deadline === "This week") {
+    return 10;
+  }
+
+  const date = new Date(deadline);
+  if (Number.isNaN(date.getTime())) {
+    return 0;
+  }
+
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  date.setHours(0, 0, 0, 0);
+  const daysAway = Math.ceil((date.getTime() - now.getTime()) / 86400000);
+
+  if (daysAway <= 1) {
+    return 20;
+  }
+  if (daysAway <= 7) {
+    return 10;
+  }
+  return 0;
+}
+
+function getScheduledCandidates() {
+  return [...state.actions, ...state.timeline, ...state.focusSessions].filter((item) => (item.timingType ?? inferTimingType(item)) === "scheduled");
+}
+
+function getMinutesUntilScheduledStart(item) {
+  return getMinutesUntilTime(item.startTime ?? item.time);
+}
+
+function getRawMinutesUntilScheduledStart(item) {
+  const target = parseTodayTime(item.startTime ?? item.time);
+  if (!target) {
+    return 0;
+  }
+
+  return Math.ceil((target.getTime() - Date.now()) / 60000);
+}
+
+function inferTimingType(item) {
+  if (item.startTime || item.time) {
+    return "scheduled";
+  }
+  if (item.deadline) {
+    return "deadline";
+  }
+  return "flexible";
+}
+
+function isDeadlineWithinHours(item, hours) {
+  const deadline = item.deadline ?? item.dueDate;
+  if (deadline === "Today" || deadline === "Tomorrow") {
+    return true;
+  }
+
+  const date = new Date(deadline);
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+
+  return date.getTime() - Date.now() <= hours * 60 * 60 * 1000;
+}
+
+function getTodayKey() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function findByCollection(collectionName, id) {

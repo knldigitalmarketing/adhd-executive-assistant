@@ -21,6 +21,7 @@ export const appState = {
   },
   ui: {
     activeView: "working",
+    lastMorningBriefingDate: null,
   },
   interviewProfile: {
     adhd: {},
@@ -110,10 +111,10 @@ export const appState = {
     { id: "routine-bed", name: "Bedtime routine", time: "10:00 PM", areaId: "health", completed: false, priority: "Medium", estimatedEffortMinutes: 20 },
   ],
   actions: [
-    { id: "action-insurance", areaId: "finances", title: "Call insurance company", dueDate: "Today", status: "todo", priority: "High", estimatedEffortMinutes: 15 },
-    { id: "action-electric", areaId: "finances", title: "Pay electric bill", dueDate: "Today", status: "todo", priority: "High", estimatedEffortMinutes: 10 },
-    { id: "action-doctor", areaId: "health", title: "Confirm doctor appointment", dueDate: "Tomorrow", status: "todo", priority: "Medium", estimatedEffortMinutes: 10 },
-    { id: "action-client", areaId: "business", title: "Reply to client", dueDate: "Today", status: "waiting", priority: "Medium", estimatedEffortMinutes: 25 },
+    { id: "action-insurance", areaId: "finances", title: "Call insurance company", timingType: "flexible", preferredWindow: "Today", dueDate: "Today", status: "todo", priority: "High", estimatedEffortMinutes: 15 },
+    { id: "action-electric", areaId: "finances", title: "Pay electric bill", timingType: "deadline", deadline: "Today", dueDate: "Today", status: "todo", priority: "High", estimatedEffortMinutes: 10 },
+    { id: "action-doctor", areaId: "health", title: "Confirm doctor appointment", timingType: "deadline", deadline: "Tomorrow", dueDate: "Tomorrow", status: "todo", priority: "Medium", estimatedEffortMinutes: 10 },
+    { id: "action-client", areaId: "business", title: "Reply to client", timingType: "flexible", preferredWindow: "Today", dueDate: "Today", status: "waiting", priority: "Medium", estimatedEffortMinutes: 25 },
   ],
   obligations: [
     { id: "ob-home-insurance", profileId: "home-profile", name: "Home insurance", dueDate: "In 43 days", status: "Needs review", urgency: "Soon" },
@@ -138,6 +139,8 @@ export const appState = {
       priority: "Medium",
       flexibility: "Can move by 30 minutes",
       areaId: "projects",
+      timingType: "scheduled",
+      startTime: "9:00 AM",
       estimatedEffortMinutes: 90,
     },
     {
@@ -150,16 +153,18 @@ export const appState = {
       priority: "High",
       flexibility: "Do today",
       areaId: "finances",
+      timingType: "scheduled",
+      startTime: "10:45 AM",
       estimatedEffortMinutes: 30,
     },
   ],
   timeline: [
-    { id: "tl-breakfast", time: "8:00 AM", title: "Breakfast", type: "Routine", areaId: "health", status: "Done", priority: "Medium", estimatedEffortMinutes: 20 },
-    { id: "tl-focus-start", time: "9:00 AM", title: "Start: Work on motorcycle fairing", type: "Focus Session", areaId: "projects", status: "Upcoming", priority: "Medium", estimatedEffortMinutes: 90 },
-    { id: "tl-focus-warning", time: "10:20 AM", title: "Wrap up motorcycle work", type: "Transition Reminder", areaId: "projects", status: "Upcoming", priority: "Medium", estimatedEffortMinutes: 10 },
-    { id: "tl-focus-stop", time: "10:30 AM", title: "Stop motorcycle work. Next: Pay electric bill", type: "Transition Reminder", areaId: "finances", status: "Upcoming", priority: "High", estimatedEffortMinutes: 5 },
-    { id: "tl-bills", time: "10:45 AM", title: "Pay electric bill", type: "Action", areaId: "finances", status: "Upcoming", priority: "High", estimatedEffortMinutes: 10 },
-    { id: "tl-exercise", time: "5:30 PM", title: "Exercise", type: "Routine", areaId: "health", status: "Upcoming", priority: "Medium", estimatedEffortMinutes: 30 },
-    { id: "tl-bedtime", time: "10:00 PM", title: "Begin bedtime routine", type: "Transition Reminder", areaId: "health", status: "Upcoming", priority: "Medium", estimatedEffortMinutes: 20 },
+    { id: "tl-breakfast", time: "8:00 AM", title: "Breakfast", type: "Routine", areaId: "health", status: "Done", priority: "Medium", timingType: "scheduled", startTime: "8:00 AM", estimatedEffortMinutes: 20 },
+    { id: "tl-focus-start", time: "9:00 AM", title: "Start: Work on motorcycle fairing", type: "Focus Session", areaId: "projects", status: "Upcoming", priority: "Medium", timingType: "scheduled", startTime: "9:00 AM", estimatedEffortMinutes: 90 },
+    { id: "tl-focus-warning", time: "10:20 AM", title: "Wrap up motorcycle work", type: "Transition Reminder", areaId: "projects", status: "Upcoming", priority: "Medium", timingType: "scheduled", startTime: "10:20 AM", estimatedEffortMinutes: 10 },
+    { id: "tl-focus-stop", time: "10:30 AM", title: "Stop motorcycle work. Next: Pay electric bill", type: "Transition Reminder", areaId: "finances", status: "Upcoming", priority: "High", timingType: "scheduled", startTime: "10:30 AM", estimatedEffortMinutes: 5 },
+    { id: "tl-bills", time: "10:45 AM", title: "Pay electric bill", type: "Action", areaId: "finances", status: "Upcoming", priority: "High", timingType: "scheduled", startTime: "10:45 AM", estimatedEffortMinutes: 10 },
+    { id: "tl-exercise", time: "5:30 PM", title: "Exercise", type: "Routine", areaId: "health", status: "Upcoming", priority: "Medium", timingType: "scheduled", startTime: "5:30 PM", estimatedEffortMinutes: 30 },
+    { id: "tl-bedtime", time: "10:00 PM", title: "Begin bedtime routine", type: "Transition Reminder", areaId: "health", status: "Upcoming", priority: "Medium", timingType: "scheduled", startTime: "10:00 PM", estimatedEffortMinutes: 20 },
   ],
 };
