@@ -351,6 +351,61 @@ main {
   align-items: center;
 }
 
+.goal-progress-list {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.goal-progress-list li {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.goal-progress-list span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.goal-progress-list strong {
+  font-size: 1.4rem;
+}
+
+.carryover-form {
+  display: grid;
+  gap: 12px;
+}
+
+.carryover-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  cursor: pointer;
+}
+
+.carryover-option input {
+  margin-top: 3px;
+}
+
+.carryover-option span {
+  display: grid;
+  gap: 3px;
+}
+
+.carryover-option small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .briefing-list span,
 .empty-copy {
   color: var(--muted);
@@ -833,6 +888,7 @@ dd {
   .today-grid,
   .working-grid,
   .morning-grid,
+  .goal-progress-list,
   .add-task-form {
     grid-template-columns: 1fr;
   }

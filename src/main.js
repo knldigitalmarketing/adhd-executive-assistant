@@ -2,6 +2,7 @@ import { modelDefinitions } from "./models.js";
 import {
   addTask,
   answerInterviewQuestion,
+  completeEndOfDayReview,
   dismissRecommendation,
   dismissGuidance,
   dismissMorningRoutine,
@@ -11,6 +12,7 @@ import {
   endFocus,
   editInterviewAnswer,
   getDecisionRecommendation,
+  getEndOfDayReviewData,
   getActiveView,
   getFocusModeData,
   getInterviewState,
@@ -75,6 +77,7 @@ function renderHeader() {
       <nav aria-label="Primary">
         <a href="#today">Today</a>
         <a href="#working">Working</a>
+        <a href="#review">Review</a>
         <a href="#onboarding">Onboarding</a>
         <a href="#dashboard">Dashboard</a>
         <a href="#timeline">Timeline</a>
@@ -96,6 +99,98 @@ function renderTestModePanel() {
         <button type="button" data-action="load-demo" data-demo-id="self-employed">Load Self Employed Demo</button>
       </div>
     </aside>
+  `;
+}
+
+function renderEndOfDayReview() {
+  const review = getEndOfDayReviewData();
+
+  return `
+    <section id="review" class="section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">End-of-Day Review</p>
+          <h2>Close today, set up tomorrow</h2>
+        </div>
+        ${review.review ? pill("Review complete", "strong") : ""}
+      </div>
+      <div class="briefing-grid">
+        <article class="panel">
+          <div class="panel-title">
+            <h3>Completed Today</h3>
+            ${pill(`${review.completed.length} done`, "strong")}
+          </div>
+          ${renderReviewList(review.completed, "Nothing has been completed yet today.")}
+        </article>
+        <article class="panel">
+          <div class="panel-title">
+            <h3>Missed, Snoozed, or Skipped</h3>
+            ${pill(`${review.deferred.length} review`, "warn")}
+          </div>
+          ${renderCarryoverForm(review)}
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function renderReviewList(items, emptyText) {
+  if (items.length === 0) {
+    return `<p class="empty-copy">${escapeHtml(emptyText)}</p>`;
+  }
+
+  return `
+    <ul class="briefing-list">
+      ${items
+        .map(
+          (entry) => `
+            <li>
+              <strong>${escapeHtml(entry.title)}</strong>
+              <span>${escapeHtml(entry.status)}</span>
+            </li>
+          `,
+        )
+        .join("")}
+    </ul>
+  `;
+}
+
+function renderCarryoverForm(review) {
+  if (review.deferred.length === 0) {
+    return `
+      <form class="carryover-form" data-action="complete-review">
+        <p class="empty-copy">Nothing needs carryover right now.</p>
+        <div class="button-row">
+          <button type="submit">Complete Review</button>
+        </div>
+      </form>
+    `;
+  }
+
+  return `
+    <form class="carryover-form" data-action="complete-review">
+      <p class="empty-copy">What should carry over tomorrow?</p>
+      <ul class="briefing-list">
+        ${review.deferred
+          .map(
+            (entry) => `
+              <li>
+                <label class="carryover-option">
+                  <input type="checkbox" name="carryover" value="${escapeHtml(entry.key)}" />
+                  <span>
+                    <strong>${escapeHtml(entry.title)}</strong>
+                    <small>${escapeHtml(entry.status)}</small>
+                  </span>
+                </label>
+              </li>
+            `,
+          )
+          .join("")}
+      </ul>
+      <div class="button-row">
+        <button type="submit">Complete Review</button>
+      </div>
+    </form>
   `;
 }
 
@@ -161,6 +256,13 @@ function renderMorningBriefing() {
         </div>
         ${renderRecoverySuggestionItems(briefing.recoverySuggestions)}
       </article>
+      <article class="panel morning-routine-panel">
+        <div class="panel-title">
+          <h3>Goal Progress</h3>
+          ${pill(`${briefing.goalProgress.total} this week`, "strong")}
+        </div>
+        ${renderGoalProgress(briefing.goalProgress)}
+      </article>
       <div class="morning-grid">
         <article class="panel">
           <div class="panel-title">
@@ -201,6 +303,24 @@ function renderMorningBriefing() {
         </article>
       </div>
     </section>
+  `;
+}
+
+function renderGoalProgress(progress) {
+  return `
+    <p class="empty-copy">${escapeHtml(progress.summary)}</p>
+    <ul class="goal-progress-list">
+      ${Object.entries(progress.counts)
+        .map(
+          ([area, count]) => `
+            <li>
+              <span>${escapeHtml(area)}</span>
+              <strong>${count}</strong>
+            </li>
+          `,
+        )
+        .join("")}
+    </ul>
   `;
 }
 
@@ -293,7 +413,10 @@ function renderWorkingMode() {
           <p class="eyebrow">Working Mode</p>
           <h2>Stay with the next step</h2>
         </div>
-        <button type="button" class="secondary-button" data-action="show-dashboard">Full dashboard</button>
+        <div class="button-row">
+          <button type="button" class="secondary-button" data-action="show-dashboard">Full dashboard</button>
+          <button type="button" class="secondary-button" data-action="show-review">End-of-Day Review</button>
+        </div>
       </div>
       <div class="working-grid">
         ${renderNowCard(working)}
@@ -874,6 +997,7 @@ function renderApp() {
   const activeView = getActiveView();
   const fullDashboard = `
     ${renderToday()}
+    ${renderEndOfDayReview()}
     ${renderOnboarding()}
     ${renderBriefing()}
     ${renderResponsibilityEngine()}
@@ -886,7 +1010,7 @@ function renderApp() {
     ${renderHeader()}
     ${renderTestModePanel()}
     <main>
-      ${activeView === "briefing" ? renderMorningBriefing() : activeView === "working" ? renderWorkingMode() : fullDashboard}
+      ${activeView === "briefing" ? renderMorningBriefing() : activeView === "working" ? renderWorkingMode() : activeView === "review" ? renderEndOfDayReview() : fullDashboard}
     </main>
   `;
   scheduleWorkingModeRefresh(activeView);
@@ -991,6 +1115,10 @@ app.addEventListener("click", (event) => {
     setActiveView("dashboard");
     renderApp();
   }
+  if (action === "show-review") {
+    setActiveView("review");
+    renderApp();
+  }
   if (action === "answer-interview") {
     answerInterviewQuestion(button.dataset.questionId, button.dataset.answer);
     renderApp();
@@ -1002,6 +1130,14 @@ app.addEventListener("click", (event) => {
 });
 
 app.addEventListener("submit", (event) => {
+  const reviewForm = event.target.closest("form[data-action='complete-review']");
+  if (reviewForm) {
+    event.preventDefault();
+    completeEndOfDayReview(new FormData(reviewForm).getAll("carryover"));
+    renderApp();
+    return;
+  }
+
   const form = event.target.closest("form[data-action='add-task']");
   if (!form) {
     return;

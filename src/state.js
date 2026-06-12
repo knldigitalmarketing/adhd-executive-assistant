@@ -198,7 +198,9 @@ export function editInterviewAnswer(questionId) {
 
 export function markDone(collectionName, id) {
   if (collectionName === "recoverySuggestions") {
+    const item = findByCollection(collectionName, id);
     recordItemEvent(collectionName, id, "done");
+    recordGoalProgress(collectionName, id, item);
     state.recoveryState[id] = {
       ...state.recoveryState[id],
       status: "done",
@@ -211,7 +213,9 @@ export function markDone(collectionName, id) {
   }
 
   if (collectionName === "morningRoutine") {
+    const item = findByCollection(collectionName, id);
     recordItemEvent(collectionName, id, "done");
+    recordGoalProgress(collectionName, id, item);
     state.morningRoutineState[id] = {
       ...state.morningRoutineState[id],
       status: "done",
@@ -223,7 +227,9 @@ export function markDone(collectionName, id) {
   }
 
   if (collectionName === "guidance") {
+    const item = findByCollection(collectionName, id);
     recordItemEvent(collectionName, id, "done");
+    recordGoalProgress(collectionName, id, item);
     state.guidanceState[id] = {
       ...state.guidanceState[id],
       status: "done",
@@ -235,7 +241,9 @@ export function markDone(collectionName, id) {
   }
 
   if (collectionName === "recommendations") {
+    const item = findByCollection(collectionName, id);
     recordItemEvent(collectionName, id, "done");
+    recordGoalProgress(collectionName, id, item);
     state.recommendationState[id] = {
       ...state.recommendationState[id],
       status: "done",
@@ -252,6 +260,7 @@ export function markDone(collectionName, id) {
   }
 
   recordItemEvent(collectionName, id, "done", item);
+  recordGoalProgress(collectionName, id, item);
   item.status = "done";
   item.completed = true;
   item.completedAt = new Date().toISOString();
@@ -564,6 +573,7 @@ export function getWorkingModeData() {
 
 export function getMorningBriefingData() {
   return {
+    goalProgress: getGoalProgressSummary(),
     morningRoutine: getGeneratedMorningRoutine(),
     recoverySuggestions: getGeneratedRecoverySuggestions(),
     bigThings: getScoredActionableItems().slice(0, 3),
@@ -572,6 +582,91 @@ export function getMorningBriefingData() {
       .filter(isOpen)
       .sort((left, right) => getRawMinutesUntilScheduledStart(left) - getRawMinutesUntilScheduledStart(right)),
     potentialIssues: getPotentialIssues(),
+  };
+}
+
+export function getEndOfDayReviewData() {
+  const todayKey = getTodayKey();
+  const completed = getCompletedTodayItems();
+  const deferred = getDeferredTodayItems();
+
+  return {
+    date: todayKey,
+    completed,
+    deferred,
+    review: state.endOfDayReviews?.[todayKey] ?? null,
+  };
+}
+
+export function completeEndOfDayReview(carryoverIds = []) {
+  const todayKey = getTodayKey();
+  const deferredItems = getDeferredTodayItems();
+  const carryoverSet = new Set(carryoverIds);
+  const createdCarryovers = [];
+
+  for (const entry of deferredItems) {
+    if (!carryoverSet.has(entry.key)) {
+      continue;
+    }
+
+    const item = entry.item;
+    const carryover = {
+      id: `carryover-${Date.now()}-${createdCarryovers.length}`,
+      areaId: item.areaId ?? "projects",
+      title: item.title ?? item.name,
+      category: item.category ?? getGoalArea(item),
+      workType: item.workType ?? "none",
+      timingType: "flexible",
+      preferredWindow: "Tomorrow",
+      dueDate: "Tomorrow",
+      status: "todo",
+      priority: item.priority ?? "Medium",
+      estimatedEffortMinutes: Number(item.estimatedEffortMinutes ?? 15),
+      source: "End-of-Day Review",
+      carriedFrom: entry.key,
+      createdAt: new Date().toISOString(),
+    };
+    state.actions.unshift(carryover);
+    createdCarryovers.push(carryover.id);
+  }
+
+  state.endOfDayReviews = state.endOfDayReviews ?? {};
+  state.endOfDayReviews[todayKey] = {
+    completedAt: new Date().toISOString(),
+    completedCount: getCompletedTodayItems().length,
+    deferredCount: deferredItems.length,
+    carryoverIds: createdCarryovers,
+  };
+  saveState(state);
+}
+
+export function getGoalProgressSummary() {
+  const areas = ["Health", "Fitness", "Work", "Money", "Relationships", "Personal"];
+  const weekStart = getWeekStartDate(new Date());
+  const counts = Object.fromEntries(areas.map((area) => [area, 0]));
+
+  for (const entry of state.progressHistory ?? []) {
+    const completedAt = new Date(entry.completedAt);
+    if (Number.isNaN(completedAt.getTime()) || completedAt < weekStart) {
+      continue;
+    }
+
+    if (counts[entry.goalArea] !== undefined) {
+      counts[entry.goalArea] += 1;
+    }
+  }
+
+  const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
+  const strongestArea = areas.reduce((best, area) => (counts[area] > counts[best] ? area : best), areas[0]);
+
+  return {
+    counts,
+    total,
+    weekStart: weekStart.toISOString().slice(0, 10),
+    summary:
+      total === 0
+        ? "No completions logged yet this week."
+        : `${total} completion${total === 1 ? "" : "s"} logged this week. Strongest area: ${strongestArea}.`,
   };
 }
 
@@ -679,6 +774,87 @@ function allCompletableItems() {
     ...getGeneratedMorningRoutine(),
     ...getGeneratedRecoverySuggestions(),
   ];
+}
+
+function getReviewableEntries() {
+  return [
+    ...state.actions.map((item) => ({ collection: "actions", item })),
+    ...state.routines.map((item) => ({ collection: "routines", item })),
+    ...state.timeline.map((item) => ({ collection: "timeline", item })),
+    ...state.focusSessions.map((item) => ({ collection: "focusSessions", item })),
+    ...getGeneratedRecommendations().map((item) => ({ collection: "recommendations", item })),
+    ...getGeneratedGuidance().map((item) => ({ collection: "guidance", item })),
+    ...getGeneratedMorningRoutine().map((item) => ({ collection: "morningRoutine", item })),
+    ...getGeneratedRecoverySuggestions().map((item) => ({ collection: "recoverySuggestions", item })),
+  ].map((entry) => ({
+    ...entry,
+    key: `${entry.collection}:${entry.item.id}`,
+    title: entry.item.title ?? entry.item.name,
+    status: statusText(entry.item),
+  }));
+}
+
+function getCompletedTodayItems() {
+  return [
+    ...getReviewableEntries().filter(({ item }) => isDone(item) && isToday(item.completedAt)),
+    ...(state.progressHistory ?? [])
+      .filter((entry) => isToday(entry.completedAt))
+      .map((entry) => ({
+        collection: entry.collection,
+        key: `${entry.collection}:${entry.itemId}`,
+        title: entry.title,
+        status: "Done",
+        item: {
+          id: entry.itemId,
+          title: entry.title,
+          category: entry.goalArea,
+          completedAt: entry.completedAt,
+        },
+      })),
+  ].filter(uniqueByKey);
+}
+
+function getDeferredTodayItems() {
+  const learnedMisses = Object.entries(getLearningStats())
+    .filter(([, stats]) => stats.lastMissedDate === getTodayKey())
+    .map(([key, stats]) => {
+      const [collection, id] = key.split(":");
+      return {
+        collection,
+        key,
+        title: stats.title ?? id,
+        status: "Missed",
+        item: findByCollection(collection, id) ?? {
+          id,
+          title: stats.title ?? id,
+          category: "Personal",
+          priority: "Medium",
+          estimatedEffortMinutes: 15,
+        },
+      };
+    });
+
+  return [
+    ...getReviewableEntries().filter(({ item }) => isSnoozed(item) || isSkipped(item)),
+    ...learnedMisses,
+  ].filter(uniqueByKey);
+}
+
+function uniqueByKey(entry, index, entries) {
+  return entries.findIndex((candidate) => candidate.key === entry.key) === index;
+}
+
+function isToday(value) {
+  if (!value) {
+    return false;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+
+  return date.toISOString().slice(0, 10) === getTodayKey();
 }
 
 export function getGeneratedMorningRoutine() {
@@ -1289,6 +1465,51 @@ function recordItemEvent(collectionName, id, eventName, item = null) {
   state.learningStats[key] = next;
 }
 
+function recordGoalProgress(collectionName, id, item = null) {
+  const trackedItem = item ?? findByCollection(collectionName, id);
+  state.progressHistory = state.progressHistory ?? [];
+  state.progressHistory.push({
+    id: `progress-${collectionName}-${id}-${Date.now()}`,
+    collection: collectionName,
+    itemId: id,
+    title: trackedItem?.title ?? trackedItem?.name ?? id,
+    goalArea: getGoalArea(trackedItem),
+    completedAt: new Date().toISOString(),
+  });
+  state.progressHistory = state.progressHistory.slice(-250);
+}
+
+function getGoalArea(item = {}) {
+  const raw = String(item.category ?? item.areaId ?? "").toLowerCase();
+  const title = String(item.title ?? item.name ?? "").toLowerCase();
+
+  if (raw.includes("health") || title.includes("medication") || title.includes("doctor")) {
+    return "Health";
+  }
+  if (raw.includes("fitness") || title.includes("exercise") || title.includes("walk") || title.includes("workout")) {
+    return "Fitness";
+  }
+  if (raw.includes("work") || raw.includes("business") || title.includes("client") || title.includes("revenue")) {
+    return "Work";
+  }
+  if (raw.includes("money") || raw.includes("finance") || raw.includes("finances") || title.includes("bill") || title.includes("invoice")) {
+    return "Money";
+  }
+  if (raw.includes("relationship") || raw.includes("family")) {
+    return "Relationships";
+  }
+
+  return "Personal";
+}
+
+function getWeekStartDate(date) {
+  const weekStart = new Date(date);
+  weekStart.setHours(0, 0, 0, 0);
+  const daysSinceMonday = (weekStart.getDay() + 6) % 7;
+  weekStart.setDate(weekStart.getDate() - daysSinceMonday);
+  return weekStart;
+}
+
 function recordMissedOpenItems() {
   const missableCollections = [
     ["actions", state.actions],
@@ -1742,6 +1963,8 @@ function createDemoState(demoId) {
   demoState.recoveryHistory = [];
   demoState.focusMode = null;
   demoState.focusHistory = [];
+  demoState.progressHistory = [];
+  demoState.endOfDayReviews = {};
 
   if (demoId === "adhd-weight-loss") {
     demoState.interviewProfile = buildProfileWithRulesets({
