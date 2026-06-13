@@ -491,14 +491,16 @@ main {
 
 .routine-form,
 .goal-form,
-.habit-form {
+.habit-form,
+.recurring-task-form {
   display: grid;
   gap: 12px;
 }
 
 .routine-form label,
 .goal-form label,
-.habit-form label {
+.habit-form label,
+.recurring-task-form label {
   display: block;
   min-height: 0;
   margin-bottom: 6px;
@@ -508,14 +510,16 @@ main {
 }
 
 .goal-setting-grid,
-.habit-tracking-grid {
+.habit-tracking-grid,
+.recurring-task-grid {
   display: grid;
   grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.15fr);
   gap: 16px;
 }
 
 .goal-list,
-.habit-list {
+.habit-list,
+.recurring-task-list {
   display: grid;
   gap: 14px;
   margin: 0;
@@ -524,7 +528,8 @@ main {
 }
 
 .goal-list li,
-.habit-list li {
+.habit-list li,
+.recurring-task-list li {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
@@ -536,12 +541,15 @@ main {
 .goal-list strong,
 .goal-list span,
 .habit-list strong,
-.habit-list span {
+.habit-list span,
+.recurring-task-list strong,
+.recurring-task-list span {
   display: block;
 }
 
 .goal-list span,
-.habit-list span {
+.habit-list span,
+.recurring-task-list span {
   color: var(--muted);
 }
 
@@ -1226,6 +1234,7 @@ dd {
   .life-area-grid,
   .goal-setting-grid,
   .habit-tracking-grid,
+  .recurring-task-grid,
   .routine-builder-grid,
   .tomorrow-planning-grid,
   .add-task-form {
@@ -1249,6 +1258,7 @@ dd {
   .compact-list li,
   .goal-list li,
   .habit-list li,
+  .recurring-task-list li,
   .tip-card,
   .intervention-card,
   .timeline li,

@@ -2,19 +2,23 @@ import { modelDefinitions } from "./models.js";
 import {
   activateRoutine,
   activateHabit,
+  activateRecurringTask,
   addTask,
   answerInterviewQuestion,
   cancelGoalEdit,
   cancelHabitEdit,
+  cancelRecurringTaskEdit,
   cancelRoutineEdit,
   completeEndOfDayReview,
   completeSmartIntervention,
   completeWeeklyReview,
   deactivateRoutine,
   deactivateHabit,
+  deactivateRecurringTask,
   deleteRoutine,
   deleteGoal,
   deleteHabit,
+  deleteRecurringTask,
   dismissRecommendation,
   dismissGuidance,
   dismissMorningRoutine,
@@ -23,6 +27,7 @@ import {
   dismissSmartIntervention,
   doItNow,
   editRoutine,
+  editRecurringTask,
   endFocus,
   editInterviewAnswer,
   editGoal,
@@ -37,6 +42,7 @@ import {
   getLifeAreaDashboardData,
   getMorningBriefingData,
   getOpenTodayActions,
+  getRecurringTaskData,
   getRoutineBuilderData,
   getState,
   getTodayStats,
@@ -55,6 +61,7 @@ import {
   resumeFocus,
   saveGoal,
   saveHabit,
+  saveRecurringTask,
   saveRoutine,
   startFocus,
   startMyDay,
@@ -112,6 +119,7 @@ function renderHeader() {
         <a href="#routine-builder">Routines</a>
         <a href="#goal-setting">Goals</a>
         <a href="#habit-tracking">Habits</a>
+        <a href="#recurring-tasks">Recurring</a>
         <a href="#life-areas">Life Areas</a>
         <a href="#dashboard">Dashboard</a>
         <a href="#timeline">Timeline</a>
@@ -385,6 +393,7 @@ function renderMorningBriefing() {
       ${renderRoutineBuilder(briefing.builtRoutines)}
       ${renderGoalSetting(getGoalSettingData(), briefing.goals)}
       ${renderHabitTracking(briefing.habits)}
+      ${renderRecurringTasks(briefing.recurringTasks)}
       <article class="panel morning-routine-panel">
         <div class="panel-title">
           <h3>Recovery Suggestions</h3>
@@ -807,6 +816,123 @@ function renderHabitStreak(streak) {
       <span>${escapeHtml(bestLabel)}</span>
       ${streak.recoveryAvailable ? `<em>${escapeHtml(streak.message)}</em>` : ""}
     </div>
+  `;
+}
+
+function renderRecurringTasks(data = getRecurringTaskData()) {
+  const draft = data.draftTask;
+
+  return `
+    <section id="recurring-tasks" class="section recurring-task-section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Recurring Tasks</p>
+          <h2>Repeat without rethinking</h2>
+        </div>
+        ${pill(`${data.dueOccurrences.length} due`, "strong")}
+      </div>
+      <div class="recurring-task-grid">
+        <form class="panel recurring-task-form" data-action="save-recurring-task">
+          <input type="hidden" name="recurringTaskId" value="${escapeHtml(draft?.id ?? "")}" />
+          <div>
+            <label for="recurring-task-name">Task name</label>
+            <input id="recurring-task-name" name="recurringTaskName" type="text" value="${escapeHtml(draft?.name ?? "")}" placeholder="Take out trash" required />
+          </div>
+          <div>
+            <label for="recurring-task-type">Recurrence</label>
+            <select id="recurring-task-type" name="recurringTaskType">
+              ${renderRecurringTypeOptions(draft?.recurrenceType ?? "daily")}
+            </select>
+          </div>
+          <div>
+            <label for="recurring-task-next">Next occurrence</label>
+            <input id="recurring-task-next" name="recurringTaskNextOccurrence" type="text" value="${escapeHtml(draft?.nextOccurrence ?? "")}" placeholder="Today or YYYY-MM-DD" />
+          </div>
+          <div>
+            <label for="recurring-task-custom">Custom schedule</label>
+            <input id="recurring-task-custom" name="recurringTaskCustomSchedule" type="text" value="${escapeHtml(draft?.customSchedule ?? "")}" placeholder="Every 3 days" />
+          </div>
+          <div>
+            <label for="recurring-task-category">Category</label>
+            <select id="recurring-task-category" name="recurringTaskCategory">
+              ${["Personal", "Health", "Fitness", "Work", "Money", "Relationships", "Home"].map((category) => `<option ${category === (draft?.category ?? "Personal") ? "selected" : ""}>${category}</option>`).join("")}
+            </select>
+          </div>
+          <div>
+            <label for="recurring-task-priority">Priority</label>
+            <select id="recurring-task-priority" name="recurringTaskPriority">
+              ${["High", "Medium", "Low"].map((priority) => `<option ${priority === (draft?.priority ?? "Medium") ? "selected" : ""}>${priority}</option>`).join("")}
+            </select>
+          </div>
+          <div>
+            <label for="recurring-task-active">Status</label>
+            <select id="recurring-task-active" name="recurringTaskActive">
+              <option value="active" ${draft?.active === false ? "" : "selected"}>Active</option>
+              <option value="inactive" ${draft?.active === false ? "selected" : ""}>Inactive</option>
+            </select>
+          </div>
+          <div class="button-row">
+            <button type="submit">${draft ? "Save Recurring Task" : "Create Recurring Task"}</button>
+            ${draft ? `<button type="button" class="secondary-button" data-action="cancel-recurring-task-edit">Cancel</button>` : ""}
+          </div>
+        </form>
+        <article class="panel recurring-task-list-panel">
+          <div class="panel-title">
+            <h3>Active recurring tasks</h3>
+            ${pill(`${data.activeTasks.length} active`, "strong")}
+          </div>
+          ${renderRecurringTaskList(data.activeTasks, false)}
+          ${data.inactiveTasks.length > 0 ? `<h3 class="subsection-title">Inactive</h3>${renderRecurringTaskList(data.inactiveTasks, true)}` : ""}
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function renderRecurringTypeOptions(selectedType) {
+  return [
+    ["daily", "Daily"],
+    ["weekly", "Weekly"],
+    ["monthly", "Monthly"],
+    ["custom", "Custom"],
+  ]
+    .map(([value, label]) => `<option value="${value}" ${selectedType === value ? "selected" : ""}>${label}</option>`)
+    .join("");
+}
+
+function renderRecurringTaskList(tasks, inactive) {
+  if (tasks.length === 0) {
+    return `<p class="empty-copy">${inactive ? "No inactive recurring tasks." : "No recurring tasks yet."}</p>`;
+  }
+
+  return `
+    <ul class="recurring-task-list">
+      ${tasks.map((task) => renderRecurringTaskItem(task)).join("")}
+    </ul>
+  `;
+}
+
+function renderRecurringTaskItem(task) {
+  const completedCount = task.completionHistory?.length ?? 0;
+  const recurrence = task.recurrenceType === "custom" && task.customSchedule ? task.customSchedule : titleCase(task.recurrenceType);
+
+  return `
+    <li>
+      <div>
+        <strong>${escapeHtml(task.name)}</strong>
+        <span>${escapeHtml(task.category)} - ${escapeHtml(recurrence)} - next ${escapeHtml(task.nextOccurrence)}</span>
+        <div class="habit-streak">
+          <span>${completedCount} completed</span>
+          <span>${escapeHtml(task.priority)} priority</span>
+        </div>
+      </div>
+      <div class="item-actions">
+        ${pill(task.active === false ? "Inactive" : "Active", task.active === false ? "neutral" : "strong")}
+        <button type="button" data-action="edit-recurring-task" data-id="${escapeHtml(task.id)}">Edit</button>
+        <button type="button" data-action="${task.active === false ? "activate-recurring-task" : "deactivate-recurring-task"}" data-id="${escapeHtml(task.id)}">${task.active === false ? "Activate" : "Deactivate"}</button>
+        <button type="button" data-action="delete-recurring-task" data-id="${escapeHtml(task.id)}">Delete</button>
+      </div>
+    </li>
   `;
 }
 
@@ -1724,6 +1850,7 @@ function renderApp() {
     ${renderRoutineBuilder()}
     ${renderGoalSetting()}
     ${renderHabitTracking()}
+    ${renderRecurringTasks()}
     ${renderLifeAreaDashboard()}
     ${renderBriefing()}
     ${renderResponsibilityEngine()}
@@ -1929,9 +2056,38 @@ app.addEventListener("click", (event) => {
     deactivateHabit(id);
     renderApp();
   }
+  if (action === "edit-recurring-task") {
+    editRecurringTask(id);
+    renderApp();
+  }
+  if (action === "cancel-recurring-task-edit") {
+    cancelRecurringTaskEdit();
+    renderApp();
+  }
+  if (action === "delete-recurring-task") {
+    deleteRecurringTask(id);
+    renderApp();
+  }
+  if (action === "activate-recurring-task") {
+    activateRecurringTask(id);
+    renderApp();
+  }
+  if (action === "deactivate-recurring-task") {
+    deactivateRecurringTask(id);
+    renderApp();
+  }
 });
 
 app.addEventListener("submit", (event) => {
+  const recurringTaskForm = event.target.closest("form[data-action='save-recurring-task']");
+  if (recurringTaskForm) {
+    event.preventDefault();
+    saveRecurringTask(new FormData(recurringTaskForm));
+    recurringTaskForm.reset();
+    renderApp();
+    return;
+  }
+
   const habitForm = event.target.closest("form[data-action='save-habit']");
   if (habitForm) {
     event.preventDefault();

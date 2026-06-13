@@ -66,6 +66,18 @@ import {
   recordRecoveryHistoryEntry,
 } from "./recovery-adaptation.js";
 import {
+  buildDueRecurringOccurrences,
+  clearRecurringTaskDraft,
+  completeRecurringOccurrence,
+  createRecurringTask,
+  deleteRecurringTask as removeRecurringTask,
+  ensureRecurringTaskState,
+  getRecurringTaskData as buildRecurringTaskData,
+  setRecurringTaskActive,
+  setRecurringTaskDraft,
+  updateRecurringTask,
+} from "./recurring-task-engine.js";
+import {
   buildActiveRoutineSteps,
   clearRoutineBuilderDraft,
   createRoutinePlan,
@@ -86,6 +98,7 @@ state.interventionState = ensureInterventionState(state.interventionState);
 ensureRoutineBuilderState(state);
 ensureGoalState(state);
 ensureHabitState(state);
+ensureRecurringTaskState(state);
 
 export function getState() {
   return state;
@@ -146,6 +159,7 @@ export function resetLocalData() {
   ensureRoutineBuilderState(state);
   ensureGoalState(state);
   ensureHabitState(state);
+  ensureRecurringTaskState(state);
 }
 
 export function loadDemo(demoId) {
@@ -276,6 +290,15 @@ export function editInterviewAnswer(questionId) {
 }
 
 export function markDone(collectionName, id) {
+  if (collectionName === "recurringOccurrences") {
+    const item = findByCollection(collectionName, id);
+    const recurringTask = completeRecurringOccurrence(state, id);
+    recordItemEvent(collectionName, id, "done", item);
+    recordGoalProgress(collectionName, id, item ?? recurringTask);
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "habitItems") {
     const item = findByCollection(collectionName, id);
     const habit = completeHabit(state, id);
@@ -371,6 +394,16 @@ export function markDone(collectionName, id) {
 }
 
 export function doItNow(collectionName, id) {
+  if (collectionName === "recurringOccurrences") {
+    state.recurringOccurrenceState[id] = {
+      ...state.recurringOccurrenceState[id],
+      status: "doing",
+      startedAt: new Date().toISOString(),
+    };
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "routineSteps") {
     state.routineStepState[id] = {
       ...state.routineStepState[id],
@@ -435,6 +468,19 @@ export function doItNow(collectionName, id) {
 }
 
 export function snoozeItem(collectionName, id) {
+  if (collectionName === "recurringOccurrences") {
+    const item = findByCollection(collectionName, id);
+    recordItemEvent(collectionName, id, "snoozed", item);
+    state.recurringOccurrenceState[id] = {
+      ...state.recurringOccurrenceState[id],
+      status: "snoozed",
+      completed: false,
+      snoozedUntil: getSnoozeLabel(),
+    };
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "routineSteps") {
     const item = findByCollection(collectionName, id);
     recordItemEvent(collectionName, id, "snoozed", item);
@@ -522,6 +568,19 @@ export function snoozeRecoverySuggestion(id) {
 }
 
 export function skipItem(collectionName, id) {
+  if (collectionName === "recurringOccurrences") {
+    const item = findByCollection(collectionName, id);
+    recordItemEvent(collectionName, id, "skipped", item);
+    state.recurringOccurrenceState[id] = {
+      ...state.recurringOccurrenceState[id],
+      status: "skipped",
+      completed: false,
+      skippedUntil: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    };
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "routineSteps") {
     const item = findByCollection(collectionName, id);
     recordItemEvent(collectionName, id, "skipped", item);
@@ -638,6 +697,18 @@ export function dismissRecoverySuggestion(id) {
 }
 
 export function dismissItem(collectionName, id) {
+  if (collectionName === "recurringOccurrences") {
+    const item = findByCollection(collectionName, id);
+    recordItemEvent(collectionName, id, "dismissed", item);
+    state.recurringOccurrenceState[id] = {
+      ...state.recurringOccurrenceState[id],
+      status: "dismissed",
+      dismissedAt: new Date().toISOString(),
+    };
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "routineSteps") {
     const item = findByCollection(collectionName, id);
     recordItemEvent(collectionName, id, "dismissed", item);
@@ -778,6 +849,45 @@ export function deactivateHabit(id) {
   saveState(state);
 }
 
+export function getRecurringTaskData() {
+  return buildRecurringTaskData(state);
+}
+
+export function saveRecurringTask(formData) {
+  const id = String(formData.get("recurringTaskId") ?? "").trim();
+  if (id) {
+    updateRecurringTask(state, id, formData);
+  } else {
+    createRecurringTask(state, formData);
+  }
+  saveState(state);
+}
+
+export function editRecurringTask(id) {
+  setRecurringTaskDraft(state, id);
+  saveState(state);
+}
+
+export function cancelRecurringTaskEdit() {
+  clearRecurringTaskDraft(state);
+  saveState(state);
+}
+
+export function deleteRecurringTask(id) {
+  removeRecurringTask(state, id);
+  saveState(state);
+}
+
+export function activateRecurringTask(id) {
+  setRecurringTaskActive(state, id, true);
+  saveState(state);
+}
+
+export function deactivateRecurringTask(id) {
+  setRecurringTaskActive(state, id, false);
+  saveState(state);
+}
+
 export function getGoalSettingData() {
   return buildGoalSettingData(state);
 }
@@ -845,6 +955,7 @@ export function getMorningBriefingData() {
     goalProgress: getGoalProgressSummary(),
     goals: getTopActiveGoals(state, 3),
     habits: getHabitTrackingData(),
+    recurringTasks: getRecurringTaskData(),
     tomorrowPlanning: getTomorrowPlanningData(),
     morningRoutine: getGeneratedMorningRoutine(),
     builtRoutines: getRoutineBuilderData(),
@@ -1039,6 +1150,7 @@ function allCompletableItems() {
     ...state.actions,
     ...state.routines,
     ...state.timeline,
+    ...getDueRecurringOccurrences(),
     ...getGeneratedRecommendations(),
     ...getGeneratedGuidance(),
     ...getGeneratedMorningRoutine(),
@@ -1107,6 +1219,10 @@ function getDueHabitItems() {
   return buildDueHabitItems({ state });
 }
 
+function getDueRecurringOccurrences() {
+  return buildDueRecurringOccurrences({ state });
+}
+
 function getGeneratedGuidance() {
   return buildGeneratedGuidance({ state, isDone, getDayPart });
 }
@@ -1132,6 +1248,7 @@ function getActionableCandidates() {
   const generatedMorningRoutine = getGeneratedMorningRoutine();
   const activeRoutineSteps = getActiveRoutineSteps();
   const dueHabitItems = getDueHabitItems();
+  const dueRecurringOccurrences = getDueRecurringOccurrences();
   const generatedRecoverySuggestions = getGeneratedRecoverySuggestions();
 
   return [
@@ -1147,10 +1264,15 @@ function getActionableCandidates() {
       item,
       order: state.actions.length + state.routines.length + state.timeline.length + index,
     })),
+    ...dueRecurringOccurrences.map((item, index) => ({
+      collection: "recurringOccurrences",
+      item,
+      order: state.actions.length + state.routines.length + state.timeline.length + state.focusSessions.length + index,
+    })),
     ...generatedRecommendations.map((item, index) => ({
       collection: "recommendations",
       item,
-      order: state.actions.length + state.routines.length + state.timeline.length + state.focusSessions.length + index,
+      order: state.actions.length + state.routines.length + state.timeline.length + state.focusSessions.length + dueRecurringOccurrences.length + index,
     })),
     ...generatedGuidance.map((item, index) => ({
       collection: "guidance",
@@ -1160,6 +1282,7 @@ function getActionableCandidates() {
         state.routines.length +
         state.timeline.length +
         state.focusSessions.length +
+        dueRecurringOccurrences.length +
         generatedRecommendations.length +
         index,
     })),
@@ -1171,6 +1294,7 @@ function getActionableCandidates() {
         state.routines.length +
         state.timeline.length +
         state.focusSessions.length +
+        dueRecurringOccurrences.length +
         generatedRecommendations.length +
         generatedGuidance.length +
         index,
@@ -1183,6 +1307,7 @@ function getActionableCandidates() {
         state.routines.length +
         state.timeline.length +
         state.focusSessions.length +
+        dueRecurringOccurrences.length +
         generatedRecommendations.length +
         generatedGuidance.length +
         generatedMorningRoutine.length +
@@ -1196,6 +1321,7 @@ function getActionableCandidates() {
         state.routines.length +
         state.timeline.length +
         state.focusSessions.length +
+        dueRecurringOccurrences.length +
         generatedRecommendations.length +
         generatedGuidance.length +
         generatedMorningRoutine.length +
@@ -1210,6 +1336,7 @@ function getActionableCandidates() {
         state.routines.length +
         state.timeline.length +
         state.focusSessions.length +
+        dueRecurringOccurrences.length +
         generatedRecommendations.length +
         generatedGuidance.length +
         generatedMorningRoutine.length +
@@ -1644,6 +1771,10 @@ function createDemoState(demoId) {
   demoState.routinePlans = [];
   demoState.routineStepState = {};
   demoState.routineBuilderDraftId = null;
+  demoState.recurringTasks = [];
+  demoState.recurringTaskDraftId = null;
+  demoState.recurringTaskCompletions = {};
+  demoState.recurringOccurrenceState = {};
   demoState.focusMode = null;
   demoState.focusHistory = [];
   demoState.progressHistory = [];
@@ -1782,6 +1913,10 @@ function findByCollection(collectionName, id) {
 
   if (collectionName === "habitItems") {
     return getDueHabitItems().find((item) => item.id === id);
+  }
+
+  if (collectionName === "recurringOccurrences") {
+    return getDueRecurringOccurrences().find((item) => item.id === id);
   }
 
   if (collectionName === "guidance") {

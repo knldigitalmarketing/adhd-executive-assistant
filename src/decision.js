@@ -32,6 +32,10 @@ export function scoreActionableCandidate(context, candidate) {
     reasons.push(item.recoveryAction ?? "try a smaller recovery step");
   }
 
+  if (item.type === "Recurring Task") {
+    reasons.push(item.reason ?? "recurring task due");
+  }
+
   const deadlineUrgency = context.getDeadlineUrgencyScore(item);
   if (deadlineUrgency > 0) {
     score += deadlineUrgency;
@@ -174,6 +178,9 @@ function getWhyThis(candidate, item) {
   }
   if (item.type === "Recommendation") {
     return "This is a profile-based support item that can help today go smoother.";
+  }
+  if (item.type === "Recurring Task") {
+    return "This is a recurring responsibility that is due and ready to handle once.";
   }
   if (candidate.collection === "timeline" || candidate.collection === "focusSessions") {
     return "This is tied to today’s schedule, so it needs attention before it slips.";
