@@ -134,6 +134,13 @@ export const appState = {
     recentTipIds: [],
     lastShownByContext: {},
   },
+  interventionState: {
+    recentInterventionIds: [],
+    lastShownByContext: {},
+    dismissedToday: [],
+    effectiveness: {},
+    history: [],
+  },
   focusMode: null,
   focusHistory: [],
   progressHistory: [],

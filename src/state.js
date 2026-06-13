@@ -1,6 +1,13 @@
 import { appState as defaultState } from "./data.js";
 import { scoreActionableCandidate } from "./decision.js";
 import {
+  buildSmartIntervention,
+  ensureInterventionState,
+  getCachedIntervention,
+  recordInterventionOutcome,
+  recordInterventionShown,
+} from "./intervention-engine.js";
+import {
   buildProfileWithRulesets,
   ensureProfileShape,
   getFirstUnansweredQuestionId,
@@ -37,6 +44,8 @@ import { ensureTipState, getTipById, recordTipShown, selectAdhdTip } from "./tip
 
 let state = loadState(defaultState);
 state.interviewProfile = buildProfileWithRulesets(ensureProfileShape(state.interviewProfile));
+state.tipState = ensureTipState(state.tipState);
+state.interventionState = ensureInterventionState(state.interventionState);
 
 export function getState() {
   return state;
@@ -93,6 +102,7 @@ export function resetLocalData() {
   state = loadState(defaultState);
   state.interviewProfile = buildProfileWithRulesets(ensureProfileShape(state.interviewProfile));
   state.tipState = ensureTipState(state.tipState);
+  state.interventionState = ensureInterventionState(state.interventionState);
 }
 
 export function loadDemo(demoId) {
@@ -595,6 +605,7 @@ export function getWorkingModeData() {
     comingUp,
     timeRemaining: recommendation ? getTimeRemainingLabel(comingUp) : "Time Remaining: Due now",
     tip: getAdhdTip("working"),
+    intervention: getSmartIntervention("working"),
   };
 }
 
@@ -611,6 +622,7 @@ export function getMorningBriefingData() {
       .sort((left, right) => getRawMinutesUntilScheduledStart(left) - getRawMinutesUntilScheduledStart(right)),
     potentialIssues: getPotentialIssues(),
     tip: getAdhdTip("briefing"),
+    intervention: getSmartIntervention("briefing"),
   };
 }
 
@@ -660,6 +672,38 @@ export function getAdhdTip(contextName = "dashboard") {
     saveState(state);
   }
   return tip;
+}
+
+export function getSmartIntervention(contextName = "dashboard") {
+  state.interventionState = ensureInterventionState(state.interventionState);
+  const todayKey = getTodayKey();
+  const cached = getCachedIntervention(state.interventionState, contextName, todayKey);
+  if (cached) {
+    return {
+      ...cached,
+      reason: "Selected earlier today for this screen.",
+    };
+  }
+
+  const intervention = buildSmartIntervention(getInterventionContext(contextName));
+  if (!intervention) {
+    return null;
+  }
+
+  if (recordInterventionShown(state, contextName, intervention, todayKey)) {
+    saveState(state);
+  }
+  return intervention;
+}
+
+export function completeSmartIntervention(id, contextName = "dashboard") {
+  recordInterventionOutcome(state, id, "accepted", contextName);
+  saveState(state);
+}
+
+export function dismissSmartIntervention(id, contextName = "dashboard") {
+  recordInterventionOutcome(state, id, "dismissed", contextName);
+  saveState(state);
 }
 
 export function formatTimeRemaining(minutesUntilDue) {
@@ -800,6 +844,18 @@ function getTipContext(contextName) {
     hasMissedTasks: statsValues.some((stats) => stats.lastMissedDate === getTodayKey() || Number(stats.missedCount ?? 0) > 0),
     hasSnoozedItems: statsValues.some((stats) => Number(stats.snoozeCount ?? 0) > 0) || allCompletableItems().some(isSnoozed),
     hasOverwhelm: profile.adhd?.busyFailureMode === "overwhelmed" || profile.adhd?.supportNeeded === "choose",
+  };
+}
+
+function getInterventionContext(contextName) {
+  return {
+    contextName,
+    profile: state.interviewProfile ?? {},
+    learningStats: getLearningStats(),
+    focusHistory: state.focusHistory ?? [],
+    openItems: allCompletableItems().filter(isOpen),
+    interventionState: state.interventionState,
+    now: new Date(),
   };
 }
 
@@ -1270,6 +1326,13 @@ function createDemoState(demoId) {
   demoState.tipState = {
     recentTipIds: [],
     lastShownByContext: {},
+  };
+  demoState.interventionState = {
+    recentInterventionIds: [],
+    lastShownByContext: {},
+    dismissedToday: [],
+    effectiveness: {},
+    history: [],
   };
   demoState.focusMode = null;
   demoState.focusHistory = [];

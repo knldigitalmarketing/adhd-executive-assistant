@@ -529,6 +529,41 @@ main {
   font-weight: 700;
 }
 
+.intervention-card {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.3fr) minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid #f1d493;
+  border-left: 5px solid var(--yellow);
+  border-radius: 8px;
+  background: #fffaf0;
+}
+
+.intervention-card .eyebrow {
+  margin-bottom: 3px;
+  color: #8a600f;
+}
+
+.intervention-card strong {
+  display: block;
+}
+
+.intervention-card p,
+.intervention-card span {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.intervention-card span {
+  display: block;
+  margin-top: 5px;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
 .why-list {
   display: grid;
   gap: 6px;
@@ -1007,6 +1042,7 @@ dd {
 
   .compact-list li,
   .tip-card,
+  .intervention-card,
   .timeline li,
   .task-list li,
   .focus-card dl div {

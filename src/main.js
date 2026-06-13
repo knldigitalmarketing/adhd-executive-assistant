@@ -3,12 +3,14 @@ import {
   addTask,
   answerInterviewQuestion,
   completeEndOfDayReview,
+  completeSmartIntervention,
   completeWeeklyReview,
   dismissRecommendation,
   dismissGuidance,
   dismissMorningRoutine,
   dismissRecoverySuggestion,
   dismissItem,
+  dismissSmartIntervention,
   doItNow,
   endFocus,
   editInterviewAnswer,
@@ -344,6 +346,7 @@ function renderMorningBriefing() {
         <button type="button" data-action="start-working">Start My Day</button>
       </div>
       ${renderTipCard(briefing.tip)}
+      ${renderInterventionCard(briefing.intervention, "briefing")}
       <article class="panel morning-routine-panel">
         <div class="panel-title">
           <h3>Morning Routine</h3>
@@ -573,6 +576,7 @@ function renderWorkingMode() {
         ${renderComingUpCard(working.comingUp)}
       </div>
       ${renderTipCard(working.tip)}
+      ${renderInterventionCard(working.intervention, "working")}
     </section>
   `;
 }
@@ -590,6 +594,29 @@ function renderTipCard(tip) {
       </div>
       <p>${escapeHtml(tip.text)}</p>
       <span>${escapeHtml(tip.reason)}</span>
+    </aside>
+  `;
+}
+
+function renderInterventionCard(intervention, contextName) {
+  if (!intervention) {
+    return "";
+  }
+
+  return `
+    <aside class="intervention-card" aria-label="Smart Intervention">
+      <div>
+        <p class="eyebrow">Smart Intervention</p>
+        <strong>${escapeHtml(intervention.title)}</strong>
+      </div>
+      <div>
+        <p>${escapeHtml(intervention.message)}</p>
+        <span>${escapeHtml(intervention.reason)}</span>
+      </div>
+      <div class="button-row">
+        <button type="button" data-action="complete-intervention" data-id="${escapeHtml(intervention.id)}" data-context="${escapeHtml(contextName)}">${escapeHtml(intervention.actionLabel ?? "Done")}</button>
+        <button type="button" class="secondary-button" data-action="dismiss-intervention" data-id="${escapeHtml(intervention.id)}" data-context="${escapeHtml(contextName)}">Dismiss</button>
+      </div>
     </aside>
   `;
 }
@@ -1340,6 +1367,14 @@ app.addEventListener("click", (event) => {
   }
   if (action === "dismiss-recovery-suggestion") {
     dismissRecoverySuggestion(id);
+    renderApp();
+  }
+  if (action === "complete-intervention") {
+    completeSmartIntervention(id, button.dataset.context);
+    renderApp();
+  }
+  if (action === "dismiss-intervention") {
+    dismissSmartIntervention(id, button.dataset.context);
     renderApp();
   }
   if (action === "dismiss-item") {
