@@ -33,6 +33,7 @@ import {
   recordRecoveryHistoryEntry,
 } from "./recovery-adaptation.js";
 import { clearState, loadState, saveState } from "./storage.js";
+import { ensureTipState, getTipById, recordTipShown, selectAdhdTip } from "./tips.js";
 
 let state = loadState(defaultState);
 state.interviewProfile = buildProfileWithRulesets(ensureProfileShape(state.interviewProfile));
@@ -91,6 +92,7 @@ export function resetLocalData() {
   clearState();
   state = loadState(defaultState);
   state.interviewProfile = buildProfileWithRulesets(ensureProfileShape(state.interviewProfile));
+  state.tipState = ensureTipState(state.tipState);
 }
 
 export function loadDemo(demoId) {
@@ -592,6 +594,7 @@ export function getWorkingModeData() {
     now: recommendation,
     comingUp,
     timeRemaining: recommendation ? getTimeRemainingLabel(comingUp) : "Time Remaining: Due now",
+    tip: getAdhdTip("working"),
   };
 }
 
@@ -607,6 +610,7 @@ export function getMorningBriefingData() {
       .filter(isOpen)
       .sort((left, right) => getRawMinutesUntilScheduledStart(left) - getRawMinutesUntilScheduledStart(right)),
     potentialIssues: getPotentialIssues(),
+    tip: getAdhdTip("briefing"),
   };
 }
 
@@ -643,6 +647,19 @@ export function completeWeeklyReview() {
 
 export function getGoalProgressSummary() {
   return buildGoalProgressSummary({ state, getTodayKey });
+}
+
+export function getAdhdTip(contextName = "dashboard") {
+  state.tipState = ensureTipState(state.tipState);
+  const context = getTipContext(contextName);
+  const todayKey = getTodayKey();
+  const cached = state.tipState.lastShownByContext?.[contextName];
+  const cachedTip = cached?.date === todayKey ? getTipById(cached.tipId, context) : null;
+  const tip = cachedTip ?? selectAdhdTip(context);
+  if (recordTipShown(state, contextName, tip)) {
+    saveState(state);
+  }
+  return tip;
 }
 
 export function formatTimeRemaining(minutesUntilDue) {
@@ -767,6 +784,22 @@ function getProgressReviewContext() {
     isSkipped,
     isOverdue,
     statusText,
+  };
+}
+
+function getTipContext(contextName) {
+  const learningStats = getLearningStats();
+  const statsValues = Object.values(learningStats);
+  const profile = state.interviewProfile ?? {};
+
+  return {
+    contextName,
+    dayPart: getDayPart(),
+    activeRulesets: profile.activeRulesets ?? [],
+    recentTipIds: state.tipState?.recentTipIds ?? [],
+    hasMissedTasks: statsValues.some((stats) => stats.lastMissedDate === getTodayKey() || Number(stats.missedCount ?? 0) > 0),
+    hasSnoozedItems: statsValues.some((stats) => Number(stats.snoozeCount ?? 0) > 0) || allCompletableItems().some(isSnoozed),
+    hasOverwhelm: profile.adhd?.busyFailureMode === "overwhelmed" || profile.adhd?.supportNeeded === "choose",
   };
 }
 
@@ -1234,6 +1267,10 @@ function createDemoState(demoId) {
   demoState.learningStats = {};
   demoState.recoveryState = {};
   demoState.recoveryHistory = [];
+  demoState.tipState = {
+    recentTipIds: [],
+    lastShownByContext: {},
+  };
   demoState.focusMode = null;
   demoState.focusHistory = [];
   demoState.progressHistory = [];

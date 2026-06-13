@@ -130,6 +130,10 @@ export const appState = {
   learningStats: {},
   recoveryState: {},
   recoveryHistory: [],
+  tipState: {
+    recentTipIds: [],
+    lastShownByContext: {},
+  },
   focusMode: null,
   focusHistory: [],
   progressHistory: [],

@@ -52,6 +52,12 @@ function mergeState(base, stored) {
     learningStats: { ...base.learningStats, ...stored.learningStats },
     recoveryState: { ...base.recoveryState, ...stored.recoveryState },
     recoveryHistory: arrayOrDefault(stored.recoveryHistory, base.recoveryHistory),
+    tipState: {
+      ...base.tipState,
+      ...stored.tipState,
+      recentTipIds: arrayOrDefault(stored.tipState?.recentTipIds, base.tipState?.recentTipIds ?? []),
+      lastShownByContext: { ...base.tipState?.lastShownByContext, ...stored.tipState?.lastShownByContext },
+    },
     focusMode: stored.focusMode ?? base.focusMode,
     focusHistory: arrayOrDefault(stored.focusHistory, base.focusHistory),
     progressHistory: arrayOrDefault(stored.progressHistory, base.progressHistory),

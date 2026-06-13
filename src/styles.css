@@ -497,6 +497,38 @@ main {
   line-height: 1.55;
 }
 
+.tip-card {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.25fr) minmax(0, 1fr) minmax(180px, 0.4fr);
+  gap: 14px;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid #cfd7ea;
+  border-left: 5px solid var(--blue);
+  border-radius: 8px;
+  background: #f7f9fd;
+}
+
+.tip-card .eyebrow {
+  margin-bottom: 3px;
+}
+
+.tip-card strong {
+  display: block;
+}
+
+.tip-card p,
+.tip-card span {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.tip-card span {
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
 .why-list {
   display: grid;
   gap: 6px;
@@ -974,6 +1006,7 @@ dd {
   }
 
   .compact-list li,
+  .tip-card,
   .timeline li,
   .task-list li,
   .focus-card dl div {

@@ -343,6 +343,7 @@ function renderMorningBriefing() {
         </div>
         <button type="button" data-action="start-working">Start My Day</button>
       </div>
+      ${renderTipCard(briefing.tip)}
       <article class="panel morning-routine-panel">
         <div class="panel-title">
           <h3>Morning Routine</h3>
@@ -571,7 +572,25 @@ function renderWorkingMode() {
         ${renderNowCard(working)}
         ${renderComingUpCard(working.comingUp)}
       </div>
+      ${renderTipCard(working.tip)}
     </section>
+  `;
+}
+
+function renderTipCard(tip) {
+  if (!tip) {
+    return "";
+  }
+
+  return `
+    <aside class="tip-card" aria-label="ADHD Tip">
+      <div>
+        <p class="eyebrow">ADHD Tip</p>
+        <strong>${escapeHtml(tip.category)}</strong>
+      </div>
+      <p>${escapeHtml(tip.text)}</p>
+      <span>${escapeHtml(tip.reason)}</span>
+    </aside>
   `;
 }
 
