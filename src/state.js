@@ -1,4 +1,5 @@
 import { appState as defaultState } from "./data.js";
+import { buildContextSignals, getContextAwareInfluence } from "./context-aware-recommendations.js";
 import { scoreActionableCandidate } from "./decision.js";
 import {
   ensureEnergyMoodState,
@@ -143,7 +144,7 @@ export function getFocusModeData() {
 }
 
 export function getActiveView() {
-  if (state.ui?.lastMorningBriefingDate !== getTodayKey()) {
+  if (state.ui?.lastMorningBriefingDate !== getTodayKey() && state.ui?.activeView !== "command-center") {
     return "briefing";
   }
 
@@ -1424,6 +1425,8 @@ function getDecisionContext() {
     getGoalInfluence,
     getHabitInfluence,
     getEnergyMoodInfluence,
+    getContextAwareInfluence,
+    getContextSignals,
     getEnergyMoodContext,
     hasLowMood,
     getActiveMode,
@@ -1449,6 +1452,18 @@ function getHabitInfluence(item) {
 
 function getEnergyMoodInfluence(item) {
   return getEnergyMoodInfluenceForItem(state, item, getEstimatedEffort);
+}
+
+function getContextSignals() {
+  return buildContextSignals({
+    state,
+    getDayPart,
+    getEnergyMoodData,
+    getLearningStats,
+    getSmartReschedulingSummary,
+    getEstimatedEffort,
+    isDone,
+  });
 }
 
 function getEnergyMoodContext() {

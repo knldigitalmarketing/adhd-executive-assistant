@@ -383,6 +383,104 @@ main {
   gap: 16px;
 }
 
+.command-center-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.35fr) repeat(2, minmax(240px, 0.85fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.command-card {
+  display: grid;
+  gap: 12px;
+  min-height: 180px;
+}
+
+.command-now {
+  grid-row: span 2;
+  border-left: 5px solid var(--green);
+}
+
+.command-today,
+.command-alerts {
+  grid-column: span 2;
+}
+
+.command-positive {
+  grid-column: span 3;
+  min-height: 120px;
+  background: #f7f9fd;
+}
+
+.command-card h3,
+.command-card p {
+  margin: 0;
+}
+
+.command-card h3 {
+  font-size: clamp(1.05rem, 1.7vw, 1.6rem);
+}
+
+.command-card p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.command-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.command-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.command-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.command-list strong,
+.command-list span {
+  display: block;
+}
+
+.command-list span {
+  color: var(--muted);
+}
+
+.command-status {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.command-status div {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.command-status dt {
+  font-size: 0.78rem;
+}
+
+.command-status dd {
+  margin-top: 4px;
+  font-weight: 800;
+}
+
 .morning-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1266,6 +1364,7 @@ dd {
   .energy-mood-form,
   .today-grid,
   .working-grid,
+  .command-center-grid,
   .morning-grid,
   .goal-progress-list,
   .life-area-grid,
@@ -1280,6 +1379,14 @@ dd {
 
   .priority-panel {
     grid-column: auto;
+  }
+
+  .command-now,
+  .command-today,
+  .command-alerts,
+  .command-positive {
+    grid-column: auto;
+    grid-row: auto;
   }
 }
 
@@ -1298,6 +1405,8 @@ dd {
   .recurring-task-list li,
   .tip-card,
   .intervention-card,
+  .command-list li,
+  .command-status,
   .timeline li,
   .task-list li,
   .focus-card dl div {

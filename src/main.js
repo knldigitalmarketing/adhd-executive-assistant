@@ -45,7 +45,9 @@ import {
   getOpenTodayActions,
   getRecurringTaskData,
   getRoutineBuilderData,
+  getScoredActionableItems,
   getState,
+  getSmartReschedulingSummary,
   getTodayStats,
   getWeeklyReviewData,
   getWorkingModeData,
@@ -115,6 +117,7 @@ function renderHeader() {
       </div>
       <nav aria-label="Primary">
         <a href="#today">Today</a>
+        <button type="button" data-action="show-command-center">Command</button>
         <a href="#working">Working</a>
         <a href="#review">Review</a>
         <a href="#onboarding">Onboarding</a>
@@ -347,6 +350,7 @@ function renderToday() {
           <h2>Do this next</h2>
         </div>
         <div class="button-row">
+          <button type="button" data-action="show-command-center">Command Center</button>
           <button type="button" data-action="start-working">Start My Day</button>
           <button type="button" class="secondary-button" data-action="reset-local-data">Reset local data</button>
         </div>
@@ -1030,6 +1034,7 @@ function renderWorkingMode() {
           <h2>Stay with the next step</h2>
         </div>
         <div class="button-row">
+          <button type="button" class="secondary-button" data-action="show-command-center">Command Center</button>
           <button type="button" class="secondary-button" data-action="show-dashboard">Full dashboard</button>
           <button type="button" class="secondary-button" data-action="show-life-areas">Life Areas</button>
           <button type="button" class="secondary-button" data-action="show-review">End-of-Day Review</button>
@@ -1044,6 +1049,202 @@ function renderWorkingMode() {
       ${renderInterventionCard(working.intervention, "working")}
     </section>
   `;
+}
+
+function renderCommandCenter() {
+  const working = getWorkingModeData();
+  const briefing = getMorningBriefingData();
+  const stats = getTodayStats();
+  const scored = getScoredActionableItems();
+  const now = working.now;
+  const next = working.comingUp ?? scored.find((candidate) => candidate.item.id !== now?.item.id)?.item ?? null;
+  const important = scored.filter((candidate) => candidate.item.id !== now?.item.id).slice(0, 4);
+  const energyMood = getEnergyMoodData();
+  const smartRescheduling = getSmartReschedulingSummary();
+
+  return `
+    <section id="command-center" class="section command-center-mode">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Command Center</p>
+          <h2>All-day dashboard</h2>
+        </div>
+        <div class="button-row">
+          <button type="button" data-action="start-working">Working Mode</button>
+          <button type="button" class="secondary-button" data-action="show-dashboard">Full dashboard</button>
+        </div>
+      </div>
+      <div class="command-center-grid">
+        ${renderCommandNow(now)}
+        ${renderCommandNext(next)}
+        ${renderCommandToday(important)}
+        ${renderCommandStatus({ stats, energyMood, briefing, smartRescheduling })}
+        ${renderCommandTip(briefing.tip)}
+        ${renderCommandAlerts({ intervention: working.intervention ?? briefing.intervention, smartRescheduling })}
+        ${renderCommandPositiveMessage({ stats, now, energyMood })}
+      </div>
+    </section>
+  `;
+}
+
+function renderCommandNow(recommendation) {
+  if (!recommendation) {
+    return `
+      <article class="panel command-card command-now">
+        <p class="eyebrow">Now</p>
+        <h3>Nothing urgent is waiting.</h3>
+        <p class="empty-copy">The assistant has no open next action right now.</p>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="panel command-card command-now">
+      <p class="eyebrow">Now</p>
+      <h3>${escapeHtml(recommendation.title)}</h3>
+      <p>${escapeHtml(getShortWhy(recommendation))}</p>
+      <div class="command-meta">
+        ${pill(`${recommendation.effort} min`, "neutral")}
+        ${pill(`Score ${recommendation.score}`, "strong")}
+      </div>
+      <div class="button-row">
+        <button type="button" data-action="do-it-now" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Start</button>
+        <button type="button" data-action="mark-done" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Done</button>
+        <button type="button" data-action="snooze" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Snooze</button>
+        <button type="button" data-action="skip" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Skip</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderCommandNext(item) {
+  if (!item) {
+    return `
+      <article class="panel command-card">
+        <p class="eyebrow">Next</p>
+        <h3>No upcoming item.</h3>
+        <p class="empty-copy">The next slot is open.</p>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="panel command-card">
+      <p class="eyebrow">Next</p>
+      <h3>${escapeHtml(item.title ?? item.name)}</h3>
+      <p>${escapeHtml(item.startTime ?? item.time ?? item.dueDate ?? item.deadline ?? item.type ?? "Up next")}</p>
+    </article>
+  `;
+}
+
+function renderCommandToday(items) {
+  return `
+    <article class="panel command-card command-today">
+      <div class="panel-title">
+        <h3>Today</h3>
+        ${pill(`${items.length} important`, "strong")}
+      </div>
+      ${
+        items.length === 0
+          ? `<p class="empty-copy">No remaining important items are waiting.</p>`
+          : `<ul class="command-list">${items.map((candidate) => renderCommandTodayItem(candidate)).join("")}</ul>`
+      }
+    </article>
+  `;
+}
+
+function renderCommandTodayItem(candidate) {
+  return `
+    <li>
+      <div>
+        <strong>${escapeHtml(candidate.title)}</strong>
+        <span>${escapeHtml(getShortWhy(candidate))}</span>
+      </div>
+      <div class="item-actions">
+        <button type="button" data-action="mark-done" data-collection="${candidate.collection}" data-id="${escapeHtml(candidate.item.id)}">Done</button>
+        <button type="button" data-action="snooze" data-collection="${candidate.collection}" data-id="${escapeHtml(candidate.item.id)}">Snooze</button>
+      </div>
+    </li>
+  `;
+}
+
+function renderCommandStatus({ stats, energyMood, briefing, smartRescheduling }) {
+  const latest = energyMood.latestCheckIn;
+  const strongestHabit = [...briefing.habits.activeHabits].sort((left, right) => (right.streak?.currentStreak ?? 0) - (left.streak?.currentStreak ?? 0))[0];
+  const workload = smartRescheduling.load?.today ?? { items: stats.open, minutes: 0 };
+
+  return `
+    <article class="panel command-card">
+      <p class="eyebrow">Status</p>
+      <dl class="command-status">
+        <div><dt>Mood</dt><dd>${escapeHtml(latest?.mood ? titleCase(latest.mood) : "Not checked")}</dd></div>
+        <div><dt>Energy</dt><dd>${escapeHtml(latest?.energy ? titleCase(latest.energy) : "Not checked")}</dd></div>
+        <div><dt>Progress</dt><dd>${stats.done} done / ${stats.open} open</dd></div>
+        <div><dt>Streak</dt><dd>${escapeHtml(strongestHabit ? `${strongestHabit.name}: ${strongestHabit.streak.currentStreak}` : "No active streak yet")}</dd></div>
+        <div><dt>Workload</dt><dd>${workload.items} items / ${workload.minutes} min</dd></div>
+      </dl>
+    </article>
+  `;
+}
+
+function renderCommandTip(tip) {
+  if (!tip) {
+    return "";
+  }
+
+  return `
+    <article class="panel command-card">
+      <p class="eyebrow">Tip</p>
+      <h3>${escapeHtml(tip.category)}</h3>
+      <p>${escapeHtml(tip.text)}</p>
+    </article>
+  `;
+}
+
+function renderCommandAlerts({ intervention, smartRescheduling }) {
+  const notices = [
+    ...(intervention ? [{ title: intervention.title, detail: intervention.message }] : []),
+    ...(smartRescheduling.moved ?? []).slice(0, 2).map((item) => ({ title: item.title, detail: item.reason })),
+    ...(smartRescheduling.conflicts ?? []).slice(0, 2).map((item) => ({ title: item.title, detail: `Conflict: try ${item.suggestedAlternative}` })),
+  ];
+
+  return `
+    <article class="panel command-card command-alerts">
+      <div class="panel-title">
+        <h3>Alerts</h3>
+        ${pill(`${notices.length}`, notices.length ? "warn" : "strong")}
+      </div>
+      ${
+        notices.length === 0
+          ? `<p class="empty-copy">No alerts right now.</p>`
+          : `<ul class="command-list">${notices.map((item) => `<li><div><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></div></li>`).join("")}</ul>`
+      }
+    </article>
+  `;
+}
+
+function renderCommandPositiveMessage({ stats, now, energyMood }) {
+  const lowEnergy = energyMood.latestCheckIn?.energy === "low";
+  const message = stats.done > 0
+    ? `You have already completed ${stats.done} item${stats.done === 1 ? "" : "s"} today. Keep the next step small and visible.`
+    : lowEnergy
+      ? "Low energy still counts. One small next step is enough to keep the day moving."
+      : now
+        ? "You have a clear next step. That is the win right now."
+        : "The board is quiet. Take the opening without inventing extra work.";
+
+  return `
+    <article class="panel command-card command-positive">
+      <p class="eyebrow">Positive Message</p>
+      <h3>${escapeHtml(message)}</h3>
+    </article>
+  `;
+}
+
+function getShortWhy(recommendation) {
+  return String(recommendation.why ?? recommendation.explanation?.whyNow ?? "Best available next step.")
+    .split("\n")
+    .filter(Boolean)[0] ?? "Best available next step.";
 }
 
 function renderTipCard(tip) {
@@ -1963,7 +2164,7 @@ function renderApp() {
     ${renderHeader()}
     ${renderTestModePanel()}
     <main>
-      ${activeView === "briefing" ? renderMorningBriefing() : activeView === "working" ? renderWorkingMode() : activeView === "review" ? renderEndOfDayReview() : activeView === "life-areas" ? renderLifeAreaDashboard() : fullDashboard}
+      ${activeView === "briefing" ? renderMorningBriefing() : activeView === "working" ? renderWorkingMode() : activeView === "command-center" ? renderCommandCenter() : activeView === "review" ? renderEndOfDayReview() : activeView === "life-areas" ? renderLifeAreaDashboard() : fullDashboard}
     </main>
   `;
   scheduleWorkingModeRefresh(activeView);
@@ -1975,7 +2176,7 @@ function scheduleWorkingModeRefresh(activeView) {
     workingModeTimer = null;
   }
 
-  if (activeView !== "working") {
+  if (!["working", "command-center"].includes(activeView)) {
     return;
   }
 
@@ -1983,7 +2184,7 @@ function scheduleWorkingModeRefresh(activeView) {
   const refreshMs = focus.status === "running" ? 1000 : 60000;
 
   workingModeTimer = setInterval(() => {
-    if (getActiveView() === "working") {
+    if (["working", "command-center"].includes(getActiveView())) {
       renderApp();
     }
   }, refreshMs);
@@ -2070,6 +2271,10 @@ app.addEventListener("click", (event) => {
   }
   if (action === "start-working") {
     startMyDay();
+    renderApp();
+  }
+  if (action === "show-command-center") {
+    setActiveView("command-center");
     renderApp();
   }
   if (action === "show-dashboard") {
