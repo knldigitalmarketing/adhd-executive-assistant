@@ -3,12 +3,14 @@ import {
   activateRoutine,
   addTask,
   answerInterviewQuestion,
+  cancelGoalEdit,
   cancelRoutineEdit,
   completeEndOfDayReview,
   completeSmartIntervention,
   completeWeeklyReview,
   deactivateRoutine,
   deleteRoutine,
+  deleteGoal,
   dismissRecommendation,
   dismissGuidance,
   dismissMorningRoutine,
@@ -19,10 +21,12 @@ import {
   editRoutine,
   endFocus,
   editInterviewAnswer,
+  editGoal,
   getDecisionRecommendation,
   getEndOfDayReviewData,
   getActiveView,
   getFocusModeData,
+  getGoalSettingData,
   getInterviewState,
   getLifeAreaDashboardData,
   getMorningBriefingData,
@@ -40,7 +44,10 @@ import {
   skipItem,
   snoozeItem,
   pauseFocus,
+  markGoalComplete,
+  reactivateCompletedGoal,
   resumeFocus,
+  saveGoal,
   saveRoutine,
   startFocus,
   startMyDay,
@@ -92,6 +99,7 @@ function renderHeader() {
         <a href="#review">Review</a>
         <a href="#onboarding">Onboarding</a>
         <a href="#routine-builder">Routines</a>
+        <a href="#goal-setting">Goals</a>
         <a href="#life-areas">Life Areas</a>
         <a href="#dashboard">Dashboard</a>
         <a href="#timeline">Timeline</a>
@@ -363,6 +371,7 @@ function renderMorningBriefing() {
         ${renderMorningRoutineItems(briefing.morningRoutine)}
       </article>
       ${renderRoutineBuilder(briefing.builtRoutines)}
+      ${renderGoalSetting(getGoalSettingData(), briefing.goals)}
       <article class="panel morning-routine-panel">
         <div class="panel-title">
           <h3>Recovery Suggestions</h3>
@@ -584,6 +593,93 @@ function renderGoalProgress(progress) {
         )
         .join("")}
     </ul>
+  `;
+}
+
+function renderGoalSetting(data = getGoalSettingData(), briefingGoals = null) {
+  const draft = data.draftGoal;
+  const visibleActiveGoals = briefingGoals ?? data.activeGoals.slice(0, 3);
+
+  return `
+    <section id="goal-setting" class="section goal-setting-section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Goal Setting</p>
+          <h2>Choose the direction</h2>
+        </div>
+        ${pill(`${data.activeGoals.length} active`, "strong")}
+      </div>
+      <div class="goal-setting-grid">
+        <form class="panel goal-form" data-action="save-goal">
+          <input type="hidden" name="goalId" value="${escapeHtml(draft?.id ?? "")}" />
+          <div>
+            <label for="goal-title">Goal title</label>
+            <input id="goal-title" name="goalTitle" type="text" value="${escapeHtml(draft?.title ?? "")}" placeholder="Improve sleep consistency" required />
+          </div>
+          <div>
+            <label for="goal-category">Goal category</label>
+            <select id="goal-category" name="goalCategory">
+              ${renderGoalCategoryOptions(data.categories, draft?.category ?? "Personal")}
+            </select>
+          </div>
+          <div>
+            <label for="goal-priority">Priority</label>
+            <select id="goal-priority" name="goalPriority">
+              ${["High", "Medium", "Low"].map((priority) => `<option ${priority === (draft?.priority ?? "Medium") ? "selected" : ""}>${priority}</option>`).join("")}
+            </select>
+          </div>
+          <div>
+            <label for="goal-deadline">Deadline</label>
+            <input id="goal-deadline" name="goalDeadline" type="text" value="${escapeHtml(draft?.deadline ?? "")}" placeholder="Optional" />
+          </div>
+          <div class="button-row">
+            <button type="submit">${draft ? "Save Goal" : "Create Goal"}</button>
+            ${draft ? `<button type="button" class="secondary-button" data-action="cancel-goal-edit">Cancel</button>` : ""}
+          </div>
+        </form>
+        <article class="panel goal-list-panel">
+          <div class="panel-title">
+            <h3>Active goals</h3>
+            ${pill(`${visibleActiveGoals.length} shown`, "strong")}
+          </div>
+          ${renderGoalList(visibleActiveGoals, false)}
+          ${data.completedGoals.length > 0 ? `<h3 class="subsection-title">Completed</h3>${renderGoalList(data.completedGoals.slice(0, 3), true)}` : ""}
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function renderGoalCategoryOptions(categories, selectedCategory) {
+  return categories.map((category) => `<option ${category === selectedCategory ? "selected" : ""}>${category}</option>`).join("");
+}
+
+function renderGoalList(goals, completed) {
+  if (goals.length === 0) {
+    return `<p class="empty-copy">${completed ? "No completed goals yet." : "No active goals yet."}</p>`;
+  }
+
+  return `
+    <ul class="goal-list">
+      ${goals.map((goal) => renderGoalItem(goal, completed)).join("")}
+    </ul>
+  `;
+}
+
+function renderGoalItem(goal, completed) {
+  return `
+    <li>
+      <div>
+        <strong>${escapeHtml(goal.title)}</strong>
+        <span>${escapeHtml(goal.category)} - ${escapeHtml(goal.priority)} priority${goal.deadline ? ` - ${escapeHtml(goal.deadline)}` : ""}</span>
+      </div>
+      <div class="item-actions">
+        ${pill(completed ? "Completed" : "Active", completed ? "done" : "strong")}
+        ${completed ? `<button type="button" data-action="reactivate-goal" data-id="${escapeHtml(goal.id)}">Reactivate</button>` : `<button type="button" data-action="complete-goal" data-id="${escapeHtml(goal.id)}">Complete</button>`}
+        <button type="button" data-action="edit-goal" data-id="${escapeHtml(goal.id)}">Edit</button>
+        <button type="button" data-action="delete-goal" data-id="${escapeHtml(goal.id)}">Delete</button>
+      </div>
+    </li>
   `;
 }
 
@@ -1220,6 +1316,10 @@ function renderLifeAreaCard(area) {
           <h4>Overdue</h4>
           ${renderLifeAreaList(area.overdueItems, "No overdue items.")}
         </div>
+        <div>
+          <h4>Goals</h4>
+          ${renderLifeAreaGoalList(area.activeGoals, "No active goals.")}
+        </div>
       </div>
     </article>
   `;
@@ -1238,6 +1338,27 @@ function renderLifeAreaList(items, emptyText) {
             <li>
               <strong>${escapeHtml(item.title)}</strong>
               <span>${escapeHtml(item.status)} - ${escapeHtml(item.priority)} priority</span>
+            </li>
+          `,
+        )
+        .join("")}
+    </ul>
+  `;
+}
+
+function renderLifeAreaGoalList(goals, emptyText) {
+  if (!goals || goals.length === 0) {
+    return `<p class="empty-copy">${escapeHtml(emptyText)}</p>`;
+  }
+
+  return `
+    <ul class="briefing-list life-area-list">
+      ${goals
+        .map(
+          (goal) => `
+            <li>
+              <strong>${escapeHtml(goal.title)}</strong>
+              <span>${escapeHtml(goal.priority)} priority${goal.deadline ? ` - ${escapeHtml(goal.deadline)}` : ""}</span>
             </li>
           `,
         )
@@ -1439,6 +1560,7 @@ function renderApp() {
     ${renderEndOfDayReview()}
     ${renderOnboarding()}
     ${renderRoutineBuilder()}
+    ${renderGoalSetting()}
     ${renderLifeAreaDashboard()}
     ${renderBriefing()}
     ${renderResponsibilityEngine()}
@@ -1604,9 +1726,38 @@ app.addEventListener("click", (event) => {
     deactivateRoutine(id);
     renderApp();
   }
+  if (action === "edit-goal") {
+    editGoal(id);
+    renderApp();
+  }
+  if (action === "cancel-goal-edit") {
+    cancelGoalEdit();
+    renderApp();
+  }
+  if (action === "delete-goal") {
+    deleteGoal(id);
+    renderApp();
+  }
+  if (action === "complete-goal") {
+    markGoalComplete(id);
+    renderApp();
+  }
+  if (action === "reactivate-goal") {
+    reactivateCompletedGoal(id);
+    renderApp();
+  }
 });
 
 app.addEventListener("submit", (event) => {
+  const goalForm = event.target.closest("form[data-action='save-goal']");
+  if (goalForm) {
+    event.preventDefault();
+    saveGoal(new FormData(goalForm));
+    goalForm.reset();
+    renderApp();
+    return;
+  }
+
   const routineForm = event.target.closest("form[data-action='save-routine']");
   if (routineForm) {
     event.preventDefault();

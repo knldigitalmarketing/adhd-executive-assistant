@@ -22,6 +22,19 @@ import {
   buildGeneratedRecommendations,
 } from "./guidance-routines.js";
 import {
+  clearGoalDraft,
+  completeGoal,
+  createGoal,
+  deleteGoal as removeGoal,
+  ensureGoalState,
+  getGoalInfluenceForItem,
+  getGoalSettingData as buildGoalSettingData,
+  getTopActiveGoals,
+  reactivateGoal,
+  setGoalDraft,
+  updateGoal,
+} from "./goal-setting.js";
+import {
   buildEndOfDayReviewData,
   buildGoalProgressSummary,
   buildLifeAreaDashboardData,
@@ -58,6 +71,7 @@ state.interviewProfile = buildProfileWithRulesets(ensureProfileShape(state.inter
 state.tipState = ensureTipState(state.tipState);
 state.interventionState = ensureInterventionState(state.interventionState);
 ensureRoutineBuilderState(state);
+ensureGoalState(state);
 
 export function getState() {
   return state;
@@ -116,6 +130,7 @@ export function resetLocalData() {
   state.tipState = ensureTipState(state.tipState);
   state.interventionState = ensureInterventionState(state.interventionState);
   ensureRoutineBuilderState(state);
+  ensureGoalState(state);
 }
 
 export function loadDemo(demoId) {
@@ -700,6 +715,45 @@ export function deactivateRoutine(id) {
   saveState(state);
 }
 
+export function getGoalSettingData() {
+  return buildGoalSettingData(state);
+}
+
+export function saveGoal(formData) {
+  const id = String(formData.get("goalId") ?? "").trim();
+  if (id) {
+    updateGoal(state, id, formData);
+  } else {
+    createGoal(state, formData);
+  }
+  saveState(state);
+}
+
+export function editGoal(id) {
+  setGoalDraft(state, id);
+  saveState(state);
+}
+
+export function cancelGoalEdit() {
+  clearGoalDraft(state);
+  saveState(state);
+}
+
+export function deleteGoal(id) {
+  removeGoal(state, id);
+  saveState(state);
+}
+
+export function markGoalComplete(id) {
+  completeGoal(state, id);
+  saveState(state);
+}
+
+export function reactivateCompletedGoal(id) {
+  reactivateGoal(state, id);
+  saveState(state);
+}
+
 export function getDecisionRecommendation() {
   const scored = getScoredActionableItems();
   if (scored.length === 0) {
@@ -726,6 +780,7 @@ export function getWorkingModeData() {
 export function getMorningBriefingData() {
   return {
     goalProgress: getGoalProgressSummary(),
+    goals: getTopActiveGoals(state, 3),
     tomorrowPlanning: getTomorrowPlanningData(),
     morningRoutine: getGeneratedMorningRoutine(),
     builtRoutines: getRoutineBuilderData(),
@@ -1098,6 +1153,7 @@ function getDecisionContext() {
     getDeadlineUrgencyScore,
     getEstimatedEffort,
     getAdaptiveEffect,
+    getGoalInfluence,
     getActiveMode,
     getDayPart,
     getFocusStatus,
@@ -1109,6 +1165,10 @@ function getDecisionContext() {
 
 function getAdaptiveEffect(collectionName, item) {
   return computeAdaptiveEffect({ collectionName, item, getLearningStats, getCurrentMinuteOfDay });
+}
+
+function getGoalInfluence(item) {
+  return getGoalInfluenceForItem(state, item, inferTimingType);
 }
 
 function getActiveMode() {

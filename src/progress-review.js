@@ -83,14 +83,16 @@ export function buildWeeklyReviewData(context) {
 }
 
 export function buildLifeAreaDashboardData(context) {
-  const areas = ["Health", "Fitness", "Work", "Money", "Relationships", "Personal"];
+  const areas = ["Health", "Fitness", "Work", "Money", "Relationships", "Home", "Personal"];
   const weeklyProgress = getSevenDayGoalProgress(context.state);
   const openEntries = getReviewableEntries(context).filter(({ item }) => !context.isDone(item));
+  const activeGoals = context.state.goals?.filter((goal) => goal.status !== "completed") ?? [];
 
   return areas.map((area) => {
     const areaEntries = openEntries.filter(({ item }) => getGoalAreaForItem(item) === area);
     const activeTasks = areaEntries.filter(({ item }) => !context.isSnoozed(item) && !context.isSkipped(item));
     const overdueItems = areaEntries.filter(({ item }) => context.isOverdue(item));
+    const areaGoals = activeGoals.filter((goal) => getGoalAreaForItem(goal) === area);
     const weeklyCompletionCount = weeklyProgress[area] ?? 0;
     const denominator = weeklyCompletionCount + activeTasks.length;
     const progressPercentage = denominator === 0 ? 0 : Math.round((weeklyCompletionCount / denominator) * 100);
@@ -103,6 +105,13 @@ export function buildLifeAreaDashboardData(context) {
       progressPercentage,
       activeTasks: activeTasks.slice(0, 3).map(toLifeAreaDisplayItem),
       overdueItems: overdueItems.slice(0, 3).map(toLifeAreaDisplayItem),
+      activeGoalCount: areaGoals.length,
+      activeGoals: areaGoals.slice(0, 3).map((goal) => ({
+        id: goal.id,
+        title: goal.title,
+        priority: goal.priority,
+        deadline: goal.deadline,
+      })),
     };
   });
 }
@@ -198,6 +207,9 @@ export function getGoalAreaForItem(item = {}) {
   }
   if (raw.includes("relationship") || raw.includes("family")) {
     return "Relationships";
+  }
+  if (raw.includes("home") || raw.includes("house")) {
+    return "Home";
   }
 
   return "Personal";

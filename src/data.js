@@ -144,6 +144,8 @@ export const appState = {
   routinePlans: [],
   routineStepState: {},
   routineBuilderDraftId: null,
+  goals: [],
+  goalDraftId: null,
   focusMode: null,
   focusHistory: [],
   progressHistory: [],

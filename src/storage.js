@@ -70,6 +70,8 @@ function mergeState(base, stored) {
     routinePlans: arrayOrDefault(stored.routinePlans, base.routinePlans),
     routineStepState: { ...base.routineStepState, ...stored.routineStepState },
     routineBuilderDraftId: stored.routineBuilderDraftId ?? base.routineBuilderDraftId,
+    goals: arrayOrDefault(stored.goals, base.goals),
+    goalDraftId: stored.goalDraftId ?? base.goalDraftId,
     focusMode: stored.focusMode ?? base.focusMode,
     focusHistory: arrayOrDefault(stored.focusHistory, base.focusHistory),
     progressHistory: arrayOrDefault(stored.progressHistory, base.progressHistory),

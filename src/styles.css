@@ -489,18 +489,57 @@ main {
   gap: 16px;
 }
 
-.routine-form {
+.routine-form,
+.goal-form {
   display: grid;
   gap: 12px;
 }
 
-.routine-form label {
+.routine-form label,
+.goal-form label {
   display: block;
   min-height: 0;
   margin-bottom: 6px;
   color: var(--muted);
   font-size: 0.86rem;
   font-weight: 800;
+}
+
+.goal-setting-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.15fr);
+  gap: 16px;
+}
+
+.goal-list {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.goal-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.goal-list strong,
+.goal-list span {
+  display: block;
+}
+
+.goal-list span {
+  color: var(--muted);
+}
+
+.subsection-title {
+  margin: 18px 0 4px;
+  font-size: 1rem;
 }
 
 .routine-steps-field {
@@ -1151,6 +1190,7 @@ dd {
   .morning-grid,
   .goal-progress-list,
   .life-area-grid,
+  .goal-setting-grid,
   .routine-builder-grid,
   .tomorrow-planning-grid,
   .add-task-form {
@@ -1172,6 +1212,7 @@ dd {
   }
 
   .compact-list li,
+  .goal-list li,
   .tip-card,
   .intervention-card,
   .timeline li,
