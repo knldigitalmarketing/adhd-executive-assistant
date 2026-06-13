@@ -58,6 +58,12 @@ function mergeState(base, stored) {
       recentTipIds: arrayOrDefault(stored.tipState?.recentTipIds, base.tipState?.recentTipIds ?? []),
       lastShownByContext: { ...base.tipState?.lastShownByContext, ...stored.tipState?.lastShownByContext },
     },
+    positiveReinforcementState: {
+      ...base.positiveReinforcementState,
+      ...stored.positiveReinforcementState,
+      recentMessageIds: arrayOrDefault(stored.positiveReinforcementState?.recentMessageIds, base.positiveReinforcementState?.recentMessageIds ?? []),
+      currentByContext: { ...base.positiveReinforcementState?.currentByContext, ...stored.positiveReinforcementState?.currentByContext },
+    },
     interventionState: {
       ...base.interventionState,
       ...stored.interventionState,

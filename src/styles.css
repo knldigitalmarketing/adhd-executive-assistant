@@ -425,6 +425,42 @@ main {
   background: #f7f9fd;
 }
 
+.command-positive span {
+  color: var(--blue);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.positive-reinforcement-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid #b9d9cd;
+  border-left: 5px solid var(--green);
+  border-radius: 8px;
+  background: #f4fbf7;
+  box-shadow: var(--shadow);
+}
+
+.positive-reinforcement-banner p,
+.positive-reinforcement-banner strong {
+  margin: 0;
+}
+
+.positive-reinforcement-banner strong {
+  display: block;
+  line-height: 1.35;
+}
+
+.positive-reinforcement-banner span {
+  flex: 0 0 auto;
+  color: var(--green);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
 .command-card h3,
 .command-card p {
   margin: 0;
@@ -1400,6 +1436,11 @@ dd {
   .command-positive {
     grid-column: auto;
     grid-row: auto;
+  }
+
+  .positive-reinforcement-banner {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

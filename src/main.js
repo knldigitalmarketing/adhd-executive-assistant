@@ -43,6 +43,7 @@ import {
   getLifeAreaDashboardData,
   getMorningBriefingData,
   getOpenTodayActions,
+  getPositiveReinforcement,
   getRecurringTaskData,
   getRoutineBuilderData,
   getScoredActionableItems,
@@ -352,6 +353,7 @@ function renderCarryoverForm(review) {
 function renderToday() {
   const stats = getTodayStats();
   const recommendation = getDecisionRecommendation();
+  const reinforcement = getPositiveReinforcement("today");
 
   return `
     <section id="today" class="section today-section">
@@ -366,6 +368,7 @@ function renderToday() {
           <button type="button" class="secondary-button" data-action="reset-local-data">Reset local data</button>
         </div>
       </div>
+      ${renderPositiveReinforcementBanner(reinforcement)}
       <div class="today-grid">
         ${renderDecisionCard(recommendation)}
         <article class="stat-card">
@@ -1072,6 +1075,7 @@ function renderCommandCenter() {
   const important = scored.filter((candidate) => candidate.item.id !== now?.item.id).slice(0, 4);
   const energyMood = getEnergyMoodData();
   const smartRescheduling = getSmartReschedulingSummary();
+  const reinforcement = getPositiveReinforcement("command-center");
 
   return `
     <section id="command-center" class="section command-center-mode">
@@ -1092,7 +1096,7 @@ function renderCommandCenter() {
         ${renderCommandStatus({ stats, energyMood, briefing, smartRescheduling })}
         ${renderCommandTip(briefing.tip)}
         ${renderCommandAlerts({ intervention: working.intervention ?? briefing.intervention, smartRescheduling })}
-        ${renderCommandPositiveMessage({ stats, now, energyMood })}
+        ${renderCommandPositiveMessage(reinforcement)}
       </div>
     </section>
   `;
@@ -1262,21 +1266,29 @@ function renderCommandAlerts({ intervention, smartRescheduling }) {
   `;
 }
 
-function renderCommandPositiveMessage({ stats, now, energyMood }) {
-  const lowEnergy = energyMood.latestCheckIn?.energy === "low";
-  const message = stats.done > 0
-    ? `You have already completed ${stats.done} item${stats.done === 1 ? "" : "s"} today. Keep the next step small and visible.`
-    : lowEnergy
-      ? "Low energy still counts. One small next step is enough to keep the day moving."
-      : now
-        ? "You have a clear next step. That is the win right now."
-        : "The board is quiet. Take the opening without inventing extra work.";
-
+function renderCommandPositiveMessage(message) {
   return `
     <article class="panel command-card command-positive">
       <p class="eyebrow">Positive Message</p>
-      <h3>${escapeHtml(message)}</h3>
+      <h3>${escapeHtml(message.text)}</h3>
+      <span>${escapeHtml(message.source)}</span>
     </article>
+  `;
+}
+
+function renderPositiveReinforcementBanner(message) {
+  if (!message) {
+    return "";
+  }
+
+  return `
+    <aside class="positive-reinforcement-banner" aria-label="Positive reinforcement">
+      <div>
+        <p class="eyebrow">Positive Message</p>
+        <strong>${escapeHtml(message.text)}</strong>
+      </div>
+      <span>${escapeHtml(message.source)}</span>
+    </aside>
   `;
 }
 
@@ -2237,7 +2249,7 @@ function scheduleWorkingModeRefresh(activeView) {
     workingModeTimer = null;
   }
 
-  if (!["working", "command-center"].includes(activeView)) {
+  if (!["working", "command-center", "today"].includes(activeView)) {
     return;
   }
 
@@ -2245,7 +2257,7 @@ function scheduleWorkingModeRefresh(activeView) {
   const refreshMs = focus.status === "running" ? 1000 : 60000;
 
   workingModeTimer = setInterval(() => {
-    if (["working", "command-center"].includes(getActiveView())) {
+    if (["working", "command-center", "today"].includes(getActiveView())) {
       renderApp();
     }
   }, refreshMs);

@@ -134,6 +134,10 @@ export const appState = {
     recentTipIds: [],
     lastShownByContext: {},
   },
+  positiveReinforcementState: {
+    recentMessageIds: [],
+    currentByContext: {},
+  },
   interventionState: {
     recentInterventionIds: [],
     lastShownByContext: {},

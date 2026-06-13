@@ -72,6 +72,11 @@ import {
   saveWeeklyReviewSnapshot,
 } from "./progress-review.js";
 import {
+  ensurePositiveReinforcementState,
+  recordPositiveReinforcementShown,
+  selectPositiveReinforcement,
+} from "./positive-reinforcement.js";
+import {
   buildGeneratedRecoverySuggestions,
   computeAdaptiveEffect,
   recordLearningEvent,
@@ -107,6 +112,7 @@ import { ensureTipState, getTipById, recordTipShown, selectAdhdTip } from "./tip
 let state = loadState(defaultState);
 state.interviewProfile = buildProfileWithRulesets(ensureProfileShape(state.interviewProfile));
 state.tipState = ensureTipState(state.tipState);
+state.positiveReinforcementState = ensurePositiveReinforcementState(state.positiveReinforcementState);
 state.interventionState = ensureInterventionState(state.interventionState);
 ensureEnergyMoodState(state);
 ensureRoutineBuilderState(state);
@@ -170,6 +176,7 @@ export function resetLocalData() {
   state = loadState(defaultState);
   state.interviewProfile = buildProfileWithRulesets(ensureProfileShape(state.interviewProfile));
   state.tipState = ensureTipState(state.tipState);
+  state.positiveReinforcementState = ensurePositiveReinforcementState(state.positiveReinforcementState);
   state.interventionState = ensureInterventionState(state.interventionState);
   ensureEnergyMoodState(state);
   ensureRoutineBuilderState(state);
@@ -1129,6 +1136,16 @@ export function getTodayStats() {
   };
 }
 
+export function getPositiveReinforcement(contextName = "dashboard") {
+  state.positiveReinforcementState = ensurePositiveReinforcementState(state.positiveReinforcementState);
+  const now = new Date();
+  const message = selectPositiveReinforcement(getPositiveReinforcementContext(contextName, now));
+  if (recordPositiveReinforcementShown(state, contextName, message, now)) {
+    saveState(state);
+  }
+  return message;
+}
+
 export function getOpenTodayActions() {
   return state.actions.filter((action) => action.dueDate === "Today" && isOpen(action));
 }
@@ -1210,6 +1227,23 @@ function getProgressReviewContext() {
     isSkipped,
     isOverdue,
     statusText,
+  };
+}
+
+function getPositiveReinforcementContext(contextName, now) {
+  return {
+    contextName,
+    now,
+    todayKey: getTodayKey(),
+    todayStats: getTodayStats(),
+    goalProgress: getGoalProgressSummary(),
+    habits: getHabitTrackingData(),
+    energyMood: getEnergyMoodData(),
+    learningStats: getLearningStats(),
+    progressHistory: state.progressHistory ?? [],
+    recoveryHistory: state.recoveryHistory ?? [],
+    reinforcementState: state.positiveReinforcementState,
+    nowRecommendation: getDecisionRecommendation(),
   };
 }
 
@@ -1847,6 +1881,10 @@ function createDemoState(demoId) {
   demoState.tipState = {
     recentTipIds: [],
     lastShownByContext: {},
+  };
+  demoState.positiveReinforcementState = {
+    recentMessageIds: [],
+    currentByContext: {},
   };
   demoState.interventionState = {
     recentInterventionIds: [],
