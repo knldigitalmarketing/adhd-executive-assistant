@@ -22,6 +22,19 @@ import {
   buildGeneratedRecommendations,
 } from "./guidance-routines.js";
 import {
+  buildDueHabitItems,
+  clearHabitDraft,
+  completeHabit,
+  createHabit,
+  deleteHabit as removeHabit,
+  ensureHabitState,
+  getHabitInfluenceForItem,
+  getHabitTrackingData as buildHabitTrackingData,
+  setHabitActive,
+  setHabitDraft,
+  updateHabit,
+} from "./habit-tracking.js";
+import {
   clearGoalDraft,
   completeGoal,
   createGoal,
@@ -72,6 +85,7 @@ state.tipState = ensureTipState(state.tipState);
 state.interventionState = ensureInterventionState(state.interventionState);
 ensureRoutineBuilderState(state);
 ensureGoalState(state);
+ensureHabitState(state);
 
 export function getState() {
   return state;
@@ -131,6 +145,7 @@ export function resetLocalData() {
   state.interventionState = ensureInterventionState(state.interventionState);
   ensureRoutineBuilderState(state);
   ensureGoalState(state);
+  ensureHabitState(state);
 }
 
 export function loadDemo(demoId) {
@@ -261,6 +276,15 @@ export function editInterviewAnswer(questionId) {
 }
 
 export function markDone(collectionName, id) {
+  if (collectionName === "habitItems") {
+    const item = findByCollection(collectionName, id);
+    const habit = completeHabit(state, id);
+    recordItemEvent(collectionName, id, "done", item);
+    recordGoalProgress(collectionName, id, item ?? habit);
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "routineSteps") {
     const item = findByCollection(collectionName, id);
     recordItemEvent(collectionName, id, "done", item);
@@ -715,6 +739,45 @@ export function deactivateRoutine(id) {
   saveState(state);
 }
 
+export function getHabitTrackingData() {
+  return buildHabitTrackingData(state);
+}
+
+export function saveHabit(formData) {
+  const id = String(formData.get("habitId") ?? "").trim();
+  if (id) {
+    updateHabit(state, id, formData);
+  } else {
+    createHabit(state, formData);
+  }
+  saveState(state);
+}
+
+export function editHabit(id) {
+  setHabitDraft(state, id);
+  saveState(state);
+}
+
+export function cancelHabitEdit() {
+  clearHabitDraft(state);
+  saveState(state);
+}
+
+export function deleteHabit(id) {
+  removeHabit(state, id);
+  saveState(state);
+}
+
+export function activateHabit(id) {
+  setHabitActive(state, id, true);
+  saveState(state);
+}
+
+export function deactivateHabit(id) {
+  setHabitActive(state, id, false);
+  saveState(state);
+}
+
 export function getGoalSettingData() {
   return buildGoalSettingData(state);
 }
@@ -781,6 +844,7 @@ export function getMorningBriefingData() {
   return {
     goalProgress: getGoalProgressSummary(),
     goals: getTopActiveGoals(state, 3),
+    habits: getHabitTrackingData(),
     tomorrowPlanning: getTomorrowPlanningData(),
     morningRoutine: getGeneratedMorningRoutine(),
     builtRoutines: getRoutineBuilderData(),
@@ -979,6 +1043,7 @@ function allCompletableItems() {
     ...getGeneratedGuidance(),
     ...getGeneratedMorningRoutine(),
     ...getActiveRoutineSteps(),
+    ...getDueHabitItems(),
     ...getGeneratedRecoverySuggestions(),
   ];
 }
@@ -1038,6 +1103,10 @@ function getActiveRoutineSteps() {
   return buildActiveRoutineSteps({ state, isDone, getDayPart });
 }
 
+function getDueHabitItems() {
+  return buildDueHabitItems({ state });
+}
+
 function getGeneratedGuidance() {
   return buildGeneratedGuidance({ state, isDone, getDayPart });
 }
@@ -1062,6 +1131,7 @@ function getActionableCandidates() {
   const generatedGuidance = getGeneratedGuidance();
   const generatedMorningRoutine = getGeneratedMorningRoutine();
   const activeRoutineSteps = getActiveRoutineSteps();
+  const dueHabitItems = getDueHabitItems();
   const generatedRecoverySuggestions = getGeneratedRecoverySuggestions();
 
   return [
@@ -1118,6 +1188,20 @@ function getActionableCandidates() {
         generatedMorningRoutine.length +
         index,
     })),
+    ...dueHabitItems.map((item, index) => ({
+      collection: "habitItems",
+      item,
+      order:
+        state.actions.length +
+        state.routines.length +
+        state.timeline.length +
+        state.focusSessions.length +
+        generatedRecommendations.length +
+        generatedGuidance.length +
+        generatedMorningRoutine.length +
+        activeRoutineSteps.length +
+        index,
+    })),
     ...generatedRecoverySuggestions.map((item, index) => ({
       collection: "recoverySuggestions",
       item,
@@ -1130,6 +1214,7 @@ function getActionableCandidates() {
         generatedGuidance.length +
         generatedMorningRoutine.length +
         activeRoutineSteps.length +
+        dueHabitItems.length +
         index,
     })),
   ];
@@ -1154,6 +1239,7 @@ function getDecisionContext() {
     getEstimatedEffort,
     getAdaptiveEffect,
     getGoalInfluence,
+    getHabitInfluence,
     getActiveMode,
     getDayPart,
     getFocusStatus,
@@ -1169,6 +1255,10 @@ function getAdaptiveEffect(collectionName, item) {
 
 function getGoalInfluence(item) {
   return getGoalInfluenceForItem(state, item, inferTimingType);
+}
+
+function getHabitInfluence(item) {
+  return getHabitInfluenceForItem(state, item, inferTimingType);
 }
 
 function getActiveMode() {
@@ -1688,6 +1778,10 @@ function findByCollection(collectionName, id) {
 
   if (collectionName === "routineSteps") {
     return getActiveRoutineSteps().find((item) => item.id === id);
+  }
+
+  if (collectionName === "habitItems") {
+    return getDueHabitItems().find((item) => item.id === id);
   }
 
   if (collectionName === "guidance") {

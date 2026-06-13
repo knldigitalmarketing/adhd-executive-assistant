@@ -1,16 +1,20 @@
 import { modelDefinitions } from "./models.js";
 import {
   activateRoutine,
+  activateHabit,
   addTask,
   answerInterviewQuestion,
   cancelGoalEdit,
+  cancelHabitEdit,
   cancelRoutineEdit,
   completeEndOfDayReview,
   completeSmartIntervention,
   completeWeeklyReview,
   deactivateRoutine,
+  deactivateHabit,
   deleteRoutine,
   deleteGoal,
+  deleteHabit,
   dismissRecommendation,
   dismissGuidance,
   dismissMorningRoutine,
@@ -22,11 +26,13 @@ import {
   endFocus,
   editInterviewAnswer,
   editGoal,
+  editHabit,
   getDecisionRecommendation,
   getEndOfDayReviewData,
   getActiveView,
   getFocusModeData,
   getGoalSettingData,
+  getHabitTrackingData,
   getInterviewState,
   getLifeAreaDashboardData,
   getMorningBriefingData,
@@ -48,6 +54,7 @@ import {
   reactivateCompletedGoal,
   resumeFocus,
   saveGoal,
+  saveHabit,
   saveRoutine,
   startFocus,
   startMyDay,
@@ -100,6 +107,7 @@ function renderHeader() {
         <a href="#onboarding">Onboarding</a>
         <a href="#routine-builder">Routines</a>
         <a href="#goal-setting">Goals</a>
+        <a href="#habit-tracking">Habits</a>
         <a href="#life-areas">Life Areas</a>
         <a href="#dashboard">Dashboard</a>
         <a href="#timeline">Timeline</a>
@@ -372,6 +380,7 @@ function renderMorningBriefing() {
       </article>
       ${renderRoutineBuilder(briefing.builtRoutines)}
       ${renderGoalSetting(getGoalSettingData(), briefing.goals)}
+      ${renderHabitTracking(briefing.habits)}
       <article class="panel morning-routine-panel">
         <div class="panel-title">
           <h3>Recovery Suggestions</h3>
@@ -678,6 +687,102 @@ function renderGoalItem(goal, completed) {
         ${completed ? `<button type="button" data-action="reactivate-goal" data-id="${escapeHtml(goal.id)}">Reactivate</button>` : `<button type="button" data-action="complete-goal" data-id="${escapeHtml(goal.id)}">Complete</button>`}
         <button type="button" data-action="edit-goal" data-id="${escapeHtml(goal.id)}">Edit</button>
         <button type="button" data-action="delete-goal" data-id="${escapeHtml(goal.id)}">Delete</button>
+      </div>
+    </li>
+  `;
+}
+
+function renderHabitTracking(data = getHabitTrackingData()) {
+  const draft = data.draftHabit;
+
+  return `
+    <section id="habit-tracking" class="section habit-tracking-section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Habit Tracking</p>
+          <h2>Keep the loop visible</h2>
+        </div>
+        ${pill(`${data.dueHabitItems.length} due`, "strong")}
+      </div>
+      <div class="habit-tracking-grid">
+        <form class="panel habit-form" data-action="save-habit">
+          <input type="hidden" name="habitId" value="${escapeHtml(draft?.id ?? "")}" />
+          <div>
+            <label for="habit-name">Habit name</label>
+            <input id="habit-name" name="habitName" type="text" value="${escapeHtml(draft?.name ?? "")}" placeholder="Drink water" required />
+          </div>
+          <div>
+            <label for="habit-category">Habit category</label>
+            <select id="habit-category" name="habitCategory">
+              ${data.categories.map((category) => `<option ${category === (draft?.category ?? "Personal") ? "selected" : ""}>${category}</option>`).join("")}
+            </select>
+          </div>
+          <div>
+            <label for="habit-frequency">Frequency</label>
+            <select id="habit-frequency" name="habitFrequencyType">
+              <option value="daily" ${draft?.frequencyType === "weekly" ? "" : "selected"}>Daily</option>
+              <option value="weekly" ${draft?.frequencyType === "weekly" ? "selected" : ""}>Weekly</option>
+            </select>
+          </div>
+          <div>
+            <label for="habit-target-days">Target days</label>
+            <input id="habit-target-days" name="habitTargetDays" type="text" value="${escapeHtml((draft?.targetDays ?? []).join(", "))}" placeholder="Mon, Wed, Fri or leave blank" />
+          </div>
+          <div>
+            <label for="habit-weekly-target">Weekly target count</label>
+            <input id="habit-weekly-target" name="habitWeeklyTargetCount" type="text" value="${escapeHtml(draft?.weeklyTargetCount ?? 1)}" />
+          </div>
+          <div>
+            <label for="habit-active">Status</label>
+            <select id="habit-active" name="habitActive">
+              <option value="active" ${draft?.active === false ? "" : "selected"}>Active</option>
+              <option value="inactive" ${draft?.active === false ? "selected" : ""}>Inactive</option>
+            </select>
+          </div>
+          <div class="button-row">
+            <button type="submit">${draft ? "Save Habit" : "Create Habit"}</button>
+            ${draft ? `<button type="button" class="secondary-button" data-action="cancel-habit-edit">Cancel</button>` : ""}
+          </div>
+        </form>
+        <article class="panel habit-list-panel">
+          <div class="panel-title">
+            <h3>Habits</h3>
+            ${pill(`${data.activeHabits.length} active`, "strong")}
+          </div>
+          ${renderHabitList(data.activeHabits, false)}
+          ${data.inactiveHabits.length > 0 ? `<h3 class="subsection-title">Inactive</h3>${renderHabitList(data.inactiveHabits, true)}` : ""}
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function renderHabitList(habits, inactive) {
+  if (habits.length === 0) {
+    return `<p class="empty-copy">${inactive ? "No inactive habits." : "No active habits yet."}</p>`;
+  }
+
+  return `
+    <ul class="habit-list">
+      ${habits.map((habit) => renderHabitItem(habit)).join("")}
+    </ul>
+  `;
+}
+
+function renderHabitItem(habit) {
+  const frequency = habit.frequencyType === "weekly" ? `${habit.weeklyTargetCount}x weekly` : `${habit.targetDays?.length ? habit.targetDays.join(", ") : "Daily"}`;
+
+  return `
+    <li>
+      <div>
+        <strong>${escapeHtml(habit.name)}</strong>
+        <span>${escapeHtml(habit.category)} - ${escapeHtml(frequency)}</span>
+      </div>
+      <div class="item-actions">
+        ${pill(habit.active === false ? "Inactive" : "Active", habit.active === false ? "neutral" : "strong")}
+        <button type="button" data-action="edit-habit" data-id="${escapeHtml(habit.id)}">Edit</button>
+        <button type="button" data-action="${habit.active === false ? "activate-habit" : "deactivate-habit"}" data-id="${escapeHtml(habit.id)}">${habit.active === false ? "Activate" : "Deactivate"}</button>
+        <button type="button" data-action="delete-habit" data-id="${escapeHtml(habit.id)}">Delete</button>
       </div>
     </li>
   `;
@@ -1320,6 +1425,10 @@ function renderLifeAreaCard(area) {
           <h4>Goals</h4>
           ${renderLifeAreaGoalList(area.activeGoals, "No active goals.")}
         </div>
+        <div>
+          <h4>Habits</h4>
+          ${renderLifeAreaHabitList(area.activeHabits, "No active habits.")}
+        </div>
       </div>
     </article>
   `;
@@ -1359,6 +1468,27 @@ function renderLifeAreaGoalList(goals, emptyText) {
             <li>
               <strong>${escapeHtml(goal.title)}</strong>
               <span>${escapeHtml(goal.priority)} priority${goal.deadline ? ` - ${escapeHtml(goal.deadline)}` : ""}</span>
+            </li>
+          `,
+        )
+        .join("")}
+    </ul>
+  `;
+}
+
+function renderLifeAreaHabitList(habits, emptyText) {
+  if (!habits || habits.length === 0) {
+    return `<p class="empty-copy">${escapeHtml(emptyText)}</p>`;
+  }
+
+  return `
+    <ul class="briefing-list life-area-list">
+      ${habits
+        .map(
+          (habit) => `
+            <li>
+              <strong>${escapeHtml(habit.title)}</strong>
+              <span>${escapeHtml(titleCase(habit.frequencyType))}</span>
             </li>
           `,
         )
@@ -1561,6 +1691,7 @@ function renderApp() {
     ${renderOnboarding()}
     ${renderRoutineBuilder()}
     ${renderGoalSetting()}
+    ${renderHabitTracking()}
     ${renderLifeAreaDashboard()}
     ${renderBriefing()}
     ${renderResponsibilityEngine()}
@@ -1746,9 +1877,38 @@ app.addEventListener("click", (event) => {
     reactivateCompletedGoal(id);
     renderApp();
   }
+  if (action === "edit-habit") {
+    editHabit(id);
+    renderApp();
+  }
+  if (action === "cancel-habit-edit") {
+    cancelHabitEdit();
+    renderApp();
+  }
+  if (action === "delete-habit") {
+    deleteHabit(id);
+    renderApp();
+  }
+  if (action === "activate-habit") {
+    activateHabit(id);
+    renderApp();
+  }
+  if (action === "deactivate-habit") {
+    deactivateHabit(id);
+    renderApp();
+  }
 });
 
 app.addEventListener("submit", (event) => {
+  const habitForm = event.target.closest("form[data-action='save-habit']");
+  if (habitForm) {
+    event.preventDefault();
+    saveHabit(new FormData(habitForm));
+    habitForm.reset();
+    renderApp();
+    return;
+  }
+
   const goalForm = event.target.closest("form[data-action='save-goal']");
   if (goalForm) {
     event.preventDefault();

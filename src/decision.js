@@ -80,7 +80,9 @@ export function scoreActionableCandidate(context, candidate) {
   score += adaptiveEffect.score;
   const goalInfluence = context.getGoalInfluence(item);
   score += goalInfluence.score;
-  const why = context.formatWhy(reasons, [...ruleEffects, ...adaptiveEffect.reasons, ...goalInfluence.reasons]);
+  const habitInfluence = context.getHabitInfluence(item);
+  score += habitInfluence.score;
+  const why = context.formatWhy(reasons, [...ruleEffects, ...adaptiveEffect.reasons, ...goalInfluence.reasons, ...habitInfluence.reasons]);
 
   return {
     ...candidate,
@@ -92,7 +94,8 @@ export function scoreActionableCandidate(context, candidate) {
     ruleEffects,
     contributingRulesets,
     goalInfluence,
-    explanation: buildRecommendationExplanation(context, candidate, item, reasons, ruleEffects, [...adaptiveEffect.reasons, ...goalInfluence.reasons], contributingRulesets),
+    habitInfluence,
+    explanation: buildRecommendationExplanation(context, candidate, item, reasons, ruleEffects, [...adaptiveEffect.reasons, ...goalInfluence.reasons, ...habitInfluence.reasons], contributingRulesets),
     why,
     isSkipped: skipped,
   };

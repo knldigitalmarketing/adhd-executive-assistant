@@ -87,12 +87,14 @@ export function buildLifeAreaDashboardData(context) {
   const weeklyProgress = getSevenDayGoalProgress(context.state);
   const openEntries = getReviewableEntries(context).filter(({ item }) => !context.isDone(item));
   const activeGoals = context.state.goals?.filter((goal) => goal.status !== "completed") ?? [];
+  const activeHabits = context.state.habits?.filter((habit) => habit.active !== false) ?? [];
 
   return areas.map((area) => {
     const areaEntries = openEntries.filter(({ item }) => getGoalAreaForItem(item) === area);
     const activeTasks = areaEntries.filter(({ item }) => !context.isSnoozed(item) && !context.isSkipped(item));
     const overdueItems = areaEntries.filter(({ item }) => context.isOverdue(item));
     const areaGoals = activeGoals.filter((goal) => getGoalAreaForItem(goal) === area);
+    const areaHabits = activeHabits.filter((habit) => getGoalAreaForItem(habit) === area);
     const weeklyCompletionCount = weeklyProgress[area] ?? 0;
     const denominator = weeklyCompletionCount + activeTasks.length;
     const progressPercentage = denominator === 0 ? 0 : Math.round((weeklyCompletionCount / denominator) * 100);
@@ -111,6 +113,12 @@ export function buildLifeAreaDashboardData(context) {
         title: goal.title,
         priority: goal.priority,
         deadline: goal.deadline,
+      })),
+      activeHabitCount: areaHabits.length,
+      activeHabits: areaHabits.slice(0, 3).map((habit) => ({
+        id: habit.id,
+        title: habit.name,
+        frequencyType: habit.frequencyType,
       })),
     };
   });
