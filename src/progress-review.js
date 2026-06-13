@@ -1,3 +1,5 @@
+import { getHabitStreak } from "./habit-tracking.js";
+
 export function buildGoalProgressSummary({ state, getTodayKey }) {
   const areas = ["Health", "Fitness", "Work", "Money", "Relationships", "Personal"];
   const weekStart = getWeekStartDate(new Date());
@@ -119,6 +121,7 @@ export function buildLifeAreaDashboardData(context) {
         id: habit.id,
         title: habit.name,
         frequencyType: habit.frequencyType,
+        streak: getHabitStreak(context.state, habit),
       })),
     };
   });

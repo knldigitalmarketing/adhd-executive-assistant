@@ -10,14 +10,15 @@ export function ensureHabitState(state) {
 
 export function getHabitTrackingData(state, today = new Date()) {
   ensureHabitState(state);
-  const activeHabits = state.habits.filter((habit) => habit.active !== false);
-  const inactiveHabits = state.habits.filter((habit) => habit.active === false);
+  const habitsWithStreaks = state.habits.map((habit) => withHabitStreak(state, habit, today));
+  const activeHabits = habitsWithStreaks.filter((habit) => habit.active !== false);
+  const inactiveHabits = habitsWithStreaks.filter((habit) => habit.active === false);
 
   return {
     categories: HABIT_CATEGORIES,
     activeHabits,
     inactiveHabits,
-    draftHabit: state.habits.find((habit) => habit.id === state.habitDraftId) ?? null,
+    draftHabit: habitsWithStreaks.find((habit) => habit.id === state.habitDraftId) ?? null,
     dueHabitItems: buildDueHabitItems({ state, today }),
   };
 }
@@ -107,6 +108,7 @@ export function buildDueHabitItems({ state, today = new Date() }) {
       estimatedEffortMinutes: 5,
       timingType: "flexible",
       reason: `${habit.frequencyType === "daily" ? "Daily" : "Weekly"} habit`,
+      streak: getHabitStreak(state, habit, today),
     }));
 }
 
@@ -136,6 +138,15 @@ export function getHabitCompletionCount(state, habitId, days = 7) {
   cutoff.setHours(0, 0, 0, 0);
   cutoff.setDate(cutoff.getDate() - (days - 1));
   return completions.filter((dateKey) => new Date(`${dateKey}T00:00:00`) >= cutoff).length;
+}
+
+export function getHabitStreak(state, habit, today = new Date()) {
+  ensureHabitState(state);
+  if (!habit) {
+    return getEmptyStreak();
+  }
+
+  return habit.frequencyType === "weekly" ? getWeeklyHabitStreak(state, habit, today) : getDailyHabitStreak(state, habit, today);
 }
 
 function buildHabitFromForm(formData, id) {
@@ -170,6 +181,164 @@ function isHabitDue(habit, state, today) {
 
 function isHabitCompletedOnDate(state, habitId, dateKey) {
   return (state.habitCompletions[habitId] ?? []).includes(dateKey);
+}
+
+function withHabitStreak(state, habit, today) {
+  return {
+    ...habit,
+    streak: getHabitStreak(state, habit, today),
+  };
+}
+
+function getDailyHabitStreak(state, habit, today) {
+  const completionSet = new Set(state.habitCompletions[habit.id] ?? []);
+  const applicableDateKeys = getApplicableDailyDateKeys(habit, today, 120);
+  const latestCompletedIndex = applicableDateKeys.findIndex((dateKey) => completionSet.has(dateKey));
+  const longestStreak = getLongestSequentialCompletionRun(applicableDateKeys, completionSet);
+
+  if (latestCompletedIndex === -1 || latestCompletedIndex > 2) {
+    return {
+      currentStreak: 0,
+      longestStreak,
+      unit: "day",
+      recoveryAvailable: false,
+      status: "Fresh start available",
+      message: "A fresh start is available today.",
+    };
+  }
+
+  const currentStreak = countSequentialCompletions(applicableDateKeys.slice(latestCompletedIndex), completionSet);
+  const recoveryAvailable = latestCompletedIndex > 0;
+
+  return {
+    currentStreak,
+    longestStreak: Math.max(longestStreak, currentStreak),
+    unit: "day",
+    recoveryAvailable,
+    status: recoveryAvailable ? "Recovery available" : "On track",
+    message: recoveryAvailable ? "One missed day is recoverable. A small check-in keeps momentum alive." : "Momentum is active.",
+  };
+}
+
+function getWeeklyHabitStreak(state, habit, today) {
+  const weeklyTarget = Math.max(1, Number(habit.weeklyTargetCount ?? 1));
+  const weekKeys = getRecentWeekKeys(today, 26);
+  const completionsByWeek = getCompletionsByWeek(state.habitCompletions[habit.id] ?? []);
+  const metWeekSet = new Set(weekKeys.filter((weekKey) => (completionsByWeek.get(weekKey) ?? 0) >= weeklyTarget));
+  const latestMetWeekIndex = weekKeys.findIndex((weekKey) => metWeekSet.has(weekKey));
+  const longestStreak = getLongestSequentialCompletionRun(weekKeys, metWeekSet);
+
+  if (latestMetWeekIndex === -1 || latestMetWeekIndex > 1) {
+    return {
+      currentStreak: 0,
+      longestStreak,
+      unit: "week",
+      recoveryAvailable: false,
+      status: "Fresh start available",
+      message: "This week can still become a clean restart.",
+    };
+  }
+
+  const currentStreak = countSequentialCompletions(weekKeys.slice(latestMetWeekIndex), metWeekSet);
+  const recoveryAvailable = latestMetWeekIndex === 1 || !metWeekSet.has(weekKeys[0]);
+
+  return {
+    currentStreak,
+    longestStreak: Math.max(longestStreak, currentStreak),
+    unit: "week",
+    recoveryAvailable,
+    status: recoveryAvailable ? "Week still open" : "On track",
+    message: recoveryAvailable ? "This week is still open. One steady check-in can protect momentum." : "Momentum is active.",
+  };
+}
+
+function getApplicableDailyDateKeys(habit, today, days) {
+  const date = startOfDay(today);
+  const targetDays = habit.targetDays?.length ? habit.targetDays : DAY_NAMES;
+  const dateKeys = [];
+
+  for (let index = 0; index < days; index += 1) {
+    const candidate = new Date(date);
+    candidate.setDate(date.getDate() - index);
+    if (targetDays.includes(DAY_NAMES[candidate.getDay()])) {
+      dateKeys.push(getDateKey(candidate));
+    }
+  }
+
+  return dateKeys;
+}
+
+function countSequentialCompletions(dateKeys, completionSet) {
+  let count = 0;
+  for (const dateKey of dateKeys) {
+    if (!completionSet.has(dateKey)) {
+      break;
+    }
+    count += 1;
+  }
+  return count;
+}
+
+function getLongestSequentialCompletionRun(dateKeys, completionSet) {
+  let longest = 0;
+  let current = 0;
+
+  for (const dateKey of [...dateKeys].reverse()) {
+    if (completionSet.has(dateKey)) {
+      current += 1;
+      longest = Math.max(longest, current);
+    } else {
+      current = 0;
+    }
+  }
+
+  return longest;
+}
+
+function getRecentWeekKeys(today, weeks) {
+  const currentWeekStart = getWeekStartDate(today);
+  return Array.from({ length: weeks }, (_, index) => {
+    const week = new Date(currentWeekStart);
+    week.setDate(currentWeekStart.getDate() - index * 7);
+    return getDateKey(week);
+  });
+}
+
+function getCompletionsByWeek(completions) {
+  const counts = new Map();
+  for (const dateKey of completions) {
+    const date = new Date(`${dateKey}T00:00:00`);
+    if (Number.isNaN(date.getTime())) {
+      continue;
+    }
+    const weekKey = getDateKey(getWeekStartDate(date));
+    counts.set(weekKey, (counts.get(weekKey) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function getWeekStartDate(date) {
+  const weekStart = startOfDay(date);
+  const daysSinceMonday = (weekStart.getDay() + 6) % 7;
+  weekStart.setDate(weekStart.getDate() - daysSinceMonday);
+  return weekStart;
+}
+
+function startOfDay(date) {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+function getEmptyStreak() {
+  return {
+    currentStreak: 0,
+    longestStreak: 0,
+    unit: "day",
+    recoveryAvailable: false,
+    status: "Fresh start available",
+    message: "A fresh start is available today.",
+  };
 }
 
 function parseTargetDays(value) {
@@ -207,5 +376,9 @@ function getHabitIdFromItemId(id) {
 }
 
 function getDateKey(date) {
-  return date.toISOString().slice(0, 10);
+  const localDate = new Date(date);
+  const year = localDate.getFullYear();
+  const month = String(localDate.getMonth() + 1).padStart(2, "0");
+  const day = String(localDate.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }

@@ -80,6 +80,10 @@ function titleCase(value) {
     .join(" ");
 }
 
+function pluralize(unit, count) {
+  return count === 1 ? unit : `${unit}s`;
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -777,6 +781,7 @@ function renderHabitItem(habit) {
       <div>
         <strong>${escapeHtml(habit.name)}</strong>
         <span>${escapeHtml(habit.category)} - ${escapeHtml(frequency)}</span>
+        ${renderHabitStreak(habit.streak)}
       </div>
       <div class="item-actions">
         ${pill(habit.active === false ? "Inactive" : "Active", habit.active === false ? "neutral" : "strong")}
@@ -785,6 +790,23 @@ function renderHabitItem(habit) {
         <button type="button" data-action="delete-habit" data-id="${escapeHtml(habit.id)}">Delete</button>
       </div>
     </li>
+  `;
+}
+
+function renderHabitStreak(streak) {
+  if (!streak) {
+    return "";
+  }
+
+  const currentLabel = `${streak.currentStreak} current ${pluralize(streak.unit, streak.currentStreak)}`;
+  const bestLabel = `${streak.longestStreak} best ${pluralize(streak.unit, streak.longestStreak)}`;
+
+  return `
+    <div class="habit-streak">
+      <span>${escapeHtml(currentLabel)}</span>
+      <span>${escapeHtml(bestLabel)}</span>
+      ${streak.recoveryAvailable ? `<em>${escapeHtml(streak.message)}</em>` : ""}
+    </div>
   `;
 }
 
@@ -1488,13 +1510,23 @@ function renderLifeAreaHabitList(habits, emptyText) {
           (habit) => `
             <li>
               <strong>${escapeHtml(habit.title)}</strong>
-              <span>${escapeHtml(titleCase(habit.frequencyType))}</span>
+              <span>${escapeHtml(getLifeAreaHabitDetail(habit))}</span>
             </li>
           `,
         )
         .join("")}
     </ul>
   `;
+}
+
+function getLifeAreaHabitDetail(habit) {
+  const frequency = titleCase(habit.frequencyType);
+  if (!habit.streak) {
+    return frequency;
+  }
+
+  const streakText = `${habit.streak.currentStreak} current ${pluralize(habit.streak.unit, habit.streak.currentStreak)}`;
+  return habit.streak.recoveryAvailable ? `${frequency} - ${streakText} - recovery available` : `${frequency} - ${streakText}`;
 }
 
 function renderActionItem(action) {
