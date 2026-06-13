@@ -963,12 +963,34 @@ function getDecisionContext() {
     getDeadlineUrgencyScore,
     getEstimatedEffort,
     getAdaptiveEffect,
+    getActiveMode,
+    getDayPart,
+    getFocusStatus,
+    hasMissedTasks,
+    hasOverwhelm,
     formatWhy,
   };
 }
 
 function getAdaptiveEffect(collectionName, item) {
   return computeAdaptiveEffect({ collectionName, item, getLearningStats, getCurrentMinuteOfDay });
+}
+
+function getActiveMode() {
+  return state.ui?.activeView ?? "working";
+}
+
+function getFocusStatus() {
+  return getFocusModeData().status;
+}
+
+function hasMissedTasks() {
+  return Object.values(getLearningStats()).some((stats) => stats.lastMissedDate === getTodayKey() || Number(stats.missedCount ?? 0) > 0);
+}
+
+function hasOverwhelm() {
+  const profile = state.interviewProfile ?? {};
+  return profile.adhd?.busyFailureMode === "overwhelmed" || profile.adhd?.supportNeeded === "choose";
 }
 
 function recordItemEvent(collectionName, id, eventName, item = null) {

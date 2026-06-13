@@ -637,7 +637,7 @@ function renderNowCard(working) {
     <article class="working-card now-card">
       <p class="eyebrow">Now</p>
       <h3>${escapeHtml(recommendation.title)}</h3>
-      ${renderWhyList(recommendation.why)}
+      ${renderRecommendationExplanation(recommendation)}
       <div class="time-remaining">
         <strong>${escapeHtml(working.timeRemaining)}</strong>
       </div>
@@ -747,7 +747,7 @@ function renderDecisionCard(recommendation) {
     <article class="next-card decision-card">
       <p class="eyebrow">Do This Next</p>
       <h3>${escapeHtml(recommendation.title)}</h3>
-      ${renderWhyList(recommendation.why)}
+      ${renderRecommendationExplanation(recommendation)}
       <dl class="decision-meta">
         <div><dt>Estimated effort</dt><dd>${recommendation.effort} min</dd></div>
         <div><dt>Priority score</dt><dd>${recommendation.score}</dd></div>
@@ -762,6 +762,61 @@ function renderDecisionCard(recommendation) {
         ${!["recommendations", "guidance", "morningRoutine", "recoverySuggestions"].includes(recommendation.collection) ? `<button type="button" data-action="dismiss-item" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
       </div>
     </article>
+  `;
+}
+
+function renderRecommendationExplanation(recommendation) {
+  const explanation = recommendation.explanation;
+  if (!explanation) {
+    return renderWhyList(recommendation.why);
+  }
+
+  return `
+    <details class="recommendation-explanation">
+      <summary>Why this recommendation?</summary>
+      <div class="explanation-grid">
+        <section>
+          <h4>Why this?</h4>
+          <p>${escapeHtml(explanation.whyThis)}</p>
+        </section>
+        <section>
+          <h4>Why now?</h4>
+          <p>${escapeHtml(explanation.whyNow)}</p>
+        </section>
+        <section>
+          <h4>Rules influencing this recommendation</h4>
+          ${renderRuleInfluenceList(explanation.rules)}
+        </section>
+        ${renderContextInfluences(explanation.context)}
+      </div>
+    </details>
+  `;
+}
+
+function renderRuleInfluenceList(rules) {
+  if (!rules || rules.length === 0) {
+    return `<p>No active ruleset changed the score. Timing, priority, and effort decided this.</p>`;
+  }
+
+  return `
+    <ul>
+      ${rules.map((rule) => `<li><strong>${escapeHtml(rule.name)}</strong><span>${escapeHtml(rule.effect)}</span></li>`).join("")}
+    </ul>
+  `;
+}
+
+function renderContextInfluences(contextDetails) {
+  if (!contextDetails || contextDetails.length === 0) {
+    return "";
+  }
+
+  return `
+    <section>
+      <h4>Context</h4>
+      <ul>
+        ${contextDetails.map((detail) => `<li><span>${escapeHtml(detail)}</span></li>`).join("")}
+      </ul>
+    </section>
   `;
 }
 

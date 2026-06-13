@@ -1,6 +1,7 @@
 export function scoreActionableCandidate(context, candidate) {
   const reasons = [];
   const ruleEffects = [];
+  const contributingRulesets = [];
   const { item } = candidate;
   let score = 0;
 
@@ -72,11 +73,12 @@ export function scoreActionableCandidate(context, candidate) {
     reasons.push("recently skipped");
   }
 
-  const rulesetScore = applyRulesetEffects(context, item, ruleEffects);
+  const rulesetScore = applyRulesetEffects(context, item, ruleEffects, contributingRulesets);
   score += rulesetScore;
 
   const adaptiveEffect = context.getAdaptiveEffect(candidate.collection, item);
   score += adaptiveEffect.score;
+  const why = context.formatWhy(reasons, [...ruleEffects, ...adaptiveEffect.reasons]);
 
   return {
     ...candidate,
@@ -86,12 +88,14 @@ export function scoreActionableCandidate(context, candidate) {
     score,
     reasons,
     ruleEffects,
-    why: context.formatWhy(reasons, [...ruleEffects, ...adaptiveEffect.reasons]),
+    contributingRulesets,
+    explanation: buildRecommendationExplanation(context, candidate, item, reasons, ruleEffects, adaptiveEffect.reasons, contributingRulesets),
+    why,
     isSkipped: skipped,
   };
 }
 
-function applyRulesetEffects(context, item, ruleEffects) {
+function applyRulesetEffects(context, item, ruleEffects, contributingRulesets) {
   const activeRulesets = new Set(context.state.interviewProfile?.activeRulesets ?? []);
   let score = 0;
 
@@ -100,9 +104,11 @@ function applyRulesetEffects(context, item, ruleEffects) {
     if (minutesUntilStart <= 15) {
       score += 40;
       ruleEffects.push("Time Blindness Support boost");
+      contributingRulesets.push("time_blindness_support");
     } else if (minutesUntilStart <= 30) {
       score += 20;
       ruleEffects.push("Time Blindness Support boost");
+      contributingRulesets.push("time_blindness_support");
     }
   }
 
@@ -111,27 +117,128 @@ function applyRulesetEffects(context, item, ruleEffects) {
     if (effort <= 15) {
       score += 10;
       ruleEffects.push("Decision Paralysis Support favors the simplest action");
+      contributingRulesets.push("decision_paralysis_support");
     } else if (effort > 30) {
       score -= 10;
       ruleEffects.push("Decision Paralysis Support lowers complex actions");
+      contributingRulesets.push("decision_paralysis_support");
     }
   }
 
   if (activeRulesets.has("short_movement_blocks") && context.isMovementTask(item)) {
     score += 10;
     ruleEffects.push("Short Movement Blocks boost");
+    contributingRulesets.push("short_movement_blocks");
   }
 
   if (activeRulesets.has("self_employed")) {
     if (item.category === "Work" && item.workType === "revenue") {
       score += 15;
       ruleEffects.push("Self-employed revenue boost");
+      contributingRulesets.push("self_employed");
     }
     if (item.category === "Work" && (item.workType === "admin" || item.workType === "administrative")) {
       score -= 5;
       ruleEffects.push("Self-employed admin penalty");
+      contributingRulesets.push("self_employed");
     }
   }
 
   return score;
+}
+
+function buildRecommendationExplanation(context, candidate, item, reasons, ruleEffects, adaptiveReasons, contributingRulesets) {
+  return {
+    whyThis: getWhyThis(candidate, item),
+    whyNow: getWhyNow(context, item, reasons),
+    rules: getRulesExplanation(contributingRulesets, ruleEffects),
+    context: getContextExplanation(context, adaptiveReasons),
+  };
+}
+
+function getWhyThis(candidate, item) {
+  if (item.type === "Recovery Suggestion") {
+    return "This helps unstick a task that has been delayed repeatedly.";
+  }
+  if (item.type === "Morning Routine") {
+    return "This protects the first part of the day with a clear next step.";
+  }
+  if (item.type === "Guidance") {
+    return "This supports an active profile rule without adding a new project.";
+  }
+  if (item.type === "Recommendation") {
+    return "This is a profile-based support item that can help today go smoother.";
+  }
+  if (candidate.collection === "timeline" || candidate.collection === "focusSessions") {
+    return "This is tied to today’s schedule, so it needs attention before it slips.";
+  }
+  return "This is the strongest available next action based on priority, timing, and effort.";
+}
+
+function getWhyNow(context, item, reasons) {
+  if (context.isOverdue(item)) {
+    return "It is overdue, so the assistant is surfacing it before it creates more drag.";
+  }
+  if ((item.timingType ?? context.inferTimingType(item)) === "scheduled") {
+    const minutesUntilStart = context.getRawMinutesUntilScheduledStart(item);
+    if (minutesUntilStart <= 0) {
+      return "Its scheduled time has arrived.";
+    }
+    if (minutesUntilStart <= 15) {
+      return "Its scheduled start is close.";
+    }
+    if (minutesUntilStart <= 30) {
+      return "It is coming up soon enough to prepare now.";
+    }
+  }
+  if (context.hasMissedTasks()) {
+    return "There are missed or deferred items today, so the assistant is reducing drift.";
+  }
+  if (context.hasOverwhelm()) {
+    return "The current profile suggests overwhelm risk, so a clear next step is better than more choices.";
+  }
+  if (context.getFocusStatus() === "running") {
+    return "Focus Mode is active, so the assistant is keeping the next action narrow.";
+  }
+  if (reasons.includes("due today")) {
+    return "It is due today and still open.";
+  }
+  if (context.getActiveMode() === "working") {
+    return "Working Mode needs one clear action right now.";
+  }
+  return `It fits the current ${context.getDayPart()} context and visible workload.`;
+}
+
+function getRulesExplanation(contributingRulesets, ruleEffects) {
+  const labels = {
+    time_blindness_support: "Time Blindness Support",
+    decision_paralysis_support: "Decision Paralysis Support",
+    short_movement_blocks: "Short Movement Blocks",
+    self_employed: "Self-employed",
+  };
+  const effectsByRuleset = new Map();
+
+  contributingRulesets.forEach((ruleset, index) => {
+    const label = labels[ruleset] ?? ruleset;
+    if (!effectsByRuleset.has(label)) {
+      effectsByRuleset.set(label, ruleEffects[index] ?? "Adjusted recommendation score");
+    }
+  });
+
+  return [...effectsByRuleset.entries()].map(([name, effect]) => ({ name, effect }));
+}
+
+function getContextExplanation(context, adaptiveReasons) {
+  const details = [];
+  if (context.hasMissedTasks()) {
+    details.push("Missed/deferred items are visible today.");
+  }
+  if (context.hasOverwhelm()) {
+    details.push("Overwhelm support is active.");
+  }
+  if (context.getFocusStatus() === "running") {
+    details.push("Focus Mode is running.");
+  }
+  details.push(...adaptiveReasons);
+  return details.slice(0, 3);
 }
