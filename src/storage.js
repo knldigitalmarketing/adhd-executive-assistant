@@ -67,6 +67,11 @@ function mergeState(base, stored) {
       effectiveness: { ...base.interventionState?.effectiveness, ...stored.interventionState?.effectiveness },
       history: arrayOrDefault(stored.interventionState?.history, base.interventionState?.history ?? []),
     },
+    energyMood: {
+      ...base.energyMood,
+      ...stored.energyMood,
+      checkIns: arrayOrDefault(stored.energyMood?.checkIns, base.energyMood?.checkIns ?? []),
+    },
     smartReschedulingState: {
       ...base.smartReschedulingState,
       ...stored.smartReschedulingState,

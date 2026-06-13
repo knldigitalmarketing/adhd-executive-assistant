@@ -786,6 +786,30 @@ main {
   gap: 16px;
 }
 
+.energy-mood-panel .panel-title {
+  align-items: start;
+}
+
+.energy-mood-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 0.45fr)) minmax(180px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.energy-mood-form label {
+  display: block;
+  min-height: 0;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.energy-mood-form button {
+  min-height: 40px;
+}
+
 .why-list {
   display: grid;
   gap: 6px;
@@ -1239,6 +1263,7 @@ dd {
   .onboarding-grid,
   .briefing-grid,
   .smart-rescheduling-grid,
+  .energy-mood-form,
   .today-grid,
   .working-grid,
   .morning-grid,

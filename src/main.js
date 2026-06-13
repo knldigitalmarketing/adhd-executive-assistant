@@ -33,6 +33,7 @@ import {
   editGoal,
   editHabit,
   getDecisionRecommendation,
+  getEnergyMoodData,
   getEndOfDayReviewData,
   getActiveView,
   getFocusModeData,
@@ -61,6 +62,7 @@ import {
   resumeFocus,
   saveGoal,
   saveHabit,
+  saveEnergyMoodCheckIn,
   saveRecurringTask,
   saveRoutine,
   startFocus,
@@ -381,6 +383,7 @@ function renderMorningBriefing() {
         </div>
         <button type="button" data-action="start-working">Start My Day</button>
       </div>
+      ${renderEnergyMoodCheckIn(briefing.energyMood)}
       ${renderTipCard(briefing.tip)}
       ${renderInterventionCard(briefing.intervention, "briefing")}
       ${renderSmartRescheduling(briefing.smartRescheduling)}
@@ -1036,6 +1039,7 @@ function renderWorkingMode() {
         ${renderNowCard(working)}
         ${renderComingUpCard(working.comingUp)}
       </div>
+      ${renderEnergyMoodCheckIn(getEnergyMoodData())}
       ${renderTipCard(working.tip)}
       ${renderInterventionCard(working.intervention, "working")}
     </section>
@@ -1080,6 +1084,45 @@ function renderInterventionCard(intervention, contextName) {
       </div>
     </aside>
   `;
+}
+
+function renderEnergyMoodCheckIn(data = getEnergyMoodData()) {
+  const latest = data.latestCheckIn;
+
+  return `
+    <article class="panel energy-mood-panel">
+      <div class="panel-title">
+        <div>
+          <h3>Energy / Mood Check-In</h3>
+          <p class="empty-copy">${escapeHtml(data.summary)}</p>
+        </div>
+        ${latest ? pill(`${titleCase(latest.energy)} energy`, latest.energy === "low" ? "warn" : "strong") : pill("Quick check", "neutral")}
+      </div>
+      <form class="energy-mood-form" data-action="save-energy-mood">
+        <div>
+          <label for="energy-mood-mood">Mood</label>
+          <select id="energy-mood-mood" name="mood">
+            ${renderOptionList(data.moods, latest?.mood ?? "steady", titleCase)}
+          </select>
+        </div>
+        <div>
+          <label for="energy-mood-energy">Energy</label>
+          <select id="energy-mood-energy" name="energy">
+            ${renderOptionList(data.energyLevels, latest?.energy ?? "medium", titleCase)}
+          </select>
+        </div>
+        <div>
+          <label for="energy-mood-note">Optional note</label>
+          <input id="energy-mood-note" name="energyMoodNote" type="text" placeholder="Short context, if useful" />
+        </div>
+        <button type="submit">Save Check-In</button>
+      </form>
+    </article>
+  `;
+}
+
+function renderOptionList(options, selectedValue, labelFormatter = (value) => value) {
+  return options.map((option) => `<option value="${escapeHtml(option)}" ${option === selectedValue ? "selected" : ""}>${escapeHtml(labelFormatter(option))}</option>`).join("");
 }
 
 function renderSmartRescheduling(summary) {
@@ -2136,6 +2179,15 @@ app.addEventListener("click", (event) => {
 });
 
 app.addEventListener("submit", (event) => {
+  const energyMoodForm = event.target.closest("form[data-action='save-energy-mood']");
+  if (energyMoodForm) {
+    event.preventDefault();
+    saveEnergyMoodCheckIn(new FormData(energyMoodForm));
+    energyMoodForm.reset();
+    renderApp();
+    return;
+  }
+
   const recurringTaskForm = event.target.closest("form[data-action='save-recurring-task']");
   if (recurringTaskForm) {
     event.preventDefault();

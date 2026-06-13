@@ -141,6 +141,9 @@ export const appState = {
     effectiveness: {},
     history: [],
   },
+  energyMood: {
+    checkIns: [],
+  },
   smartReschedulingState: {
     history: [],
     lastRunDate: null,

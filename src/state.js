@@ -1,6 +1,13 @@
 import { appState as defaultState } from "./data.js";
 import { scoreActionableCandidate } from "./decision.js";
 import {
+  ensureEnergyMoodState,
+  getEnergyMoodContextDetails,
+  getEnergyMoodData as buildEnergyMoodData,
+  getEnergyMoodInfluenceForItem,
+  recordEnergyMoodCheckIn,
+} from "./energy-mood-tracking.js";
+import {
   buildSmartIntervention,
   ensureInterventionState,
   getCachedIntervention,
@@ -100,6 +107,7 @@ let state = loadState(defaultState);
 state.interviewProfile = buildProfileWithRulesets(ensureProfileShape(state.interviewProfile));
 state.tipState = ensureTipState(state.tipState);
 state.interventionState = ensureInterventionState(state.interventionState);
+ensureEnergyMoodState(state);
 ensureRoutineBuilderState(state);
 ensureGoalState(state);
 ensureHabitState(state);
@@ -162,6 +170,7 @@ export function resetLocalData() {
   state.interviewProfile = buildProfileWithRulesets(ensureProfileShape(state.interviewProfile));
   state.tipState = ensureTipState(state.tipState);
   state.interventionState = ensureInterventionState(state.interventionState);
+  ensureEnergyMoodState(state);
   ensureRoutineBuilderState(state);
   ensureGoalState(state);
   ensureHabitState(state);
@@ -962,6 +971,7 @@ export function getMorningBriefingData() {
 
   return {
     goalProgress: getGoalProgressSummary(),
+    energyMood: getEnergyMoodData(),
     smartRescheduling,
     goals: getTopActiveGoals(state, 3),
     habits: getHabitTrackingData(),
@@ -990,6 +1000,15 @@ export function getTomorrowPlanningData() {
     getEstimatedEffort,
     getPriorityWeight,
   });
+}
+
+export function getEnergyMoodData() {
+  return buildEnergyMoodData(state);
+}
+
+export function saveEnergyMoodCheckIn(formData) {
+  recordEnergyMoodCheckIn(state, formData);
+  saveState(state);
 }
 
 export function getSmartReschedulingSummary() {
@@ -1404,6 +1423,9 @@ function getDecisionContext() {
     getAdaptiveEffect,
     getGoalInfluence,
     getHabitInfluence,
+    getEnergyMoodInfluence,
+    getEnergyMoodContext,
+    hasLowMood,
     getActiveMode,
     getDayPart,
     getFocusStatus,
@@ -1423,6 +1445,19 @@ function getGoalInfluence(item) {
 
 function getHabitInfluence(item) {
   return getHabitInfluenceForItem(state, item, inferTimingType);
+}
+
+function getEnergyMoodInfluence(item) {
+  return getEnergyMoodInfluenceForItem(state, item, getEstimatedEffort);
+}
+
+function getEnergyMoodContext() {
+  return getEnergyMoodContextDetails(state);
+}
+
+function hasLowMood() {
+  const mood = getEnergyMoodData().latestCheckIn?.mood;
+  return mood === "low" || mood === "stressed";
 }
 
 function getActiveMode() {
@@ -1804,6 +1839,9 @@ function createDemoState(demoId) {
     dismissedToday: [],
     effectiveness: {},
     history: [],
+  };
+  demoState.energyMood = {
+    checkIns: [],
   };
   demoState.smartReschedulingState = {
     history: [],

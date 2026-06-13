@@ -90,7 +90,9 @@ export function scoreActionableCandidate(context, candidate) {
   score += goalInfluence.score;
   const habitInfluence = context.getHabitInfluence(item);
   score += habitInfluence.score;
-  const why = context.formatWhy(reasons, [...ruleEffects, ...adaptiveEffect.reasons, ...goalInfluence.reasons, ...habitInfluence.reasons]);
+  const energyMoodInfluence = context.getEnergyMoodInfluence(item);
+  score += energyMoodInfluence.score;
+  const why = context.formatWhy(reasons, [...ruleEffects, ...adaptiveEffect.reasons, ...goalInfluence.reasons, ...habitInfluence.reasons, ...energyMoodInfluence.reasons]);
 
   return {
     ...candidate,
@@ -103,7 +105,8 @@ export function scoreActionableCandidate(context, candidate) {
     contributingRulesets,
     goalInfluence,
     habitInfluence,
-    explanation: buildRecommendationExplanation(context, candidate, item, reasons, ruleEffects, [...adaptiveEffect.reasons, ...goalInfluence.reasons, ...habitInfluence.reasons], contributingRulesets),
+    energyMoodInfluence,
+    explanation: buildRecommendationExplanation(context, candidate, item, reasons, ruleEffects, [...adaptiveEffect.reasons, ...goalInfluence.reasons, ...habitInfluence.reasons, ...energyMoodInfluence.reasons], contributingRulesets),
     why,
     isSkipped: skipped,
   };
@@ -194,6 +197,9 @@ function getWhyThis(candidate, item) {
 
 function getWhyNow(context, item, reasons) {
   if (context.isOverdue(item)) {
+    if (context.hasLowMood()) {
+      return "It is overdue, and the assistant is keeping the next step concrete and gentle.";
+    }
     return "It is overdue, so the assistant is surfacing it before it creates more drag.";
   }
   if (item.rescheduledBySmartEngine) {
@@ -256,6 +262,7 @@ function getContextExplanation(context, adaptiveReasons) {
   if (context.hasOverwhelm()) {
     details.push("Overwhelm support is active.");
   }
+  details.push(...context.getEnergyMoodContext());
   if (context.getFocusStatus() === "running") {
     details.push("Focus Mode is running.");
   }
