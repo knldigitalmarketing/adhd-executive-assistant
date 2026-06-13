@@ -144,11 +144,11 @@ export function getFocusModeData() {
 }
 
 export function getActiveView() {
-  if (state.ui?.lastMorningBriefingDate !== getTodayKey() && state.ui?.activeView !== "command-center") {
+  if (state.ui?.lastMorningBriefingDate !== getTodayKey() && !state.ui?.activeView) {
     return "briefing";
   }
 
-  return state.ui?.activeView ?? "working";
+  return state.ui?.activeView ?? "command-center";
 }
 
 export function setActiveView(activeView) {

@@ -76,6 +76,20 @@ import {
 const app = document.querySelector("#app");
 let workingModeTimer = null;
 
+const navItems = [
+  ["command-center", "Command Center"],
+  ["today", "Today"],
+  ["working", "Working Mode"],
+  ["goals", "Goals"],
+  ["habits", "Habits"],
+  ["routines", "Routines"],
+  ["recurring-tasks", "Recurring Tasks"],
+  ["progress", "Progress"],
+  ["learn", "Learn"],
+  ["shop", "Shop"],
+  ["settings", "Settings"],
+];
+
 function areaMap() {
   return new Map(getState().responsibilityAreas.map((area) => [area.id, area]));
 }
@@ -109,29 +123,26 @@ function pill(text, tone = "neutral") {
 }
 
 function renderHeader() {
+  const activeView = getActiveView();
+
   return `
     <header class="topbar">
       <div>
         <p class="eyebrow">Interactive local-first MVP</p>
         <h1>ADHD Executive Assistant</h1>
       </div>
-      <nav aria-label="Primary">
-        <a href="#today">Today</a>
-        <button type="button" data-action="show-command-center">Command</button>
-        <a href="#working">Working</a>
-        <a href="#review">Review</a>
-        <a href="#onboarding">Onboarding</a>
-        <a href="#routine-builder">Routines</a>
-        <a href="#goal-setting">Goals</a>
-        <a href="#habit-tracking">Habits</a>
-        <a href="#recurring-tasks">Recurring</a>
-        <a href="#life-areas">Life Areas</a>
-        <a href="#dashboard">Dashboard</a>
-        <a href="#timeline">Timeline</a>
-        <a href="#focus">Focus</a>
-        <a href="#models">Models</a>
+      <nav class="app-nav" aria-label="Primary">
+        ${navItems.map(([view, label]) => renderNavButton(view, label, activeView)).join("")}
       </nav>
     </header>
+  `;
+}
+
+function renderNavButton(view, label, activeView) {
+  return `
+    <button type="button" class="${activeView === view ? "is-active" : ""}" data-action="navigate" data-view="${escapeHtml(view)}" aria-current="${activeView === view ? "page" : "false"}">
+      ${escapeHtml(label)}
+    </button>
   `;
 }
 
@@ -1083,6 +1094,34 @@ function renderCommandCenter() {
         ${renderCommandAlerts({ intervention: working.intervention ?? briefing.intervention, smartRescheduling })}
         ${renderCommandPositiveMessage({ stats, now, energyMood })}
       </div>
+    </section>
+  `;
+}
+
+function renderProgressView() {
+  return `
+    <section id="progress" class="section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Progress</p>
+          <h2>See what is moving</h2>
+        </div>
+      </div>
+      ${renderLifeAreaDashboard()}
+      ${renderEndOfDayReview()}
+    </section>
+  `;
+}
+
+function renderPlaceholderView(viewName, title, copy) {
+  return `
+    <section id="${escapeHtml(viewName)}" class="section placeholder-view">
+      <article class="panel">
+        <p class="eyebrow">${escapeHtml(title)}</p>
+        <h2>${escapeHtml(title)}</h2>
+        <p>${escapeHtml(copy)}</p>
+        <p class="empty-copy">This placeholder is intentionally local-only. No integrations, accounts, payments, or shopping flows are active.</p>
+      </article>
     </section>
   `;
 }
@@ -2164,10 +2203,32 @@ function renderApp() {
     ${renderHeader()}
     ${renderTestModePanel()}
     <main>
-      ${activeView === "briefing" ? renderMorningBriefing() : activeView === "working" ? renderWorkingMode() : activeView === "command-center" ? renderCommandCenter() : activeView === "review" ? renderEndOfDayReview() : activeView === "life-areas" ? renderLifeAreaDashboard() : fullDashboard}
+      ${renderActiveView(activeView, fullDashboard)}
     </main>
   `;
   scheduleWorkingModeRefresh(activeView);
+}
+
+function renderActiveView(activeView, fullDashboard) {
+  const views = {
+    briefing: renderMorningBriefing,
+    "command-center": renderCommandCenter,
+    today: renderToday,
+    working: renderWorkingMode,
+    goals: renderGoalSetting,
+    habits: renderHabitTracking,
+    routines: renderRoutineBuilder,
+    "recurring-tasks": renderRecurringTasks,
+    progress: renderProgressView,
+    review: renderEndOfDayReview,
+    "life-areas": renderLifeAreaDashboard,
+    learn: () => renderPlaceholderView("learn", "Learn", "ADHD-friendly learning content will live here later."),
+    shop: () => renderPlaceholderView("shop", "Shop", "Shopping support is not built yet. This area is a placeholder only."),
+    settings: () => renderPlaceholderView("settings", "Settings", "Profile, display, and prototype preferences will live here later."),
+    dashboard: () => fullDashboard,
+  };
+
+  return (views[activeView] ?? views["command-center"])();
 }
 
 function scheduleWorkingModeRefresh(activeView) {
@@ -2197,6 +2258,10 @@ app.addEventListener("click", (event) => {
   }
 
   const { action, collection, id } = button.dataset;
+  if (action === "navigate") {
+    setActiveView(button.dataset.view);
+    renderApp();
+  }
   if (action === "mark-done") {
     markDone(collection, id);
     renderApp();

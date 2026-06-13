@@ -73,14 +73,14 @@ textarea {
   letter-spacing: 0;
 }
 
-nav {
+.app-nav {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }
 
-nav a,
+.app-nav button,
 button {
   min-height: 40px;
   border: 1px solid var(--line);
@@ -90,11 +90,16 @@ button {
   text-decoration: none;
 }
 
-nav a {
-  display: inline-flex;
-  align-items: center;
+.app-nav button {
   padding: 0 12px;
   font-size: 0.92rem;
+}
+
+.app-nav button.is-active {
+  border-color: var(--blue);
+  background: #eaf2f8;
+  color: var(--blue);
+  font-weight: 800;
 }
 
 button {
@@ -103,7 +108,7 @@ button {
 }
 
 button:hover,
-nav a:hover {
+.app-nav button:hover {
   border-color: var(--blue);
 }
 
@@ -144,6 +149,14 @@ main {
 .section {
   display: grid;
   gap: 16px;
+}
+
+.placeholder-view .panel {
+  max-width: 760px;
+}
+
+.placeholder-view h2 {
+  margin: 0;
 }
 
 .section-heading {
@@ -1354,7 +1367,7 @@ dd {
     flex-direction: column;
   }
 
-  nav {
+  .app-nav {
     justify-content: flex-start;
   }
 
