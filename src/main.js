@@ -9,6 +9,7 @@ import {
   cancelHabitEdit,
   cancelRecurringTaskEdit,
   cancelRoutineEdit,
+  clearProfilePhoto,
   completeEndOfDayReview,
   completeSmartIntervention,
   completeWeeklyReview,
@@ -32,7 +33,11 @@ import {
   editInterviewAnswer,
   editGoal,
   editHabit,
+  clearAppearanceImage,
+  disablePrivacyLock,
   getDecisionRecommendation,
+  getAccountSettings,
+  getAppearanceSettings,
   getEnergyMoodData,
   getEndOfDayReviewData,
   getActiveView,
@@ -54,7 +59,9 @@ import {
   getWeeklyReviewData,
   getWorkingModeData,
   isDone,
+  isPrivacyLocked,
   loadDemo,
+  lockApp,
   markDone,
   resetLocalData,
   setActiveView,
@@ -64,6 +71,9 @@ import {
   markGoalComplete,
   reactivateCompletedGoal,
   resumeFocus,
+  saveAccountProfile,
+  saveAppearanceImage,
+  saveAppearanceSettings,
   saveGoal,
   saveHabit,
   saveEnergyMoodCheckIn,
@@ -79,6 +89,9 @@ import {
   startMyDay,
   statusText,
   statusTone,
+  savePrivacyLock,
+  saveProfilePhoto,
+  unlockApp,
 } from "./state.js";
 import { formatRoutineStepLines, startVoiceRecognition } from "./voice-list-entry.js";
 
@@ -97,6 +110,7 @@ const navItems = [
   ["progress", "Progress"],
   ["learn", "Learn"],
   ["shop", "Shop"],
+  ["account", "Account"],
   ["settings", "Settings"],
 ];
 
@@ -113,6 +127,14 @@ function titleCase(value) {
     .split("-")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function categoryLabel(value) {
+  return value === "adhd" ? "Focus & Follow-Through" : titleCase(value);
+}
+
+function supportModeLabel(value) {
+  return titleCase(String(value).replaceAll("_", "-"));
 }
 
 function pluralize(unit, count) {
@@ -143,7 +165,7 @@ function renderHeader() {
     <header class="topbar">
       <div>
         <p class="eyebrow">Interactive local-first MVP</p>
-        <h1>ADHD Executive Assistant</h1>
+        <h1>Life Enablement Assistant</h1>
       </div>
       <nav class="app-nav" aria-label="Primary">
         ${navItems.map(([view, label]) => renderNavButton(view, label, activeView)).join("")}
@@ -166,8 +188,8 @@ function renderTestModePanel() {
       <strong>Test Mode / Prototype Tools</strong>
       <div>
         <button type="button" data-action="reset-local-data">Reset App Data</button>
-        <button type="button" data-action="load-demo" data-demo-id="adhd-weight-loss">Load ADHD + Weight Loss Demo</button>
-        <button type="button" data-action="load-demo" data-demo-id="adhd-muscle-gain">Load ADHD + Muscle Gain Demo</button>
+        <button type="button" data-action="load-demo" data-demo-id="adhd-weight-loss">Load Focus + Weight Loss Demo</button>
+        <button type="button" data-action="load-demo" data-demo-id="adhd-muscle-gain">Load Focus + Muscle Gain Demo</button>
         <button type="button" data-action="load-demo" data-demo-id="self-employed">Load Self Employed Demo</button>
       </div>
     </aside>
@@ -409,8 +431,8 @@ function renderMorningBriefing() {
     <section id="briefing" class="section briefing-screen">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Morning Briefing</p>
-          <h2>Orient the day</h2>
+          <p class="eyebrow">Day Glimpse</p>
+          <h2>See what matters today</h2>
         </div>
         <button type="button" data-action="start-working">Start My Day</button>
       </div>
@@ -1224,6 +1246,154 @@ function renderPlaceholderView(viewName, title, copy) {
   `;
 }
 
+function renderAccountView() {
+  const account = getAccountSettings();
+  const hasPhoto = Boolean(account.profilePhotoDataUrl);
+
+  return `
+    <section id="account" class="section account-view">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Account</p>
+          <h2>Your profile and privacy</h2>
+          <p class="empty-copy">This prototype stores your information locally in this browser. A full online account system is not active yet.</p>
+        </div>
+        ${account.privacyLock.enabled ? `<button type="button" data-action="lock-app">Lock App</button>` : ""}
+      </div>
+      <div class="account-grid">
+        <article class="panel account-profile-panel">
+          <div class="profile-photo-preview">
+            ${hasPhoto ? `<img src="${escapeHtml(account.profilePhotoDataUrl)}" alt="Profile" />` : `<span>${escapeHtml(getProfileInitial(account.displayName))}</span>`}
+          </div>
+          <form class="account-form" data-action="save-account-profile">
+            <div>
+              <label for="account-display-name">Name</label>
+              <input id="account-display-name" name="displayName" type="text" value="${escapeHtml(account.displayName)}" placeholder="Your name" />
+            </div>
+            <button type="submit">Save Profile</button>
+          </form>
+          <div class="photo-upload">
+            <label for="profile-photo">Profile picture</label>
+            <input id="profile-photo" type="file" accept="image/*" data-action="upload-profile-photo" />
+            ${hasPhoto ? `<button type="button" class="secondary-button" data-action="clear-profile-photo">Remove Picture</button>` : ""}
+          </div>
+        </article>
+        <article class="panel privacy-panel">
+          <div class="panel-title">
+            <div>
+              <h3>Privacy Lock</h3>
+              <p class="empty-copy">Blocks casual access on this browser. This is not a full production login or encrypted cloud account.</p>
+            </div>
+            ${account.privacyLock.enabled ? pill("On", "strong") : pill("Off", "neutral")}
+          </div>
+          <form class="account-form" data-action="save-privacy-lock">
+            <div>
+              <label for="privacy-passcode">Set or change passcode</label>
+              <input id="privacy-passcode" name="passcode" type="password" minlength="4" autocomplete="new-password" placeholder="At least 4 characters" />
+            </div>
+            <div>
+              <label for="privacy-passcode-confirm">Confirm passcode</label>
+              <input id="privacy-passcode-confirm" name="confirmPasscode" type="password" minlength="4" autocomplete="new-password" placeholder="Type it again" />
+            </div>
+            ${account.unlockError ? `<p class="form-error">${escapeHtml(account.unlockError)}</p>` : ""}
+            <div class="button-row">
+              <button type="submit">${account.privacyLock.configured ? "Update Lock" : "Turn On Lock"}</button>
+              ${account.privacyLock.enabled ? `<button type="button" class="secondary-button" data-action="disable-privacy-lock">Turn Off Lock</button>` : ""}
+            </div>
+          </form>
+          <p class="empty-copy">When the app is locked, the personal dashboard is hidden until the passcode is entered. Closing and reopening the browser will ask again.</p>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function getProfileInitial(displayName) {
+  return String(displayName || "You").trim().charAt(0).toUpperCase() || "Y";
+}
+
+function renderUnlockScreen() {
+  const account = getAccountSettings();
+  return `
+    <main class="lock-screen">
+      <section class="lock-card panel">
+        <div class="profile-photo-preview compact">
+          ${account.profilePhotoDataUrl ? `<img src="${escapeHtml(account.profilePhotoDataUrl)}" alt="Profile" />` : `<span>${escapeHtml(getProfileInitial(account.displayName))}</span>`}
+        </div>
+        <p class="eyebrow">Privacy Lock</p>
+        <h1>Welcome back${account.displayName ? `, ${escapeHtml(account.displayName)}` : ""}</h1>
+        <p>Your Life Enablement Assistant is locked on this browser.</p>
+        <form class="account-form" data-action="unlock-app">
+          <label for="unlock-passcode">Passcode</label>
+          <input id="unlock-passcode" name="passcode" type="password" autocomplete="current-password" autofocus />
+          ${account.unlockError ? `<p class="form-error">${escapeHtml(account.unlockError)}</p>` : ""}
+          <button type="submit">Unlock</button>
+        </form>
+        <p class="empty-copy">Prototype note: this is a local privacy lock, not a full online login.</p>
+      </section>
+    </main>
+  `;
+}
+
+function renderSettingsView() {
+  const appearance = getAppearanceSettings();
+  const hasImage = Boolean(appearance.imageDataUrl);
+
+  return `
+    <section id="settings" class="section settings-view">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Settings</p>
+          <h2>Make the space feel like yours</h2>
+          <p class="empty-copy">Choose a calm color or use one of your own photos as the backdrop. The overlay keeps the assistant readable.</p>
+        </div>
+      </div>
+      <article class="panel appearance-panel">
+        <div class="panel-title">
+          <div>
+            <h3>Appearance</h3>
+            <p class="empty-copy">Photos are saved locally in this browser for prototype testing.</p>
+          </div>
+          ${hasImage ? pill(appearance.imageName || "Photo selected", "strong") : pill("Color background", "neutral")}
+        </div>
+        <form class="appearance-form" data-action="save-appearance">
+          <fieldset>
+            <legend>Background</legend>
+            <label class="radio-card">
+              <input type="radio" name="backgroundType" value="color" ${appearance.backgroundType === "color" || !hasImage ? "checked" : ""} />
+              <span>Color</span>
+            </label>
+            <label class="radio-card">
+              <input type="radio" name="backgroundType" value="image" ${appearance.backgroundType === "image" && hasImage ? "checked" : ""} ${hasImage ? "" : "disabled"} />
+              <span>My photo</span>
+            </label>
+          </fieldset>
+          <div>
+            <label for="appearance-color">Background color</label>
+            <input id="appearance-color" name="backgroundColor" type="color" value="${escapeHtml(appearance.backgroundColor)}" />
+          </div>
+          <div>
+            <label for="appearance-overlay">Photo softness</label>
+            <select id="appearance-overlay" name="overlay">
+              ${renderOptionList(["light", "medium", "strong"], appearance.overlay, titleCase)}
+            </select>
+            <p class="empty-copy">Use stronger softness when a photo has bright skies, flowers, or high contrast.</p>
+          </div>
+          <div class="button-row">
+            <button type="submit">Save Appearance</button>
+            ${hasImage ? `<button type="button" class="secondary-button" data-action="clear-appearance-image">Remove Photo</button>` : ""}
+          </div>
+        </form>
+        <div class="photo-upload">
+          <label for="appearance-image">Use one of my photos</label>
+          <input id="appearance-image" type="file" accept="image/*" data-action="upload-appearance-image" />
+          <p class="empty-copy">Choose a sunset, flower, or landscape image. Very large photos may need to be resized later for production, but this works for testing.</p>
+        </div>
+      </article>
+    </section>
+  `;
+}
+
 function renderShopView() {
   return `
     <section id="shop" class="section shop-view">
@@ -1502,9 +1672,9 @@ function renderTipCard(tip) {
   }
 
   return `
-    <aside class="tip-card" aria-label="ADHD Tip">
+    <aside class="tip-card" aria-label="Helpful Strategy">
       <div>
-        <p class="eyebrow">ADHD Tip</p>
+        <p class="eyebrow">Helpful Strategy</p>
         <strong>${escapeHtml(tip.category)}</strong>
       </div>
       <p>${escapeHtml(tip.text)}</p>
@@ -1519,9 +1689,9 @@ function renderInterventionCard(intervention, contextName) {
   }
 
   return `
-    <aside class="intervention-card" aria-label="Smart Intervention">
+    <aside class="intervention-card" aria-label="Support Shift">
       <div>
-        <p class="eyebrow">Smart Intervention</p>
+        <p class="eyebrow">Support Shift</p>
         <strong>${escapeHtml(intervention.title)}</strong>
       </div>
       <div>
@@ -1798,7 +1968,7 @@ function renderRecommendationExplanation(recommendation) {
           <p>${escapeHtml(explanation.whyNow)}</p>
         </section>
         <section>
-          <h4>Rules influencing this recommendation</h4>
+          <h4>Support modes influencing this recommendation</h4>
           ${renderRuleInfluenceList(explanation.rules)}
         </section>
         ${renderContextInfluences(explanation.context)}
@@ -1809,7 +1979,7 @@ function renderRecommendationExplanation(recommendation) {
 
 function renderRuleInfluenceList(rules) {
   if (!rules || rules.length === 0) {
-    return `<p>No active ruleset changed the score. Timing, priority, and effort decided this.</p>`;
+    return `<p>No active support mode changed the score. Timing, priority, and effort decided this.</p>`;
   }
 
   return `
@@ -1931,7 +2101,7 @@ function renderOnboarding() {
       <div class="onboarding-grid">
         <article class="panel interview-panel conversation-panel">
           <div class="panel-title">
-            <h3>Interview Engine V1</h3>
+            <h3>Setup Conversation</h3>
             ${pill(`${interview.progress.answered}/${interview.progress.total} answered`, "strong")}
           </div>
           ${renderInterviewQuestion(question, interview.completed)}
@@ -1952,14 +2122,14 @@ function renderInterviewQuestion(question, completed) {
       <div class="conversation-message">
         <p class="eyebrow">Setup paused at useful</p>
         <h3>Interview complete for V1.</h3>
-        <p>The assistant has enough information to activate initial rulesets. You can edit any answer from the review panel.</p>
+        <p>The assistant has enough information to activate your initial support modes. You can edit any answer from the review panel.</p>
       </div>
     `;
   }
 
   return `
     <div class="conversation-message">
-      <p class="eyebrow">${escapeHtml(titleCase(question.category))}</p>
+      <p class="eyebrow">${escapeHtml(categoryLabel(question.category))}</p>
       <h3>${escapeHtml(question.prompt)}</h3>
     </div>
     <div class="answer-options">
@@ -1982,9 +2152,9 @@ function renderSavedProfile(interview) {
       ${interview.answeredQuestions.map((question) => renderAnsweredQuestion(question, interview.profile)).join("") || "<p>No answers yet.</p>"}
     </div>
     <div class="ruleset-list">
-      <h3>Active rulesets</h3>
+      <h3>Active support modes</h3>
       <div>
-        ${interview.profile.activeRulesets.map((ruleset) => pill(ruleset)).join("")}
+        ${interview.profile.activeRulesets.map((ruleset) => pill(supportModeLabel(ruleset))).join("")}
       </div>
     </div>
   `;
@@ -1997,7 +2167,7 @@ function renderAnsweredQuestion(question, profile) {
   return `
     <article class="review-item">
       <div>
-        <span>${escapeHtml(titleCase(question.category))}</span>
+        <span>${escapeHtml(categoryLabel(question.category))}</span>
         <strong>${escapeHtml(question.prompt)}</strong>
         <p>${escapeHtml(option?.label ?? value)}</p>
       </div>
@@ -2339,7 +2509,7 @@ function renderHourlyView() {
         <div>
           <p class="eyebrow">Hourly View</p>
           <h2>Your day by the hour</h2>
-          <p class="empty-copy">Open an hour to see what is happening there. This is the third display after the day glimpse and Working Mode.</p>
+          <p class="empty-copy">Open an hour to see what is happening there. This is the third display after the day glimpse and focused working screen.</p>
         </div>
       </div>
       <div class="hourly-list">
@@ -2487,8 +2657,31 @@ function renderModels() {
   `;
 }
 
+function applyAppearance() {
+  const appearance = getAppearanceSettings();
+  document.body.classList.toggle("has-photo-bg", appearance.backgroundType === "image" && Boolean(appearance.imageDataUrl));
+  document.body.dataset.overlay = appearance.overlay;
+  document.body.style.setProperty("--app-bg-color", appearance.backgroundColor);
+  if (appearance.imageDataUrl) {
+    document.body.style.setProperty("--app-bg-image", `url("${cssEscapeUrl(appearance.imageDataUrl)}")`);
+  } else {
+    document.body.style.removeProperty("--app-bg-image");
+  }
+}
+
+function cssEscapeUrl(value) {
+  return String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+}
+
 function renderApp() {
   const activeView = getActiveView();
+  applyAppearance();
+  if (isPrivacyLocked()) {
+    app.innerHTML = renderUnlockScreen();
+    scheduleWorkingModeRefresh("locked");
+    return;
+  }
+
   const fullDashboard = `
     ${renderToday()}
     ${renderEndOfDayReview()}
@@ -2529,9 +2722,10 @@ function renderActiveView(activeView, fullDashboard) {
     progress: renderProgressView,
     review: renderEndOfDayReview,
     "life-areas": renderLifeAreaDashboard,
-    learn: () => renderPlaceholderView("learn", "Learn", "ADHD-friendly learning content will live here later."),
+    learn: () => renderPlaceholderView("learn", "Learn", "Helpful strategies and life enablement learning content will live here later."),
     shop: renderShopView,
-    settings: () => renderPlaceholderView("settings", "Settings", "Profile, display, and prototype preferences will live here later."),
+    account: renderAccountView,
+    settings: renderSettingsView,
     dashboard: () => fullDashboard,
   };
 
@@ -2771,9 +2965,58 @@ app.addEventListener("click", (event) => {
     deleteSavedVoiceListItem(button.dataset.targetId, id);
     renderApp();
   }
+  if (action === "clear-appearance-image") {
+    clearAppearanceImage();
+    renderApp();
+  }
+  if (action === "clear-profile-photo") {
+    clearProfilePhoto();
+    renderApp();
+  }
+  if (action === "disable-privacy-lock") {
+    disablePrivacyLock();
+    renderApp();
+  }
+  if (action === "lock-app") {
+    lockApp();
+    renderApp();
+  }
 });
 
-app.addEventListener("submit", (event) => {
+app.addEventListener("submit", async (event) => {
+  const unlockForm = event.target.closest("form[data-action='unlock-app']");
+  if (unlockForm) {
+    event.preventDefault();
+    await unlockApp(new FormData(unlockForm));
+    renderApp();
+    return;
+  }
+
+  const accountForm = event.target.closest("form[data-action='save-account-profile']");
+  if (accountForm) {
+    event.preventDefault();
+    saveAccountProfile(new FormData(accountForm));
+    renderApp();
+    return;
+  }
+
+  const privacyLockForm = event.target.closest("form[data-action='save-privacy-lock']");
+  if (privacyLockForm) {
+    event.preventDefault();
+    await savePrivacyLock(new FormData(privacyLockForm));
+    privacyLockForm.reset();
+    renderApp();
+    return;
+  }
+
+  const appearanceForm = event.target.closest("form[data-action='save-appearance']");
+  if (appearanceForm) {
+    event.preventDefault();
+    saveAppearanceSettings(new FormData(appearanceForm));
+    renderApp();
+    return;
+  }
+
   const voiceListForm = event.target.closest("form[data-action='review-voice-list']");
   if (voiceListForm) {
     event.preventDefault();
@@ -2845,6 +3088,33 @@ app.addEventListener("submit", (event) => {
   addTask(new FormData(form));
   form.reset();
   renderApp();
+});
+
+app.addEventListener("change", (event) => {
+  const profileInput = event.target.closest("input[data-action='upload-profile-photo']");
+  if (profileInput && profileInput.files?.[0]) {
+    const file = profileInput.files[0];
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      saveProfilePhoto(String(reader.result ?? ""), file.name);
+      renderApp();
+    });
+    reader.readAsDataURL(file);
+    return;
+  }
+
+  const input = event.target.closest("input[data-action='upload-appearance-image']");
+  if (!input || !input.files?.[0]) {
+    return;
+  }
+
+  const file = input.files[0];
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    saveAppearanceImage(String(reader.result ?? ""), file.name);
+    renderApp();
+  });
+  reader.readAsDataURL(file);
 });
 
 function startVoiceListCapture(targetId, button) {

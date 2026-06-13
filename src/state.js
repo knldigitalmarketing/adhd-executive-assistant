@@ -107,7 +107,7 @@ import {
   updateRoutinePlan,
 } from "./routine-builder.js";
 import { clearState, loadState, saveState } from "./storage.js";
-import { ensureTipState, getTipById, recordTipShown, selectAdhdTip } from "./tips.js";
+import { ensureTipState, getTipById, recordTipShown, selectHelpfulStrategy } from "./tips.js";
 import {
   approveVoiceListItems as approveVoiceListDraftItems,
   clearVoiceListDraft as clearVoiceListEntryDraft,
@@ -120,6 +120,7 @@ import {
 } from "./voice-list-entry.js";
 
 let state = loadState(defaultState);
+let unlockError = "";
 state.interviewProfile = buildProfileWithRulesets(ensureProfileShape(state.interviewProfile));
 state.tipState = ensureTipState(state.tipState);
 state.positiveReinforcementState = ensurePositiveReinforcementState(state.positiveReinforcementState);
@@ -131,6 +132,7 @@ ensureHabitState(state);
 ensureRecurringTaskState(state);
 ensureSmartReschedulingState(state);
 ensureVoiceListEntryState(state);
+initializePrivacyLock();
 
 export function getState() {
   return state;
@@ -168,6 +170,197 @@ export function getActiveView() {
   return state.ui?.activeView ?? "command-center";
 }
 
+export function getAppearanceSettings() {
+  return {
+    backgroundType: state.ui?.appearance?.backgroundType ?? "color",
+    backgroundColor: state.ui?.appearance?.backgroundColor ?? "#dfeeff",
+    overlay: state.ui?.appearance?.overlay ?? "medium",
+    imageDataUrl: state.ui?.appearance?.imageDataUrl ?? "",
+    imageName: state.ui?.appearance?.imageName ?? "",
+  };
+}
+
+export function getAccountSettings() {
+  const account = state.ui?.account ?? {};
+  const privacyLock = account.privacyLock ?? {};
+  return {
+    displayName: account.displayName ?? state.user?.firstName ?? "",
+    profilePhotoDataUrl: account.profilePhotoDataUrl ?? "",
+    profilePhotoName: account.profilePhotoName ?? "",
+    privacyLock: {
+      enabled: Boolean(privacyLock.enabled),
+      configured: Boolean(privacyLock.passcodeHash),
+      lastChangedAt: privacyLock.lastChangedAt ?? null,
+    },
+    isLocked: isPrivacyLocked(),
+    unlockError,
+  };
+}
+
+export function isPrivacyLocked() {
+  const privacyLock = state.ui?.account?.privacyLock;
+  return Boolean(privacyLock?.enabled && privacyLock?.passcodeHash && !isSessionUnlocked());
+}
+
+export function saveAccountProfile(formData) {
+  const current = getAccountSettings();
+  const displayName = String(formData.get("displayName") ?? current.displayName).trim();
+  state.ui = {
+    ...state.ui,
+    account: {
+      ...state.ui?.account,
+      displayName: displayName || current.displayName,
+    },
+  };
+  state.user = {
+    ...state.user,
+    firstName: displayName || state.user?.firstName,
+  };
+  saveState(state);
+}
+
+export function saveProfilePhoto(imageDataUrl, imageName = "") {
+  state.ui = {
+    ...state.ui,
+    account: {
+      ...state.ui?.account,
+      profilePhotoDataUrl: imageDataUrl,
+      profilePhotoName: imageName,
+    },
+  };
+  saveState(state);
+}
+
+export function clearProfilePhoto() {
+  state.ui = {
+    ...state.ui,
+    account: {
+      ...state.ui?.account,
+      profilePhotoDataUrl: "",
+      profilePhotoName: "",
+    },
+  };
+  saveState(state);
+}
+
+export async function savePrivacyLock(formData) {
+  const passcode = String(formData.get("passcode") ?? "");
+  const confirmPasscode = String(formData.get("confirmPasscode") ?? "");
+  unlockError = "";
+
+  if (passcode.length < 4) {
+    unlockError = "Use at least 4 characters for the local passcode.";
+    return false;
+  }
+
+  if (passcode !== confirmPasscode) {
+    unlockError = "The passcodes did not match.";
+    return false;
+  }
+
+  state.ui = {
+    ...state.ui,
+    account: {
+      ...state.ui?.account,
+      privacyLock: {
+        enabled: true,
+        passcodeHash: await hashPasscode(passcode),
+        lastChangedAt: new Date().toISOString(),
+      },
+    },
+  };
+  setSessionUnlocked(true);
+  saveState(state);
+  return true;
+}
+
+export function disablePrivacyLock() {
+  unlockError = "";
+  state.ui = {
+    ...state.ui,
+    account: {
+      ...state.ui?.account,
+      privacyLock: {
+        enabled: false,
+        passcodeHash: "",
+        lastChangedAt: null,
+      },
+    },
+  };
+  setSessionUnlocked(false);
+  saveState(state);
+}
+
+export function lockApp() {
+  unlockError = "";
+  setSessionUnlocked(false);
+}
+
+export async function unlockApp(formData) {
+  const privacyLock = state.ui?.account?.privacyLock;
+  const passcode = String(formData.get("passcode") ?? "");
+  unlockError = "";
+
+  if (!privacyLock?.enabled || !privacyLock?.passcodeHash) {
+    setSessionUnlocked(true);
+    return true;
+  }
+
+  if ((await hashPasscode(passcode)) !== privacyLock.passcodeHash) {
+    unlockError = "That passcode did not unlock the app.";
+    return false;
+  }
+
+  setSessionUnlocked(true);
+  return true;
+}
+
+export function getUnlockError() {
+  return unlockError;
+}
+
+export function saveAppearanceSettings(formData) {
+  const current = getAppearanceSettings();
+  state.ui = {
+    ...state.ui,
+    appearance: {
+      ...current,
+      backgroundType: String(formData.get("backgroundType") ?? current.backgroundType),
+      backgroundColor: String(formData.get("backgroundColor") ?? current.backgroundColor),
+      overlay: String(formData.get("overlay") ?? current.overlay),
+    },
+  };
+  saveState(state);
+}
+
+export function saveAppearanceImage(imageDataUrl, imageName = "") {
+  const current = getAppearanceSettings();
+  state.ui = {
+    ...state.ui,
+    appearance: {
+      ...current,
+      backgroundType: "image",
+      imageDataUrl,
+      imageName,
+    },
+  };
+  saveState(state);
+}
+
+export function clearAppearanceImage() {
+  const current = getAppearanceSettings();
+  state.ui = {
+    ...state.ui,
+    appearance: {
+      ...current,
+      backgroundType: "color",
+      imageDataUrl: "",
+      imageName: "",
+    },
+  };
+  saveState(state);
+}
+
 export function setActiveView(activeView) {
   state.ui = { ...state.ui, activeView };
   saveState(state);
@@ -184,6 +377,8 @@ export function startMyDay() {
 
 export function resetLocalData() {
   clearState();
+  setSessionUnlocked(false);
+  unlockError = "";
   state = loadState(defaultState);
   state.interviewProfile = buildProfileWithRulesets(ensureProfileShape(state.interviewProfile));
   state.tipState = ensureTipState(state.tipState);
@@ -196,6 +391,7 @@ export function resetLocalData() {
   ensureRecurringTaskState(state);
   ensureSmartReschedulingState(state);
   ensureVoiceListEntryState(state);
+  initializePrivacyLock();
 }
 
 export function loadDemo(demoId) {
@@ -1017,7 +1213,7 @@ export function getWorkingModeData() {
     now: recommendation,
     comingUp,
     timeRemaining: recommendation ? getTimeRemainingLabel(comingUp) : "Time Remaining: Due now",
-    tip: getAdhdTip("working"),
+    tip: getHelpfulStrategy("working"),
     intervention: getSmartIntervention("working"),
   };
 }
@@ -1042,7 +1238,7 @@ export function getMorningBriefingData() {
       .filter(isOpen)
       .sort((left, right) => getRawMinutesUntilScheduledStart(left) - getRawMinutesUntilScheduledStart(right)),
     potentialIssues: getPotentialIssues(),
-    tip: getAdhdTip("briefing"),
+    tip: getHelpfulStrategy("briefing"),
     intervention: getSmartIntervention("briefing"),
   };
 }
@@ -1095,13 +1291,13 @@ export function getGoalProgressSummary() {
   return buildGoalProgressSummary({ state, getTodayKey });
 }
 
-export function getAdhdTip(contextName = "dashboard") {
+export function getHelpfulStrategy(contextName = "dashboard") {
   state.tipState = ensureTipState(state.tipState);
   const context = getTipContext(contextName);
   const todayKey = getTodayKey();
   const cached = state.tipState.lastShownByContext?.[contextName];
   const cachedTip = cached?.date === todayKey ? getTipById(cached.tipId, context) : null;
-  const tip = cachedTip ?? selectAdhdTip(context);
+  const tip = cachedTip ?? selectHelpfulStrategy(context);
   if (recordTipShown(state, contextName, tip)) {
     saveState(state);
   }
@@ -1164,6 +1360,48 @@ export function formatFocusTime(totalSeconds) {
   const minutes = Math.floor(safeSeconds / 60);
   const seconds = safeSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function initializePrivacyLock() {
+  const privacyLock = state.ui?.account?.privacyLock;
+  if (privacyLock?.enabled && privacyLock?.passcodeHash && !isSessionUnlocked()) {
+    setSessionUnlocked(false);
+  }
+}
+
+function isSessionUnlocked() {
+  try {
+    return window.sessionStorage?.getItem("life-enablement-unlocked") === "true";
+  } catch {
+    return false;
+  }
+}
+
+function setSessionUnlocked(isUnlocked) {
+  try {
+    if (isUnlocked) {
+      window.sessionStorage?.setItem("life-enablement-unlocked", "true");
+    } else {
+      window.sessionStorage?.removeItem("life-enablement-unlocked");
+    }
+  } catch {
+    // Session storage can be unavailable in strict browser modes. The lock still blocks on reload.
+  }
+}
+
+async function hashPasscode(passcode) {
+  if (globalThis.crypto?.subtle) {
+    const encoded = new TextEncoder().encode(`life-enablement-local-lock:${passcode}`);
+    const digest = await globalThis.crypto.subtle.digest("SHA-256", encoded);
+    return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+
+  let hash = 0;
+  const salted = `life-enablement-local-lock:${passcode}`;
+  for (let index = 0; index < salted.length; index += 1) {
+    hash = ((hash << 5) - hash + salted.charCodeAt(index)) | 0;
+  }
+  return `prototype-${Math.abs(hash)}`;
 }
 
 export function getScoredActionableItems() {
@@ -1917,6 +2155,13 @@ function getTodayKey() {
 function createDemoState(demoId) {
   const demoState = clone(defaultState);
   demoState.ui = {
+    ...defaultState.ui,
+    appearance: { ...defaultState.ui.appearance, ...state.ui?.appearance },
+    account: {
+      ...defaultState.ui.account,
+      ...state.ui?.account,
+      privacyLock: { ...defaultState.ui.account.privacyLock, ...state.ui?.account?.privacyLock },
+    },
     activeView: "briefing",
     lastMorningBriefingDate: null,
   };

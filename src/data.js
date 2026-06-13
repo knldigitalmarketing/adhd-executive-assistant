@@ -22,6 +22,23 @@ export const appState = {
   ui: {
     activeView: "working",
     lastMorningBriefingDate: null,
+    appearance: {
+      backgroundType: "color",
+      backgroundColor: "#dfeeff",
+      overlay: "medium",
+      imageDataUrl: "",
+      imageName: "",
+    },
+    account: {
+      displayName: "Frank",
+      profilePhotoDataUrl: "",
+      profilePhotoName: "",
+      privacyLock: {
+        enabled: false,
+        passcodeHash: "",
+        lastChangedAt: null,
+      },
+    },
   },
   interviewProfile: {
     adhd: {},

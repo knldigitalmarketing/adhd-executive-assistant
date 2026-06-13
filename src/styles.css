@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  --bg: #eef6ff;
+  --bg: #dfeeff;
   --surface: #ffffff;
   --surface-soft: #f3f8ff;
   --ink: #172033;
@@ -8,6 +8,7 @@
   --line: #cfdef0;
   --blue: #2563a8;
   --blue-dark: #123f73;
+  --blue-ink: #071f3d;
   --blue-soft: #e4f0ff;
   --blue-wash: #f7fbff;
   --green: #247a68;
@@ -26,10 +27,31 @@ html {
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--app-bg-color, var(--bg));
   color: var(--ink);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background-attachment: fixed;
+}
+
+body.has-photo-bg {
+  background-image:
+    linear-gradient(rgba(223, 238, 255, 0.74), rgba(223, 238, 255, 0.86)),
+    var(--app-bg-image);
+  background-position: center;
+  background-size: cover;
+}
+
+body.has-photo-bg[data-overlay="light"] {
+  background-image:
+    linear-gradient(rgba(223, 238, 255, 0.52), rgba(223, 238, 255, 0.68)),
+    var(--app-bg-image);
+}
+
+body.has-photo-bg[data-overlay="strong"] {
+  background-image:
+    linear-gradient(rgba(223, 238, 255, 0.84), rgba(223, 238, 255, 0.93)),
+    var(--app-bg-image);
 }
 
 button,
@@ -39,6 +61,9 @@ select {
 }
 
 input[type="text"],
+input[type="color"],
+input[type="file"],
+input[type="password"],
 input[type="time"],
 textarea,
 select {
@@ -49,6 +74,14 @@ select {
   border-radius: 8px;
   background: var(--surface);
   color: var(--ink);
+}
+
+input[type="color"] {
+  padding: 4px;
+}
+
+input[type="file"] {
+  padding: 8px 10px;
 }
 
 textarea {
@@ -65,15 +98,20 @@ textarea {
   justify-content: space-between;
   gap: 24px;
   padding: 18px clamp(18px, 5vw, 56px);
-  background: rgba(247, 251, 255, 0.94);
-  border-bottom: 1px solid var(--line);
+  background: var(--blue-ink);
+  border-bottom: 4px solid var(--yellow);
   backdrop-filter: blur(16px);
+  color: #ffffff;
 }
 
 .topbar h1 {
   margin: 0;
   font-size: clamp(1.25rem, 2vw, 1.9rem);
   letter-spacing: 0;
+}
+
+.topbar .eyebrow {
+  color: #ffffff;
 }
 
 .app-nav {
@@ -95,19 +133,20 @@ button {
 }
 
 .app-nav button {
-  border-color: var(--line);
+  border-color: #ffffff;
   background: var(--surface);
-  color: var(--ink);
+  color: var(--blue-ink);
   padding: 0 12px;
   font-size: 0.92rem;
   font-weight: 650;
 }
 
 .app-nav button.is-active {
-  border-color: var(--blue);
-  background: var(--blue-soft);
-  color: var(--blue-dark);
+  border-color: var(--yellow);
+  background: #ffffff;
+  color: var(--blue-ink);
   font-weight: 800;
+  box-shadow: inset 0 -3px 0 var(--yellow);
 }
 
 button {
@@ -118,6 +157,11 @@ button {
 button:hover,
 .app-nav button:hover {
   border-color: var(--blue);
+}
+
+.app-nav button:hover {
+  border-color: var(--yellow);
+  color: var(--blue-ink);
 }
 
 .secondary-button {
@@ -167,6 +211,142 @@ main {
 
 .placeholder-view h2 {
   margin: 0;
+}
+
+.settings-view {
+  max-width: 920px;
+}
+
+.account-view {
+  max-width: 1040px;
+}
+
+.account-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.account-profile-panel,
+.privacy-panel,
+.account-form {
+  display: grid;
+  gap: 14px;
+}
+
+.profile-photo-preview {
+  display: grid;
+  place-items: center;
+  width: 112px;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 4px solid var(--blue-soft);
+  border-radius: 999px;
+  background: var(--blue-ink);
+  color: #ffffff;
+  font-size: 2.35rem;
+  font-weight: 900;
+}
+
+.profile-photo-preview.compact {
+  width: 86px;
+  margin: 0 auto 6px;
+}
+
+.profile-photo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.form-error {
+  margin: 0;
+  color: var(--red);
+  font-weight: 800;
+}
+
+.lock-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.lock-card {
+  width: min(100%, 460px);
+  text-align: center;
+}
+
+.lock-card h1 {
+  margin: 0;
+  color: var(--blue-ink);
+}
+
+.lock-card .account-form {
+  margin-top: 12px;
+  text-align: left;
+}
+
+.appearance-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.appearance-form {
+  display: grid;
+  gap: 16px;
+}
+
+.appearance-form fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.appearance-form legend {
+  width: 100%;
+  margin-bottom: 4px;
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.radio-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--blue-ink);
+  font-weight: 750;
+}
+
+.radio-card:has(input:checked) {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.radio-card:has(input:disabled) {
+  opacity: 0.55;
+}
+
+.photo-upload {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: var(--blue-wash);
+}
+
+.photo-upload label {
+  font-weight: 800;
 }
 
 .section-heading {
@@ -1741,6 +1921,7 @@ dd {
   .guided-step-grid,
   .tomorrow-planning-grid,
   .shop-list-grid,
+  .account-grid,
   .add-task-form {
     grid-template-columns: 1fr;
   }

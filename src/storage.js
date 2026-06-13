@@ -34,7 +34,16 @@ function mergeState(base, stored) {
     user: { ...base.user, ...stored.user },
     selectedSnapshot: { ...base.selectedSnapshot, ...stored.selectedSnapshot },
     interview: { ...base.interview, ...stored.interview },
-    ui: { ...base.ui, ...stored.ui },
+    ui: {
+      ...base.ui,
+      ...stored.ui,
+      appearance: { ...base.ui?.appearance, ...stored.ui?.appearance },
+      account: {
+        ...base.ui?.account,
+        ...stored.ui?.account,
+        privacyLock: { ...base.ui?.account?.privacyLock, ...stored.ui?.account?.privacyLock },
+      },
+    },
     interviewProfile: {
       ...base.interviewProfile,
       ...stored.interviewProfile,
