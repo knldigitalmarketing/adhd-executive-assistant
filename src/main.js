@@ -1,10 +1,14 @@
 import { modelDefinitions } from "./models.js";
 import {
+  activateRoutine,
   addTask,
   answerInterviewQuestion,
+  cancelRoutineEdit,
   completeEndOfDayReview,
   completeSmartIntervention,
   completeWeeklyReview,
+  deactivateRoutine,
+  deleteRoutine,
   dismissRecommendation,
   dismissGuidance,
   dismissMorningRoutine,
@@ -12,6 +16,7 @@ import {
   dismissItem,
   dismissSmartIntervention,
   doItNow,
+  editRoutine,
   endFocus,
   editInterviewAnswer,
   getDecisionRecommendation,
@@ -22,6 +27,7 @@ import {
   getLifeAreaDashboardData,
   getMorningBriefingData,
   getOpenTodayActions,
+  getRoutineBuilderData,
   getState,
   getTodayStats,
   getWeeklyReviewData,
@@ -35,6 +41,7 @@ import {
   snoozeItem,
   pauseFocus,
   resumeFocus,
+  saveRoutine,
   startFocus,
   startMyDay,
   statusText,
@@ -84,6 +91,7 @@ function renderHeader() {
         <a href="#working">Working</a>
         <a href="#review">Review</a>
         <a href="#onboarding">Onboarding</a>
+        <a href="#routine-builder">Routines</a>
         <a href="#life-areas">Life Areas</a>
         <a href="#dashboard">Dashboard</a>
         <a href="#timeline">Timeline</a>
@@ -354,6 +362,7 @@ function renderMorningBriefing() {
         </div>
         ${renderMorningRoutineItems(briefing.morningRoutine)}
       </article>
+      ${renderRoutineBuilder(briefing.builtRoutines)}
       <article class="panel morning-routine-panel">
         <div class="panel-title">
           <h3>Recovery Suggestions</h3>
@@ -415,6 +424,108 @@ function renderMorningBriefing() {
         </article>
       </div>
     </section>
+  `;
+}
+
+function renderRoutineBuilder(data = getRoutineBuilderData()) {
+  const draft = data.draftRoutine;
+
+  return `
+    <section id="routine-builder" class="section routine-builder-section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Routine Builder</p>
+          <h2>Create steady rails</h2>
+        </div>
+        ${pill(`${data.routines.length} saved`, "strong")}
+      </div>
+      <div class="routine-builder-grid">
+        <form class="panel routine-form" data-action="save-routine">
+          <input type="hidden" name="routineId" value="${escapeHtml(draft?.id ?? "")}" />
+          <div>
+            <label for="routine-name">Routine name</label>
+            <input id="routine-name" name="routineName" type="text" value="${escapeHtml(draft?.name ?? "")}" placeholder="Morning launch" required />
+          </div>
+          <div>
+            <label for="routine-type">Routine type</label>
+            <select id="routine-type" name="routineType">
+              ${renderRoutineTypeOptions(draft?.type ?? "morning")}
+            </select>
+          </div>
+          <div>
+            <label for="routine-active">Status</label>
+            <select id="routine-active" name="routineActive">
+              <option value="active" ${draft?.active === false ? "" : "selected"}>Active</option>
+              <option value="inactive" ${draft?.active === false ? "selected" : ""}>Inactive</option>
+            </select>
+          </div>
+          <div class="routine-steps-field">
+            <label for="routine-steps">Steps</label>
+            <textarea id="routine-steps" name="routineSteps" rows="5" placeholder="Drink water - 2&#10;Take meds - 3&#10;Review Today - 5" required>${escapeHtml(getRoutineStepLines(draft))}</textarea>
+            <p class="field-help">One step per line. Use: step name - minutes</p>
+          </div>
+          <div class="button-row">
+            <button type="submit">${draft ? "Save Changes" : "Create Routine"}</button>
+            ${draft ? `<button type="button" class="secondary-button" data-action="cancel-routine-edit">Cancel</button>` : ""}
+          </div>
+        </form>
+        <article class="panel routine-list-panel">
+          <div class="panel-title">
+            <h3>Saved routines</h3>
+            ${pill(`${data.activeSteps.length} active steps`, "strong")}
+          </div>
+          ${renderRoutinePlanList(data.routines)}
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function renderRoutineTypeOptions(selectedType) {
+  return [
+    ["morning", "Morning routine"],
+    ["evening", "Evening routine"],
+    ["custom", "Custom routine"],
+  ]
+    .map(([value, label]) => `<option value="${value}" ${selectedType === value ? "selected" : ""}>${label}</option>`)
+    .join("");
+}
+
+function getRoutineStepLines(routine) {
+  return (routine?.steps ?? []).map((step) => `${step.title} - ${step.estimatedMinutes}`).join("\n");
+}
+
+function renderRoutinePlanList(routines) {
+  if (routines.length === 0) {
+    return `<p class="empty-copy">No custom routines yet.</p>`;
+  }
+
+  return `
+    <ul class="routine-plan-list">
+      ${routines.map((routine) => renderRoutinePlanItem(routine)).join("")}
+    </ul>
+  `;
+}
+
+function renderRoutinePlanItem(routine) {
+  const totalMinutes = routine.steps.reduce((sum, step) => sum + Number(step.estimatedMinutes ?? 0), 0);
+
+  return `
+    <li>
+      <div>
+        <strong>${escapeHtml(routine.name)}</strong>
+        <span>${escapeHtml(titleCase(routine.type))} - ${routine.steps.length} steps - ${totalMinutes} min</span>
+      </div>
+      <div class="item-actions">
+        ${pill(routine.active ? "Active" : "Inactive", routine.active ? "strong" : "neutral")}
+        <button type="button" data-action="edit-routine" data-id="${escapeHtml(routine.id)}">Edit</button>
+        <button type="button" data-action="${routine.active ? "deactivate-routine" : "activate-routine"}" data-id="${escapeHtml(routine.id)}">${routine.active ? "Deactivate" : "Activate"}</button>
+        <button type="button" data-action="delete-routine" data-id="${escapeHtml(routine.id)}">Delete</button>
+      </div>
+      <ol>
+        ${routine.steps.map((step) => `<li>${escapeHtml(step.title)} <span>${step.estimatedMinutes} min</span></li>`).join("")}
+      </ol>
+    </li>
   `;
 }
 
@@ -1327,6 +1438,7 @@ function renderApp() {
     ${renderToday()}
     ${renderEndOfDayReview()}
     ${renderOnboarding()}
+    ${renderRoutineBuilder()}
     ${renderLifeAreaDashboard()}
     ${renderBriefing()}
     ${renderResponsibilityEngine()}
@@ -1472,9 +1584,38 @@ app.addEventListener("click", (event) => {
     editInterviewAnswer(button.dataset.questionId);
     renderApp();
   }
+  if (action === "edit-routine") {
+    editRoutine(id);
+    renderApp();
+  }
+  if (action === "cancel-routine-edit") {
+    cancelRoutineEdit();
+    renderApp();
+  }
+  if (action === "delete-routine") {
+    deleteRoutine(id);
+    renderApp();
+  }
+  if (action === "activate-routine") {
+    activateRoutine(id);
+    renderApp();
+  }
+  if (action === "deactivate-routine") {
+    deactivateRoutine(id);
+    renderApp();
+  }
 });
 
 app.addEventListener("submit", (event) => {
+  const routineForm = event.target.closest("form[data-action='save-routine']");
+  if (routineForm) {
+    event.preventDefault();
+    saveRoutine(new FormData(routineForm));
+    routineForm.reset();
+    renderApp();
+    return;
+  }
+
   const reviewForm = event.target.closest("form[data-action='complete-review']");
   if (reviewForm) {
     event.preventDefault();

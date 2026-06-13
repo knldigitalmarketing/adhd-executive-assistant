@@ -39,6 +39,17 @@ import {
   recordMissedItems,
   recordRecoveryHistoryEntry,
 } from "./recovery-adaptation.js";
+import {
+  buildActiveRoutineSteps,
+  clearRoutineBuilderDraft,
+  createRoutinePlan,
+  deleteRoutinePlan,
+  ensureRoutineBuilderState,
+  getRoutineBuilderData as buildRoutineBuilderData,
+  setRoutineBuilderDraft,
+  setRoutinePlanActive,
+  updateRoutinePlan,
+} from "./routine-builder.js";
 import { clearState, loadState, saveState } from "./storage.js";
 import { ensureTipState, getTipById, recordTipShown, selectAdhdTip } from "./tips.js";
 
@@ -46,6 +57,7 @@ let state = loadState(defaultState);
 state.interviewProfile = buildProfileWithRulesets(ensureProfileShape(state.interviewProfile));
 state.tipState = ensureTipState(state.tipState);
 state.interventionState = ensureInterventionState(state.interventionState);
+ensureRoutineBuilderState(state);
 
 export function getState() {
   return state;
@@ -103,6 +115,7 @@ export function resetLocalData() {
   state.interviewProfile = buildProfileWithRulesets(ensureProfileShape(state.interviewProfile));
   state.tipState = ensureTipState(state.tipState);
   state.interventionState = ensureInterventionState(state.interventionState);
+  ensureRoutineBuilderState(state);
 }
 
 export function loadDemo(demoId) {
@@ -233,6 +246,20 @@ export function editInterviewAnswer(questionId) {
 }
 
 export function markDone(collectionName, id) {
+  if (collectionName === "routineSteps") {
+    const item = findByCollection(collectionName, id);
+    recordItemEvent(collectionName, id, "done", item);
+    recordGoalProgress(collectionName, id, item);
+    state.routineStepState[id] = {
+      ...state.routineStepState[id],
+      status: "done",
+      completed: true,
+      completedAt: new Date().toISOString(),
+    };
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "recoverySuggestions") {
     const item = findByCollection(collectionName, id);
     recordItemEvent(collectionName, id, "done");
@@ -305,6 +332,16 @@ export function markDone(collectionName, id) {
 }
 
 export function doItNow(collectionName, id) {
+  if (collectionName === "routineSteps") {
+    state.routineStepState[id] = {
+      ...state.routineStepState[id],
+      status: "doing",
+      startedAt: new Date().toISOString(),
+    };
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "recoverySuggestions") {
     state.recoveryState[id] = {
       ...state.recoveryState[id],
@@ -359,6 +396,19 @@ export function doItNow(collectionName, id) {
 }
 
 export function snoozeItem(collectionName, id) {
+  if (collectionName === "routineSteps") {
+    const item = findByCollection(collectionName, id);
+    recordItemEvent(collectionName, id, "snoozed", item);
+    state.routineStepState[id] = {
+      ...state.routineStepState[id],
+      status: "snoozed",
+      completed: false,
+      snoozedUntil: getSnoozeLabel(),
+    };
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "recoverySuggestions") {
     snoozeRecoverySuggestion(id);
     return;
@@ -433,6 +483,19 @@ export function snoozeRecoverySuggestion(id) {
 }
 
 export function skipItem(collectionName, id) {
+  if (collectionName === "routineSteps") {
+    const item = findByCollection(collectionName, id);
+    recordItemEvent(collectionName, id, "skipped", item);
+    state.routineStepState[id] = {
+      ...state.routineStepState[id],
+      status: "skipped",
+      completed: false,
+      skippedUntil: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    };
+    saveState(state);
+    return;
+  }
+
   if (collectionName === "recoverySuggestions") {
     recordItemEvent(collectionName, id, "skipped");
     state.recoveryState[id] = {
@@ -536,6 +599,18 @@ export function dismissRecoverySuggestion(id) {
 }
 
 export function dismissItem(collectionName, id) {
+  if (collectionName === "routineSteps") {
+    const item = findByCollection(collectionName, id);
+    recordItemEvent(collectionName, id, "dismissed", item);
+    state.routineStepState[id] = {
+      ...state.routineStepState[id],
+      status: "dismissed",
+      dismissedAt: new Date().toISOString(),
+    };
+    saveState(state);
+    return;
+  }
+
   const item = findByCollection(collectionName, id);
   if (!item) {
     return;
@@ -586,6 +661,45 @@ export function addTask(formData) {
   saveState(state);
 }
 
+export function getRoutineBuilderData() {
+  return buildRoutineBuilderData(state, getDayPart);
+}
+
+export function saveRoutine(formData) {
+  const id = String(formData.get("routineId") ?? "").trim();
+  if (id) {
+    updateRoutinePlan(state, id, formData);
+  } else {
+    createRoutinePlan(state, formData);
+  }
+  saveState(state);
+}
+
+export function editRoutine(id) {
+  setRoutineBuilderDraft(state, id);
+  saveState(state);
+}
+
+export function cancelRoutineEdit() {
+  clearRoutineBuilderDraft(state);
+  saveState(state);
+}
+
+export function deleteRoutine(id) {
+  deleteRoutinePlan(state, id);
+  saveState(state);
+}
+
+export function activateRoutine(id) {
+  setRoutinePlanActive(state, id, true);
+  saveState(state);
+}
+
+export function deactivateRoutine(id) {
+  setRoutinePlanActive(state, id, false);
+  saveState(state);
+}
+
 export function getDecisionRecommendation() {
   const scored = getScoredActionableItems();
   if (scored.length === 0) {
@@ -614,6 +728,7 @@ export function getMorningBriefingData() {
     goalProgress: getGoalProgressSummary(),
     tomorrowPlanning: getTomorrowPlanningData(),
     morningRoutine: getGeneratedMorningRoutine(),
+    builtRoutines: getRoutineBuilderData(),
     recoverySuggestions: getGeneratedRecoverySuggestions(),
     bigThings: getScoredActionableItems().slice(0, 3),
     guidance: getGeneratedGuidance(),
@@ -808,6 +923,7 @@ function allCompletableItems() {
     ...getGeneratedRecommendations(),
     ...getGeneratedGuidance(),
     ...getGeneratedMorningRoutine(),
+    ...getActiveRoutineSteps(),
     ...getGeneratedRecoverySuggestions(),
   ];
 }
@@ -863,6 +979,10 @@ export function getGeneratedMorningRoutine() {
   return buildGeneratedMorningRoutine({ state, isDone, getDayPart });
 }
 
+function getActiveRoutineSteps() {
+  return buildActiveRoutineSteps({ state, isDone, getDayPart });
+}
+
 function getGeneratedGuidance() {
   return buildGeneratedGuidance({ state, isDone, getDayPart });
 }
@@ -886,6 +1006,7 @@ function getActionableCandidates() {
   const generatedRecommendations = getGeneratedRecommendations();
   const generatedGuidance = getGeneratedGuidance();
   const generatedMorningRoutine = getGeneratedMorningRoutine();
+  const activeRoutineSteps = getActiveRoutineSteps();
   const generatedRecoverySuggestions = getGeneratedRecoverySuggestions();
 
   return [
@@ -929,6 +1050,19 @@ function getActionableCandidates() {
         generatedGuidance.length +
         index,
     })),
+    ...activeRoutineSteps.map((item, index) => ({
+      collection: "routineSteps",
+      item,
+      order:
+        state.actions.length +
+        state.routines.length +
+        state.timeline.length +
+        state.focusSessions.length +
+        generatedRecommendations.length +
+        generatedGuidance.length +
+        generatedMorningRoutine.length +
+        index,
+    })),
     ...generatedRecoverySuggestions.map((item, index) => ({
       collection: "recoverySuggestions",
       item,
@@ -940,6 +1074,7 @@ function getActionableCandidates() {
         generatedRecommendations.length +
         generatedGuidance.length +
         generatedMorningRoutine.length +
+        activeRoutineSteps.length +
         index,
     })),
   ];
@@ -1356,6 +1491,9 @@ function createDemoState(demoId) {
     effectiveness: {},
     history: [],
   };
+  demoState.routinePlans = [];
+  demoState.routineStepState = {};
+  demoState.routineBuilderDraftId = null;
   demoState.focusMode = null;
   demoState.focusHistory = [];
   demoState.progressHistory = [];
@@ -1486,6 +1624,10 @@ function findByCollection(collectionName, id) {
 
   if (collectionName === "morningRoutine") {
     return getGeneratedMorningRoutine().find((item) => item.id === id);
+  }
+
+  if (collectionName === "routineSteps") {
+    return getActiveRoutineSteps().find((item) => item.id === id);
   }
 
   if (collectionName === "guidance") {
