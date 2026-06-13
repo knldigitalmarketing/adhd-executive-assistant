@@ -1281,7 +1281,28 @@ function renderSetupStep(step) {
           ${pill(step.status, tone)}
         </div>
         <p>${escapeHtml(step.summary)}</p>
-        <p class="empty-copy">${escapeHtml(step.why)}</p>
+        <dl class="setup-step-details">
+          <div>
+            <dt>What it is</dt>
+            <dd>${escapeHtml(step.what)}</dd>
+          </div>
+          <div>
+            <dt>How you use it</dt>
+            <dd>${escapeHtml(step.userUse)}</dd>
+          </div>
+          <div>
+            <dt>How the app uses it</dt>
+            <dd>${escapeHtml(step.appUse)}</dd>
+          </div>
+          <div>
+            <dt>Big picture</dt>
+            <dd>${escapeHtml(step.bigPicture)}</dd>
+          </div>
+          <div>
+            <dt>Day to day</dt>
+            <dd>${escapeHtml(step.smallPicture)}</dd>
+          </div>
+        </dl>
       </div>
       <div class="button-row">
         <button type="button" data-action="start-setup-step" data-step-id="${escapeHtml(step.id)}">${step.complete ? "Review" : "Open Step"}</button>
@@ -1303,6 +1324,7 @@ function renderSetupGuide(stepId) {
         <p class="eyebrow">Setup Stop</p>
         <strong>${escapeHtml(step.title)}</strong>
         <p>${escapeHtml(step.summary)}</p>
+        <p class="empty-copy">${escapeHtml(step.appUse)}</p>
       </div>
       <div class="button-row">
         <button type="button" class="secondary-button" data-action="show-setup">Back To Setup</button>

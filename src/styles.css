@@ -279,6 +279,37 @@ main {
   color: var(--muted);
 }
 
+.setup-step-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 12px 0 0;
+}
+
+.setup-step-details div {
+  display: grid;
+  gap: 3px;
+  align-content: start;
+  min-height: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--blue-soft);
+  border-radius: 8px;
+  background: var(--blue-wash);
+}
+
+.setup-step-details dt {
+  color: var(--blue-ink);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.setup-step-details dd {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .setup-guide {
   display: flex;
   align-items: center;
