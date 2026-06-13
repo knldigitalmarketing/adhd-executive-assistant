@@ -736,6 +736,81 @@ main {
   gap: 4px;
 }
 
+.shop-list-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.voice-list-entry {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.voice-list-entry.compact {
+  margin-top: 12px;
+  padding: 14px;
+  background: var(--surface-soft);
+  box-shadow: none;
+}
+
+.voice-list-entry .panel-title {
+  margin-bottom: 0;
+}
+
+.voice-list-entry .panel-title h3,
+.saved-voice-list h4 {
+  margin: 0;
+}
+
+.voice-list-form {
+  display: grid;
+  gap: 8px;
+}
+
+.voice-list-form label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.voice-list-review,
+.saved-voice-list {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.voice-list-review ul,
+.saved-voice-list ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.voice-list-review li,
+.saved-voice-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.saved-voice-list span {
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
 .field-help {
   margin: 0;
   color: var(--muted);
@@ -1422,6 +1497,7 @@ dd {
   .recurring-task-grid,
   .routine-builder-grid,
   .tomorrow-planning-grid,
+  .shop-list-grid,
   .add-task-form {
     grid-template-columns: 1fr;
   }

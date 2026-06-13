@@ -138,6 +138,14 @@ export const appState = {
     recentMessageIds: [],
     currentByContext: {},
   },
+  voiceListEntry: {
+    drafts: {},
+    savedLists: {
+      foodMeals: [],
+      shoppingList: [],
+      routineSteps: [],
+    },
+  },
   interventionState: {
     recentInterventionIds: [],
     lastShownByContext: {},

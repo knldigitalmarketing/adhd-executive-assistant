@@ -108,6 +108,16 @@ import {
 } from "./routine-builder.js";
 import { clearState, loadState, saveState } from "./storage.js";
 import { ensureTipState, getTipById, recordTipShown, selectAdhdTip } from "./tips.js";
+import {
+  approveVoiceListItems as approveVoiceListDraftItems,
+  clearVoiceListDraft as clearVoiceListEntryDraft,
+  deleteSavedVoiceListItem as deleteSavedVoiceListEntryItem,
+  ensureVoiceListEntryState,
+  getVoiceListEntryData as buildVoiceListEntryData,
+  reviewVoiceListText as reviewVoiceListEntryText,
+  updateVoiceListItem as updateVoiceListEntryItem,
+  removeVoiceListItem as removeVoiceListEntryItem,
+} from "./voice-list-entry.js";
 
 let state = loadState(defaultState);
 state.interviewProfile = buildProfileWithRulesets(ensureProfileShape(state.interviewProfile));
@@ -120,6 +130,7 @@ ensureGoalState(state);
 ensureHabitState(state);
 ensureRecurringTaskState(state);
 ensureSmartReschedulingState(state);
+ensureVoiceListEntryState(state);
 
 export function getState() {
   return state;
@@ -184,10 +195,12 @@ export function resetLocalData() {
   ensureHabitState(state);
   ensureRecurringTaskState(state);
   ensureSmartReschedulingState(state);
+  ensureVoiceListEntryState(state);
 }
 
 export function loadDemo(demoId) {
   state = createDemoState(demoId);
+  ensureVoiceListEntryState(state);
   saveState(state);
 }
 
@@ -797,6 +810,41 @@ export function addTask(formData) {
 
 export function getRoutineBuilderData() {
   return buildRoutineBuilderData(state, getDayPart);
+}
+
+export function getVoiceListEntryData(targetId) {
+  return buildVoiceListEntryData(state, targetId);
+}
+
+export function reviewVoiceListText(targetId, text) {
+  reviewVoiceListEntryText(state, targetId, text);
+  saveState(state);
+}
+
+export function updateVoiceListItem(targetId, itemId, text) {
+  updateVoiceListEntryItem(state, targetId, itemId, text);
+  saveState(state);
+}
+
+export function removeVoiceListItem(targetId, itemId) {
+  removeVoiceListEntryItem(state, targetId, itemId);
+  saveState(state);
+}
+
+export function clearVoiceListDraft(targetId) {
+  clearVoiceListEntryDraft(state, targetId);
+  saveState(state);
+}
+
+export function approveVoiceListItems(targetId) {
+  const approvedItems = approveVoiceListDraftItems(state, targetId);
+  saveState(state);
+  return approvedItems;
+}
+
+export function deleteSavedVoiceListItem(targetId, itemId) {
+  deleteSavedVoiceListEntryItem(state, targetId, itemId);
+  saveState(state);
 }
 
 export function saveRoutine(formData) {

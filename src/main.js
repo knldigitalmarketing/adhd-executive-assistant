@@ -50,6 +50,7 @@ import {
   getState,
   getSmartReschedulingSummary,
   getTodayStats,
+  getVoiceListEntryData,
   getWeeklyReviewData,
   getWorkingModeData,
   isDone,
@@ -68,11 +69,18 @@ import {
   saveEnergyMoodCheckIn,
   saveRecurringTask,
   saveRoutine,
+  reviewVoiceListText,
+  removeVoiceListItem,
+  approveVoiceListItems,
+  clearVoiceListDraft,
+  deleteSavedVoiceListItem,
+  updateVoiceListItem,
   startFocus,
   startMyDay,
   statusText,
   statusTone,
 } from "./state.js";
+import { formatRoutineStepLines, startVoiceRecognition } from "./voice-list-entry.js";
 
 const app = document.querySelector("#app");
 let workingModeTimer = null;
@@ -516,6 +524,7 @@ function renderRoutineBuilder(data = getRoutineBuilderData()) {
             <label for="routine-steps">Steps</label>
             <textarea id="routine-steps" name="routineSteps" rows="5" placeholder="Drink water - 2&#10;Take meds - 3&#10;Review Today - 5" required>${escapeHtml(getRoutineStepLines(draft))}</textarea>
             <p class="field-help">One step per line. Use: step name - minutes</p>
+            ${renderVoiceListEntry(getVoiceListEntryData("routineSteps"), { compact: true })}
           </div>
           <div class="button-row">
             <button type="submit">${draft ? "Save Changes" : "Create Routine"}</button>
@@ -1127,6 +1136,99 @@ function renderPlaceholderView(viewName, title, copy) {
         <p class="empty-copy">This placeholder is intentionally local-only. No integrations, accounts, payments, or shopping flows are active.</p>
       </article>
     </section>
+  `;
+}
+
+function renderShopView() {
+  return `
+    <section id="shop" class="section shop-view">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Local Lists</p>
+          <h2>Food, meals, and shopping</h2>
+        </div>
+      </div>
+      <div class="shop-list-grid">
+        ${renderVoiceListEntry(getVoiceListEntryData("foodMeals"))}
+        ${renderVoiceListEntry(getVoiceListEntryData("shoppingList"))}
+      </div>
+      <p class="empty-copy">These are local prototype lists only. No shopping, delivery, account, payment, or integration flow is active.</p>
+    </section>
+  `;
+}
+
+function renderVoiceListEntry(data, options = {}) {
+  const modeClass = options.compact ? "voice-list-entry compact" : "voice-list-entry";
+  const textareaId = `voice-list-text-${data.targetId}`;
+
+  return `
+    <article class="${modeClass}" data-voice-list-target="${escapeHtml(data.targetId)}">
+      <div class="panel-title">
+        <div>
+          <h3>${escapeHtml(data.title)}</h3>
+          <p class="empty-copy">${data.speechSupported ? "Speak, type, or paste a list. Review before saving." : "Type or paste a list. Speech is not available in this browser."}</p>
+        </div>
+        ${pill(data.speechSupported ? "Voice ready" : "Typing fallback", data.speechSupported ? "strong" : "neutral")}
+      </div>
+      <form class="voice-list-form" data-action="review-voice-list" data-target-id="${escapeHtml(data.targetId)}">
+        <label for="${escapeHtml(textareaId)}">List text</label>
+        <textarea id="${escapeHtml(textareaId)}" name="voiceListText" rows="3" placeholder="Say or paste: eggs, rice, Greek yogurt"></textarea>
+        <div class="button-row">
+          <button type="button" data-action="start-voice-list" data-target-id="${escapeHtml(data.targetId)}" ${data.speechSupported ? "" : "disabled"}>Start Voice</button>
+          <button type="submit">Review List</button>
+          <button type="button" class="secondary-button" data-action="clear-voice-list" data-target-id="${escapeHtml(data.targetId)}">Clear</button>
+        </div>
+      </form>
+      ${renderVoiceListReview(data)}
+      ${renderSavedVoiceList(data)}
+    </article>
+  `;
+}
+
+function renderVoiceListReview(data) {
+  if (data.draft.items.length === 0) {
+    return `<div class="voice-list-review"><p class="empty-copy">No items waiting for approval.</p></div>`;
+  }
+
+  return `
+    <div class="voice-list-review">
+      <p class="eyebrow">Review before saving</p>
+      <ul>
+        ${data.draft.items
+          .map(
+            (item) => `
+              <li data-voice-list-item="${escapeHtml(item.id)}">
+                <input type="text" value="${escapeHtml(item.text)}" aria-label="Edit ${escapeHtml(item.text)}" />
+                <button type="button" class="secondary-button" data-action="remove-voice-list-item" data-target-id="${escapeHtml(data.targetId)}" data-id="${escapeHtml(item.id)}">Remove</button>
+              </li>
+            `,
+          )
+          .join("")}
+      </ul>
+      <div class="button-row">
+        <button type="button" data-action="approve-voice-list" data-target-id="${escapeHtml(data.targetId)}">Approve Items</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderSavedVoiceList(data) {
+  if (data.targetId === "routineSteps") {
+    return "";
+  }
+
+  return `
+    <div class="saved-voice-list">
+      <div class="panel-title">
+        <h4>${escapeHtml(data.savedLabel)}</h4>
+        ${pill(`${data.savedItems.length} saved`, "strong")}
+      </div>
+      ${
+        data.savedItems.length === 0
+          ? `<p class="empty-copy">No saved items yet.</p>`
+          : `<ul>${data.savedItems.map((item) => `<li><span>${escapeHtml(item.text)}</span><button type="button" class="secondary-button" data-action="delete-saved-voice-list-item" data-target-id="${escapeHtml(data.targetId)}" data-id="${escapeHtml(item.id)}">Remove</button></li>`).join("")}</ul>`
+      }
+    </div>
   `;
 }
 
@@ -2235,7 +2337,7 @@ function renderActiveView(activeView, fullDashboard) {
     review: renderEndOfDayReview,
     "life-areas": renderLifeAreaDashboard,
     learn: () => renderPlaceholderView("learn", "Learn", "ADHD-friendly learning content will live here later."),
-    shop: () => renderPlaceholderView("shop", "Shop", "Shopping support is not built yet. This area is a placeholder only."),
+    shop: renderShopView,
     settings: () => renderPlaceholderView("settings", "Settings", "Profile, display, and prototype preferences will live here later."),
     dashboard: () => fullDashboard,
   };
@@ -2458,9 +2560,36 @@ app.addEventListener("click", (event) => {
     deactivateRecurringTask(id);
     renderApp();
   }
+  if (action === "start-voice-list") {
+    startVoiceListCapture(button.dataset.targetId, button);
+  }
+  if (action === "clear-voice-list") {
+    clearVoiceListDraft(button.dataset.targetId);
+    renderApp();
+  }
+  if (action === "remove-voice-list-item") {
+    removeVoiceListItem(button.dataset.targetId, id);
+    renderApp();
+  }
+  if (action === "approve-voice-list") {
+    approveVoiceListFromDom(button.dataset.targetId, button);
+  }
+  if (action === "delete-saved-voice-list-item") {
+    deleteSavedVoiceListItem(button.dataset.targetId, id);
+    renderApp();
+  }
 });
 
 app.addEventListener("submit", (event) => {
+  const voiceListForm = event.target.closest("form[data-action='review-voice-list']");
+  if (voiceListForm) {
+    event.preventDefault();
+    reviewVoiceListText(voiceListForm.dataset.targetId, new FormData(voiceListForm).get("voiceListText"));
+    voiceListForm.reset();
+    renderApp();
+    return;
+  }
+
   const energyMoodForm = event.target.closest("form[data-action='save-energy-mood']");
   if (energyMoodForm) {
     event.preventDefault();
@@ -2524,5 +2653,53 @@ app.addEventListener("submit", (event) => {
   form.reset();
   renderApp();
 });
+
+function startVoiceListCapture(targetId, button) {
+  button.textContent = "Listening...";
+  button.disabled = true;
+  startVoiceRecognition({
+    onResult: (transcript) => {
+      reviewVoiceListText(targetId, transcript);
+      renderApp();
+    },
+    onError: () => {
+      button.textContent = "Start Voice";
+      button.disabled = false;
+    },
+    onEnd: () => {
+      button.textContent = "Start Voice";
+      button.disabled = false;
+    },
+  });
+}
+
+function approveVoiceListFromDom(targetId, button) {
+  const component = button.closest("[data-voice-list-target]");
+  const itemRows = Array.from(component?.querySelectorAll("[data-voice-list-item]") ?? []);
+  for (const row of itemRows) {
+    updateVoiceListItem(targetId, row.dataset.voiceListItem, row.querySelector("input")?.value ?? "");
+  }
+
+  const approvedItems = approveVoiceListItems(targetId);
+  if (targetId === "routineSteps") {
+    appendApprovedRoutineSteps(approvedItems, component);
+    return;
+  }
+
+  renderApp();
+}
+
+function appendApprovedRoutineSteps(items, component) {
+  const textarea = document.querySelector("#routine-steps");
+  const lines = formatRoutineStepLines(items);
+  if (textarea && lines) {
+    textarea.value = [textarea.value.trim(), lines].filter(Boolean).join("\n");
+  }
+
+  const review = component?.querySelector(".voice-list-review");
+  if (review) {
+    review.innerHTML = `<p class="empty-copy">Approved items were added to the routine steps.</p>`;
+  }
+}
 
 renderApp();

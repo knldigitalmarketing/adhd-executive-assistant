@@ -64,6 +64,18 @@ function mergeState(base, stored) {
       recentMessageIds: arrayOrDefault(stored.positiveReinforcementState?.recentMessageIds, base.positiveReinforcementState?.recentMessageIds ?? []),
       currentByContext: { ...base.positiveReinforcementState?.currentByContext, ...stored.positiveReinforcementState?.currentByContext },
     },
+    voiceListEntry: {
+      ...base.voiceListEntry,
+      ...stored.voiceListEntry,
+      drafts: { ...base.voiceListEntry?.drafts, ...stored.voiceListEntry?.drafts },
+      savedLists: {
+        ...base.voiceListEntry?.savedLists,
+        ...stored.voiceListEntry?.savedLists,
+        foodMeals: arrayOrDefault(stored.voiceListEntry?.savedLists?.foodMeals, base.voiceListEntry?.savedLists?.foodMeals ?? []),
+        shoppingList: arrayOrDefault(stored.voiceListEntry?.savedLists?.shoppingList, base.voiceListEntry?.savedLists?.shoppingList ?? []),
+        routineSteps: arrayOrDefault(stored.voiceListEntry?.savedLists?.routineSteps, base.voiceListEntry?.savedLists?.routineSteps ?? []),
+      },
+    },
     interventionState: {
       ...base.interventionState,
       ...stored.interventionState,
