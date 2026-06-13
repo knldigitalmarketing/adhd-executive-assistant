@@ -67,6 +67,11 @@ function mergeState(base, stored) {
       effectiveness: { ...base.interventionState?.effectiveness, ...stored.interventionState?.effectiveness },
       history: arrayOrDefault(stored.interventionState?.history, base.interventionState?.history ?? []),
     },
+    smartReschedulingState: {
+      ...base.smartReschedulingState,
+      ...stored.smartReschedulingState,
+      history: arrayOrDefault(stored.smartReschedulingState?.history, base.smartReschedulingState?.history ?? []),
+    },
     routinePlans: arrayOrDefault(stored.routinePlans, base.routinePlans),
     routineStepState: { ...base.routineStepState, ...stored.routineStepState },
     routineBuilderDraftId: stored.routineBuilderDraftId ?? base.routineBuilderDraftId,

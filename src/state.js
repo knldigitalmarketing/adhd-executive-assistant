@@ -8,6 +8,11 @@ import {
   recordInterventionShown,
 } from "./intervention-engine.js";
 import {
+  ensureSmartReschedulingState,
+  getSmartReschedulingData,
+  runSmartRescheduling,
+} from "./smart-rescheduling.js";
+import {
   buildProfileWithRulesets,
   ensureProfileShape,
   getFirstUnansweredQuestionId,
@@ -99,6 +104,7 @@ ensureRoutineBuilderState(state);
 ensureGoalState(state);
 ensureHabitState(state);
 ensureRecurringTaskState(state);
+ensureSmartReschedulingState(state);
 
 export function getState() {
   return state;
@@ -160,6 +166,7 @@ export function resetLocalData() {
   ensureGoalState(state);
   ensureHabitState(state);
   ensureRecurringTaskState(state);
+  ensureSmartReschedulingState(state);
 }
 
 export function loadDemo(demoId) {
@@ -951,8 +958,11 @@ export function getWorkingModeData() {
 }
 
 export function getMorningBriefingData() {
+  const smartRescheduling = applySmartRescheduling();
+
   return {
     goalProgress: getGoalProgressSummary(),
+    smartRescheduling,
     goals: getTopActiveGoals(state, 3),
     habits: getHabitTrackingData(),
     recurringTasks: getRecurringTaskData(),
@@ -980,6 +990,10 @@ export function getTomorrowPlanningData() {
     getEstimatedEffort,
     getPriorityWeight,
   });
+}
+
+export function getSmartReschedulingSummary() {
+  return getSmartReschedulingData(getSmartReschedulingContext());
 }
 
 export function getEndOfDayReviewData() {
@@ -1204,6 +1218,29 @@ function getInterventionContext(contextName) {
     openItems: allCompletableItems().filter(isOpen),
     interventionState: state.interventionState,
     now: new Date(),
+  };
+}
+
+function applySmartRescheduling() {
+  const before = JSON.stringify(state.smartReschedulingState ?? {});
+  const result = runSmartRescheduling(getSmartReschedulingContext());
+  const after = JSON.stringify(state.smartReschedulingState ?? {});
+  if (before !== after) {
+    saveState(state);
+  }
+  return result;
+}
+
+function getSmartReschedulingContext() {
+  return {
+    state,
+    learningStats: getLearningStats(),
+    getTodayKey,
+    isDone,
+    isSnoozed,
+    isSkipped,
+    inferTimingType,
+    getEstimatedEffort,
   };
 }
 
@@ -1767,6 +1804,10 @@ function createDemoState(demoId) {
     dismissedToday: [],
     effectiveness: {},
     history: [],
+  };
+  demoState.smartReschedulingState = {
+    history: [],
+    lastRunDate: null,
   };
   demoState.routinePlans = [];
   demoState.routineStepState = {};

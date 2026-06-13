@@ -141,6 +141,10 @@ export const appState = {
     effectiveness: {},
     history: [],
   },
+  smartReschedulingState: {
+    history: [],
+    lastRunDate: null,
+  },
   routinePlans: [],
   routineStepState: {},
   routineBuilderDraftId: null,

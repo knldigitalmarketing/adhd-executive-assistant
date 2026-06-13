@@ -383,6 +383,7 @@ function renderMorningBriefing() {
       </div>
       ${renderTipCard(briefing.tip)}
       ${renderInterventionCard(briefing.intervention, "briefing")}
+      ${renderSmartRescheduling(briefing.smartRescheduling)}
       <article class="panel morning-routine-panel">
         <div class="panel-title">
           <h3>Morning Routine</h3>
@@ -1078,6 +1079,62 @@ function renderInterventionCard(intervention, contextName) {
         <button type="button" class="secondary-button" data-action="dismiss-intervention" data-id="${escapeHtml(intervention.id)}" data-context="${escapeHtml(contextName)}">Dismiss</button>
       </div>
     </aside>
+  `;
+}
+
+function renderSmartRescheduling(summary) {
+  if (!summary || (summary.moved.length === 0 && summary.conflicts.length === 0 && summary.suggestions.length === 0)) {
+    return "";
+  }
+
+  return `
+    <article class="panel smart-rescheduling-panel">
+      <div class="panel-title">
+        <h3>Smart Rescheduling</h3>
+        ${pill(`${summary.moved.length} adjusted`, summary.moved.length > 0 ? "strong" : "neutral")}
+      </div>
+      <div class="smart-rescheduling-grid">
+        <div>
+          <h4>Adjusted today</h4>
+          ${renderSmartReschedulingList(
+            summary.moved.map((item) => ({ title: item.title, detail: item.reason })),
+            "No tasks needed automatic moving.",
+          )}
+        </div>
+        <div>
+          <h4>Conflicts</h4>
+          ${renderSmartReschedulingList(
+            summary.conflicts.map((item) => ({ title: item.title, detail: `Try ${item.suggestedAlternative}` })),
+            "No schedule conflicts detected.",
+          )}
+        </div>
+        <div>
+          <h4>Load check</h4>
+          ${renderSmartReschedulingList(summary.suggestions, "Today looks workable.")}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderSmartReschedulingList(items, emptyText) {
+  if (!items || items.length === 0) {
+    return `<p class="empty-copy">${escapeHtml(emptyText)}</p>`;
+  }
+
+  return `
+    <ul class="briefing-list">
+      ${items
+        .map(
+          (item) => `
+            <li>
+              <strong>${escapeHtml(item.title)}</strong>
+              <span>${escapeHtml(item.detail)}</span>
+            </li>
+          `,
+        )
+        .join("")}
+    </ul>
   `;
 }
 

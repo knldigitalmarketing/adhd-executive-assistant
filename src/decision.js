@@ -36,6 +36,10 @@ export function scoreActionableCandidate(context, candidate) {
     reasons.push(item.reason ?? "recurring task due");
   }
 
+  if (item.rescheduledBySmartEngine) {
+    reasons.push(item.rescheduleExplanation ?? "automatically rescheduled to reduce pileup");
+  }
+
   const deadlineUrgency = context.getDeadlineUrgencyScore(item);
   if (deadlineUrgency > 0) {
     score += deadlineUrgency;
@@ -191,6 +195,9 @@ function getWhyThis(candidate, item) {
 function getWhyNow(context, item, reasons) {
   if (context.isOverdue(item)) {
     return "It is overdue, so the assistant is surfacing it before it creates more drag.";
+  }
+  if (item.rescheduledBySmartEngine) {
+    return item.rescheduleExplanation ?? "It was automatically moved to keep the plan realistic.";
   }
   if ((item.timingType ?? context.inferTimingType(item)) === "scheduled") {
     const minutesUntilStart = context.getRawMinutesUntilScheduledStart(item);

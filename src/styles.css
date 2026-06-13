@@ -775,6 +775,17 @@ main {
   font-weight: 700;
 }
 
+.smart-rescheduling-panel h4 {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+}
+
+.smart-rescheduling-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
 .why-list {
   display: grid;
   gap: 6px;
@@ -1227,6 +1238,7 @@ dd {
 
   .onboarding-grid,
   .briefing-grid,
+  .smart-rescheduling-grid,
   .today-grid,
   .working-grid,
   .morning-grid,
