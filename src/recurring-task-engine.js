@@ -1,4 +1,4 @@
-export const RECURRENCE_TYPES = ["daily", "weekly", "monthly", "custom"];
+export const RECURRENCE_TYPES = ["daily", "twice-weekly", "weekly", "monthly", "custom"];
 
 export function ensureRecurringTaskState(state) {
   state.recurringTasks = Array.isArray(state.recurringTasks) ? state.recurringTasks : [];
@@ -189,7 +189,9 @@ function getNextOccurrenceDate(task, dateKey) {
   const date = parseDateKey(dateKey);
   const recurrenceType = normalizeRecurrenceType(task.recurrenceType);
 
-  if (recurrenceType === "weekly") {
+  if (recurrenceType === "twice-weekly") {
+    date.setDate(date.getDate() + getTwiceWeeklyIntervalDays(task));
+  } else if (recurrenceType === "weekly") {
     date.setDate(date.getDate() + 7);
   } else if (recurrenceType === "monthly") {
     date.setMonth(date.getMonth() + 1);
@@ -221,6 +223,11 @@ function getOccurrenceId(taskId, occurrenceDate) {
 function getCustomIntervalDays(customSchedule) {
   const match = String(customSchedule ?? "").match(/(\d+)/);
   return Math.max(1, Number(match?.[1] ?? 2));
+}
+
+function getTwiceWeeklyIntervalDays(task) {
+  const completedCount = task.completionHistory?.length ?? 0;
+  return completedCount % 2 === 1 ? 3 : 4;
 }
 
 function normalizeRecurrenceType(value) {

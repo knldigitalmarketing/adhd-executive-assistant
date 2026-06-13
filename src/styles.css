@@ -1,16 +1,19 @@
 :root {
   color-scheme: light;
-  --bg: #f6f5f1;
+  --bg: #eef6ff;
   --surface: #ffffff;
-  --surface-soft: #f0f4f8;
-  --ink: #20252b;
-  --muted: #65707a;
-  --line: #d9dee2;
-  --green: #2f7d64;
-  --yellow: #f0b84f;
-  --red: #c9534f;
-  --blue: #3f6f98;
-  --shadow: 0 14px 36px rgba(32, 37, 43, 0.08);
+  --surface-soft: #f3f8ff;
+  --ink: #172033;
+  --muted: #5d6b80;
+  --line: #cfdef0;
+  --blue: #2563a8;
+  --blue-dark: #123f73;
+  --blue-soft: #e4f0ff;
+  --blue-wash: #f7fbff;
+  --green: #247a68;
+  --yellow: #d99a28;
+  --red: #c94b57;
+  --shadow: 0 18px 42px rgba(27, 66, 118, 0.12);
 }
 
 * {
@@ -62,7 +65,7 @@ textarea {
   justify-content: space-between;
   gap: 24px;
   padding: 18px clamp(18px, 5vw, 56px);
-  background: rgba(246, 245, 241, 0.92);
+  background: rgba(247, 251, 255, 0.94);
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(16px);
 }
@@ -83,22 +86,27 @@ textarea {
 .app-nav button,
 button {
   min-height: 40px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--blue);
   border-radius: 8px;
-  background: var(--surface);
-  color: var(--ink);
+  background: var(--blue);
+  color: #ffffff;
   text-decoration: none;
+  font-weight: 750;
 }
 
 .app-nav button {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--ink);
   padding: 0 12px;
   font-size: 0.92rem;
+  font-weight: 650;
 }
 
 .app-nav button.is-active {
   border-color: var(--blue);
-  background: #eaf2f8;
-  color: var(--blue);
+  background: var(--blue-soft);
+  color: var(--blue-dark);
   font-weight: 800;
 }
 
@@ -113,6 +121,8 @@ button:hover,
 }
 
 .secondary-button {
+  border-color: var(--line);
+  background: var(--surface);
   color: var(--muted);
 }
 
@@ -127,7 +137,7 @@ main {
   gap: 10px;
   padding: 14px clamp(18px, 5vw, 56px);
   border-bottom: 1px solid var(--line);
-  background: #fff8e8;
+  background: #eaf4ff;
 }
 
 .test-mode-panel strong {
@@ -180,7 +190,7 @@ main {
 
 .eyebrow {
   margin: 0 0 5px;
-  color: var(--blue);
+  color: var(--blue-dark);
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -223,7 +233,7 @@ main {
   padding: 0 9px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: var(--surface-soft);
+  background: var(--blue-wash);
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 700;
@@ -231,27 +241,27 @@ main {
 }
 
 .pill-strong {
-  background: #e6f2ee;
-  border-color: #b9d9cd;
-  color: var(--green);
+  background: var(--blue-soft);
+  border-color: #b7d4f5;
+  color: var(--blue-dark);
 }
 
 .pill-warn {
-  background: #fff5dc;
-  border-color: #f1d493;
-  color: #8a600f;
+  background: #fff5dd;
+  border-color: #efd188;
+  color: #7d560b;
 }
 
 .pill-done {
-  background: #e6f2ee;
-  border-color: #b9d9cd;
+  background: #e5f4f0;
+  border-color: #b5d9d0;
   color: var(--green);
 }
 
 .pill-snooze {
-  background: #eef1f8;
-  border-color: #cfd7ea;
-  color: #455a86;
+  background: var(--blue-soft);
+  border-color: #b7d4f5;
+  color: var(--blue-dark);
 }
 
 .today-grid {
@@ -270,7 +280,7 @@ main {
 
 .next-card {
   padding: 22px;
-  border-left: 5px solid var(--green);
+  border-left: 5px solid var(--blue);
 }
 
 .next-card h3 {
@@ -411,7 +421,7 @@ main {
 
 .command-now {
   grid-row: span 2;
-  border-left: 5px solid var(--green);
+  border-left: 5px solid var(--blue);
 }
 
 .command-today,
@@ -422,7 +432,7 @@ main {
 .command-positive {
   grid-column: span 3;
   min-height: 120px;
-  background: #f7f9fd;
+  background: var(--blue-wash);
 }
 
 .command-positive span {
@@ -437,10 +447,10 @@ main {
   justify-content: space-between;
   gap: 14px;
   padding: 16px 18px;
-  border: 1px solid #b9d9cd;
-  border-left: 5px solid var(--green);
+  border: 1px solid #b7d4f5;
+  border-left: 5px solid var(--blue);
   border-radius: 8px;
-  background: #f4fbf7;
+  background: var(--blue-wash);
   box-shadow: var(--shadow);
 }
 
@@ -456,7 +466,7 @@ main {
 
 .positive-reinforcement-banner span {
   flex: 0 0 auto;
-  color: var(--green);
+  color: var(--blue-dark);
   font-size: 0.82rem;
   font-weight: 800;
 }
@@ -656,6 +666,67 @@ main {
   font-weight: 800;
 }
 
+.guided-step {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.guided-step-heading {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.guided-step-heading > span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: var(--blue-dark);
+  font-weight: 850;
+}
+
+.guided-step-heading h3,
+.guided-step-heading p {
+  margin: 0;
+}
+
+.guided-step-heading h3 {
+  font-size: 1.05rem;
+  font-weight: 850;
+}
+
+.guided-step-heading p {
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.guided-step-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.optional-helper {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.optional-helper summary {
+  cursor: pointer;
+  color: var(--blue);
+  font-weight: 850;
+}
+
 .goal-setting-grid,
 .habit-tracking-grid,
 .recurring-task-grid {
@@ -722,13 +793,55 @@ main {
 }
 
 .habit-streak em {
-  background: #fff5dc;
-  color: #8a600f;
+  background: var(--blue-soft);
+  color: var(--blue-dark);
 }
 
 .subsection-title {
   margin: 18px 0 4px;
   font-size: 1rem;
+}
+
+.routine-explainer,
+.habit-explainer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid #b7d4f5;
+  border-radius: 8px;
+  background: var(--blue-wash);
+}
+
+.routine-explainer div,
+.habit-explainer div {
+  display: grid;
+  gap: 6px;
+}
+
+.routine-explainer h3,
+.routine-explainer p,
+.habit-explainer h3,
+.habit-explainer p {
+  margin: 0;
+}
+
+.routine-explainer h3,
+.habit-explainer h3 {
+  font-size: 1.05rem;
+  font-weight: 850;
+}
+
+.routine-explainer p,
+.habit-explainer p {
+  color: var(--muted);
+  font-size: 0.98rem;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.routine-explainer span {
+  font-weight: 800;
 }
 
 .routine-steps-field {
@@ -768,15 +881,53 @@ main {
   margin: 0;
 }
 
+.voice-list-entry .panel-title h3 {
+  font-size: 1.3rem;
+  font-weight: 850;
+}
+
+.shop-view .section-heading .empty-copy,
+.voice-list-entry .panel-title .empty-copy,
+.voice-list-review .empty-copy,
+.saved-voice-list .empty-copy {
+  max-width: 68ch;
+  color: var(--muted);
+  font-size: 0.98rem;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.voice-list-review h4,
+.saved-voice-list h4 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.08rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .voice-list-form {
   display: grid;
   gap: 8px;
 }
 
 .voice-list-form label {
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 850;
+}
+
+.voice-list-speech-note {
+  margin: 0;
   color: var(--muted);
-  font-size: 0.82rem;
-  font-weight: 800;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.voice-list-speech-note strong {
+  color: var(--ink);
 }
 
 .voice-list-review,
@@ -815,6 +966,21 @@ main {
   margin: 0;
   color: var(--muted);
   font-size: 0.82rem;
+}
+
+.field-help strong {
+  color: var(--ink);
+}
+
+.routine-save-row {
+  margin-top: 10px;
+}
+
+.routine-save-row button[type="submit"] {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #ffffff;
+  font-weight: 850;
 }
 
 .routine-plan-list {
@@ -936,10 +1102,10 @@ main {
   gap: 14px;
   align-items: center;
   padding: 14px 16px;
-  border: 1px solid #cfd7ea;
+  border: 1px solid #b7d4f5;
   border-left: 5px solid var(--blue);
   border-radius: 8px;
-  background: #f7f9fd;
+  background: var(--blue-wash);
 }
 
 .tip-card .eyebrow {
@@ -971,12 +1137,12 @@ main {
   border: 1px solid #f1d493;
   border-left: 5px solid var(--yellow);
   border-radius: 8px;
-  background: #fffaf0;
+  background: #fff9eb;
 }
 
 .intervention-card .eyebrow {
   margin-bottom: 3px;
-  color: #8a600f;
+  color: #7d560b;
 }
 
 .intervention-card strong {
@@ -1042,7 +1208,7 @@ main {
 }
 
 .now-card {
-  border-left: 5px solid var(--green);
+  border-left: 5px solid var(--blue);
 }
 
 .coming-card {
@@ -1427,8 +1593,82 @@ input[type="checkbox"] {
   color: var(--muted);
 }
 
+.hourly-view-section {
+  max-width: 1080px;
+}
+
+.hourly-list {
+  display: grid;
+  gap: 10px;
+}
+
+.hour-block {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.hour-block summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 14px 18px;
+  cursor: pointer;
+  font-weight: 850;
+}
+
+.hour-block summary span {
+  font-size: 1.08rem;
+}
+
+.hour-block ul {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.hour-block li {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hour-block li:last-child {
+  border-bottom: 0;
+}
+
+.hour-block time {
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.hour-block strong,
+.hour-block span {
+  display: block;
+}
+
+.hour-block span {
+  margin-top: 3px;
+  color: var(--muted);
+}
+
+.hour-block > .empty-copy {
+  margin: 0;
+  padding: 0 18px 16px;
+}
+
 .transition-event {
-  background: #fff8e8;
+  background: #eef6ff;
 }
 
 .focus-card dl {
@@ -1465,7 +1705,7 @@ dd {
   display: block;
   padding: 12px;
   border-radius: 8px;
-  background: #20252b;
+  background: #102846;
   color: #edf4f6;
   font-size: 0.82rem;
   line-height: 1.6;
@@ -1496,6 +1736,9 @@ dd {
   .habit-tracking-grid,
   .recurring-task-grid,
   .routine-builder-grid,
+  .routine-explainer,
+  .habit-explainer,
+  .guided-step-grid,
   .tomorrow-planning-grid,
   .shop-list-grid,
   .add-task-form {
@@ -1538,12 +1781,14 @@ dd {
   .command-list li,
   .command-status,
   .timeline li,
+  .hour-block li,
   .task-list li,
   .focus-card dl div {
     grid-template-columns: 1fr;
   }
 
-  .timeline li {
+  .timeline li,
+  .hour-block li {
     gap: 6px;
   }
 

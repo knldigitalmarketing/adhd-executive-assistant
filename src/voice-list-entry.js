@@ -1,15 +1,29 @@
 const DEFAULT_TARGETS = {
   foodMeals: {
-    title: "Food & Meals",
-    savedLabel: "Saved foods and meals",
+    title: "Food Input",
+    inputLabel: "Food you have",
+    inputHelp:
+      "In this area you input the food you have so the system has an idea of what to suggest. In the future, you will be able to connect shopping data so it can know what is in the house and suggest meals from it. For now, click the voice button and read the items in like speech to text. Say comma between each item, like eggs comma rice comma Greek yogurt.",
+    savedLabel: "Saved Foods",
+    savedHelp: "These are the foods and meals the prototype knows about right now.",
+    placeholder: "Say: eggs comma rice comma Greek yogurt. Or paste: eggs, rice, Greek yogurt.",
   },
   shoppingList: {
     title: "Shopping List",
+    inputLabel: "Shopping items",
+    inputHelp:
+      "Use this area for items you already know you need. Later, the assistant can suggest shopping items when food may be running out or when a meal plan needs something. When speaking, say comma between items.",
     savedLabel: "Saved shopping items",
+    savedHelp: "These are manually added shopping items. Suggestions will come later.",
+    placeholder: "Say: coffee comma paper towels comma spinach. Or paste: coffee, paper towels, spinach.",
   },
   routineSteps: {
-    title: "Routine Steps",
+    title: "Step Input Helper",
+    inputLabel: "Routine step ideas",
+    inputHelp: "This helper is optional. Use it to speak, type, or paste step ideas, then review them before adding them into the main Steps box above. When speaking, say comma between each step so the assistant can separate them.",
     savedLabel: "Routine steps waiting to be added",
+    savedHelp: "",
+    placeholder: "Say: drink water comma take vitamins comma review the day. Or paste: drink water, take vitamins, review the day.",
   },
 };
 

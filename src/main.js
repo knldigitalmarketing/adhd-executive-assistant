@@ -89,6 +89,7 @@ const navItems = [
   ["command-center", "Command Center"],
   ["today", "Today"],
   ["working", "Working Mode"],
+  ["hourly", "Hourly View"],
   ["goals", "Goals"],
   ["habits", "Habits"],
   ["routines", "Routines"],
@@ -116,6 +117,10 @@ function titleCase(value) {
 
 function pluralize(unit, count) {
   return count === 1 ? unit : `${unit}s`;
+}
+
+function getTodayDateInputValue() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function escapeHtml(value) {
@@ -497,39 +502,79 @@ function renderRoutineBuilder(data = getRoutineBuilderData()) {
         <div>
           <p class="eyebrow">Routine Builder</p>
           <h2>Create steady rails</h2>
+          <p class="empty-copy">A routine is a small sequence you want the assistant to guide you through. Build the steps once, then the assistant can bring them forward at the right part of the day.</p>
         </div>
         ${pill(`${data.routines.length} saved`, "strong")}
       </div>
+      <article class="routine-explainer">
+        <div>
+          <h3>How Routines Work</h3>
+          <p><strong>Steps</strong> is the actual routine that gets saved. Put each action on its own line, like <span>Drink water - 2</span>.</p>
+          <p>The number after the dash is the estimated time in minutes. <span>Drink water - 2</span> means that step should take about 2 minutes. Make your best guess to start; you can refine it later.</p>
+        </div>
+        <div>
+          <h3>What The Helper Does</h3>
+          <p><strong>Step Input Helper</strong> is optional. It lets you speak, type, or paste ideas first, review them, and then add them into Steps.</p>
+        </div>
+      </article>
       <div class="routine-builder-grid">
         <form class="panel routine-form" data-action="save-routine">
           <input type="hidden" name="routineId" value="${escapeHtml(draft?.id ?? "")}" />
-          <div>
+          <section class="guided-step">
+            <div class="guided-step-heading">
+              <span>1</span>
+              <div>
+                <h3>Name This Routine</h3>
+                <p>Give it a simple label so the assistant knows what path this is.</p>
+              </div>
+            </div>
             <label for="routine-name">Routine name</label>
             <input id="routine-name" name="routineName" type="text" value="${escapeHtml(draft?.name ?? "")}" placeholder="Morning launch" required />
-          </div>
-          <div>
-            <label for="routine-type">Routine type</label>
-            <select id="routine-type" name="routineType">
-              ${renderRoutineTypeOptions(draft?.type ?? "morning")}
-            </select>
-          </div>
-          <div>
-            <label for="routine-active">Status</label>
-            <select id="routine-active" name="routineActive">
-              <option value="active" ${draft?.active === false ? "" : "selected"}>Active</option>
-              <option value="inactive" ${draft?.active === false ? "selected" : ""}>Inactive</option>
-            </select>
-          </div>
-          <div class="routine-steps-field">
-            <label for="routine-steps">Steps</label>
+          </section>
+          <section class="guided-step">
+            <div class="guided-step-heading">
+              <span>2</span>
+              <div>
+                <h3>Choose When It Helps</h3>
+                <p>Pick the part of the day when this routine should be available.</p>
+              </div>
+            </div>
+            <div class="guided-step-grid">
+              <div>
+                <label for="routine-type">Type</label>
+                <select id="routine-type" name="routineType">
+                  ${renderRoutineTypeOptions(draft?.type ?? "morning")}
+                </select>
+              </div>
+              <div>
+                <label for="routine-active">Status</label>
+                <select id="routine-active" name="routineActive">
+                  <option value="active" ${draft?.active === false ? "" : "selected"}>Active</option>
+                  <option value="inactive" ${draft?.active === false ? "selected" : ""}>Inactive</option>
+                </select>
+              </div>
+            </div>
+          </section>
+          <section class="guided-step routine-steps-field">
+            <div class="guided-step-heading">
+              <span>3</span>
+              <div>
+                <h3>Add The Steps</h3>
+                <p>Add only the next few actions. You can refine this later.</p>
+              </div>
+            </div>
+            <label for="routine-steps">Steps To Save</label>
             <textarea id="routine-steps" name="routineSteps" rows="5" placeholder="Drink water - 2&#10;Take meds - 3&#10;Review Today - 5" required>${escapeHtml(getRoutineStepLines(draft))}</textarea>
-            <p class="field-help">One step per line. Use: step name - minutes</p>
-            ${renderVoiceListEntry(getVoiceListEntryData("routineSteps"), { compact: true })}
-          </div>
-          <div class="button-row">
-            <button type="submit">${draft ? "Save Changes" : "Create Routine"}</button>
-            ${draft ? `<button type="button" class="secondary-button" data-action="cancel-routine-edit">Cancel</button>` : ""}
-          </div>
+            <p class="field-help">This is the routine that will be saved. Add one step per line. Use: step name - minutes.</p>
+            <div class="button-row routine-save-row">
+              <button type="submit">${draft ? "Save Routine Changes" : "Save Routine"}</button>
+              ${draft ? `<button type="button" class="secondary-button" data-action="cancel-routine-edit">Cancel</button>` : ""}
+            </div>
+            <details class="optional-helper">
+              <summary>Need help getting steps in?</summary>
+              ${renderVoiceListEntry(getVoiceListEntryData("routineSteps"), { compact: true })}
+            </details>
+          </section>
         </form>
         <article class="panel routine-list-panel">
           <div class="panel-title">
@@ -545,9 +590,10 @@ function renderRoutineBuilder(data = getRoutineBuilderData()) {
 
 function renderRoutineTypeOptions(selectedType) {
   return [
-    ["morning", "Morning routine"],
-    ["evening", "Evening routine"],
-    ["custom", "Custom routine"],
+    ["morning", "Morning"],
+    ["afternoon", "Afternoon"],
+    ["evening", "Evening"],
+    ["custom", "Custom"],
   ]
     .map(([value, label]) => `<option value="${value}" ${selectedType === value ? "selected" : ""}>${label}</option>`)
     .join("");
@@ -748,6 +794,16 @@ function renderHabitTracking(data = getHabitTrackingData()) {
         </div>
         ${pill(`${data.dueHabitItems.length} due`, "strong")}
       </div>
+      <article class="habit-explainer">
+        <div>
+          <h3>Habits Are Repeatable Actions</h3>
+          <p>A habit is one thing you want to build consistency around, like drinking water, walking, taking vitamins, or reading before bed.</p>
+        </div>
+        <div>
+          <h3>Routines Are Step-By-Step Paths</h3>
+          <p>A routine is a sequence that guides you through part of the day. A habit can be one step inside a routine, but it can also stand on its own.</p>
+        </div>
+      </article>
       <div class="habit-tracking-grid">
         <form class="panel habit-form" data-action="save-habit">
           <input type="hidden" name="habitId" value="${escapeHtml(draft?.id ?? "")}" />
@@ -773,8 +829,14 @@ function renderHabitTracking(data = getHabitTrackingData()) {
             <input id="habit-target-days" name="habitTargetDays" type="text" value="${escapeHtml((draft?.targetDays ?? []).join(", "))}" placeholder="Mon, Wed, Fri or leave blank" />
           </div>
           <div>
+            <label for="habit-daily-target">How many times per day?</label>
+            <input id="habit-daily-target" name="habitDailyTargetCount" type="text" value="${escapeHtml(draft?.dailyTargetCount ?? 1)}" />
+            <p class="field-help">Use 1 for once-a-day habits like taking a heart pill. Use a higher number for habits you repeat during the day, like drinking water or stretching.</p>
+          </div>
+          <div>
             <label for="habit-weekly-target">Weekly target count</label>
             <input id="habit-weekly-target" name="habitWeeklyTargetCount" type="text" value="${escapeHtml(draft?.weeklyTargetCount ?? 1)}" />
+            <p class="field-help">Use this for weekly habits. Example: Walk 3 times per week.</p>
           </div>
           <div>
             <label for="habit-active">Status</label>
@@ -814,7 +876,7 @@ function renderHabitList(habits, inactive) {
 }
 
 function renderHabitItem(habit) {
-  const frequency = habit.frequencyType === "weekly" ? `${habit.weeklyTargetCount}x weekly` : `${habit.targetDays?.length ? habit.targetDays.join(", ") : "Daily"}`;
+  const frequency = getHabitFrequencyLabel(habit);
 
   return `
     <li>
@@ -831,6 +893,16 @@ function renderHabitItem(habit) {
       </div>
     </li>
   `;
+}
+
+function getHabitFrequencyLabel(habit) {
+  if (habit.frequencyType === "weekly") {
+    return `${habit.weeklyTargetCount}x weekly`;
+  }
+
+  const target = Number(habit.dailyTargetCount ?? 1);
+  const days = habit.targetDays?.length ? habit.targetDays.join(", ") : "Daily";
+  return target > 1 ? `${target}x daily - ${days}` : days;
 }
 
 function renderHabitStreak(streak) {
@@ -877,7 +949,7 @@ function renderRecurringTasks(data = getRecurringTaskData()) {
           </div>
           <div>
             <label for="recurring-task-next">Next occurrence</label>
-            <input id="recurring-task-next" name="recurringTaskNextOccurrence" type="text" value="${escapeHtml(draft?.nextOccurrence ?? "")}" placeholder="Today or YYYY-MM-DD" />
+            <input id="recurring-task-next" name="recurringTaskNextOccurrence" type="date" value="${escapeHtml(draft?.nextOccurrence ?? getTodayDateInputValue())}" />
           </div>
           <div>
             <label for="recurring-task-custom">Custom schedule</label>
@@ -923,6 +995,7 @@ function renderRecurringTasks(data = getRecurringTaskData()) {
 function renderRecurringTypeOptions(selectedType) {
   return [
     ["daily", "Daily"],
+    ["twice-weekly", "Bi-weekly (twice a week)"],
     ["weekly", "Weekly"],
     ["monthly", "Monthly"],
     ["custom", "Custom"],
@@ -945,7 +1018,7 @@ function renderRecurringTaskList(tasks, inactive) {
 
 function renderRecurringTaskItem(task) {
   const completedCount = task.completionHistory?.length ?? 0;
-  const recurrence = task.recurrenceType === "custom" && task.customSchedule ? task.customSchedule : titleCase(task.recurrenceType);
+  const recurrence = getRecurringTypeLabel(task);
 
   return `
     <li>
@@ -965,6 +1038,18 @@ function renderRecurringTaskItem(task) {
       </div>
     </li>
   `;
+}
+
+function getRecurringTypeLabel(task) {
+  if (task.recurrenceType === "custom" && task.customSchedule) {
+    return task.customSchedule;
+  }
+
+  if (task.recurrenceType === "twice-weekly") {
+    return "Bi-weekly (twice a week)";
+  }
+
+  return titleCase(task.recurrenceType);
 }
 
 function renderRecoverySuggestionItems(items) {
@@ -1144,8 +1229,9 @@ function renderShopView() {
     <section id="shop" class="section shop-view">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Local Lists</p>
-          <h2>Food, meals, and shopping</h2>
+          <p class="eyebrow">Life Input</p>
+          <h2>Food and shopping support</h2>
+          <p class="empty-copy">Start by telling the assistant what food you have. This gives it useful context for future meal and shopping suggestions.</p>
         </div>
       </div>
       <div class="shop-list-grid">
@@ -1166,18 +1252,19 @@ function renderVoiceListEntry(data, options = {}) {
       <div class="panel-title">
         <div>
           <h3>${escapeHtml(data.title)}</h3>
-          <p class="empty-copy">${data.speechSupported ? "Speak, type, or paste a list. Review before saving." : "Type or paste a list. Speech is not available in this browser."}</p>
+          <p class="empty-copy">${escapeHtml(data.inputHelp)}</p>
         </div>
         ${pill(data.speechSupported ? "Voice ready" : "Typing fallback", data.speechSupported ? "strong" : "neutral")}
       </div>
       <form class="voice-list-form" data-action="review-voice-list" data-target-id="${escapeHtml(data.targetId)}">
-        <label for="${escapeHtml(textareaId)}">List text</label>
-        <textarea id="${escapeHtml(textareaId)}" name="voiceListText" rows="3" placeholder="Say or paste: eggs, rice, Greek yogurt"></textarea>
+        <label for="${escapeHtml(textareaId)}">${escapeHtml(data.inputLabel)}</label>
+        <textarea id="${escapeHtml(textareaId)}" name="voiceListText" rows="3" placeholder="${escapeHtml(data.placeholder)}"></textarea>
         <div class="button-row">
           <button type="button" data-action="start-voice-list" data-target-id="${escapeHtml(data.targetId)}" ${data.speechSupported ? "" : "disabled"}>Start Voice</button>
           <button type="submit">Review List</button>
           <button type="button" class="secondary-button" data-action="clear-voice-list" data-target-id="${escapeHtml(data.targetId)}">Clear</button>
         </div>
+        <p class="voice-list-speech-note">When speaking, say <strong>comma</strong> between items so each one becomes its own line.</p>
       </form>
       ${renderVoiceListReview(data)}
       ${renderSavedVoiceList(data)}
@@ -1187,12 +1274,18 @@ function renderVoiceListEntry(data, options = {}) {
 
 function renderVoiceListReview(data) {
   if (data.draft.items.length === 0) {
-    return `<div class="voice-list-review"><p class="empty-copy">No items waiting for approval.</p></div>`;
+    return `
+      <div class="voice-list-review">
+        <h4>Items for Approval</h4>
+        <p class="empty-copy">No items waiting for approval yet. After you speak, type, or paste items, they will appear here for review.</p>
+      </div>
+    `;
   }
 
   return `
     <div class="voice-list-review">
-      <p class="eyebrow">Review before saving</p>
+      <h4>Items for Approval</h4>
+      <p class="empty-copy">Review your data input here. It should include only the names of your items, without extra instructions, commas, or filler words. Edit any line first if needed, then click Submit.</p>
       <ul>
         ${data.draft.items
           .map(
@@ -1206,7 +1299,7 @@ function renderVoiceListReview(data) {
           .join("")}
       </ul>
       <div class="button-row">
-        <button type="button" data-action="approve-voice-list" data-target-id="${escapeHtml(data.targetId)}">Approve Items</button>
+        <button type="button" data-action="approve-voice-list" data-target-id="${escapeHtml(data.targetId)}">Submit</button>
       </div>
     </div>
   `;
@@ -1220,7 +1313,10 @@ function renderSavedVoiceList(data) {
   return `
     <div class="saved-voice-list">
       <div class="panel-title">
-        <h4>${escapeHtml(data.savedLabel)}</h4>
+        <div>
+          <h4>${escapeHtml(data.savedLabel)}</h4>
+          <p class="empty-copy">${escapeHtml(data.savedHelp)}</p>
+        </div>
         ${pill(`${data.savedItems.length} saved`, "strong")}
       </div>
       ${
@@ -1254,7 +1350,7 @@ function renderCommandNow(recommendation) {
       </div>
       <div class="button-row">
         <button type="button" data-action="do-it-now" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Start</button>
-        <button type="button" data-action="mark-done" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Done</button>
+        <button type="button" data-action="mark-done" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">${escapeHtml(getPrimaryCompletionLabel(recommendation.collection))}</button>
         <button type="button" data-action="snooze" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Snooze</button>
         <button type="button" data-action="skip" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Skip</button>
       </div>
@@ -1306,7 +1402,7 @@ function renderCommandTodayItem(candidate) {
         <span>${escapeHtml(getShortWhy(candidate))}</span>
       </div>
       <div class="item-actions">
-        <button type="button" data-action="mark-done" data-collection="${candidate.collection}" data-id="${escapeHtml(candidate.item.id)}">Done</button>
+        <button type="button" data-action="mark-done" data-collection="${candidate.collection}" data-id="${escapeHtml(candidate.item.id)}">${escapeHtml(getPrimaryCompletionLabel(candidate.collection))}</button>
         <button type="button" data-action="snooze" data-collection="${candidate.collection}" data-id="${escapeHtml(candidate.item.id)}">Snooze</button>
       </div>
     </li>
@@ -1557,7 +1653,7 @@ function renderNowCard(working) {
       </div>
       ${renderFocusModeControls(recommendation)}
       <div class="button-row">
-        <button type="button" data-action="mark-done" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Done</button>
+        <button type="button" data-action="mark-done" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">${escapeHtml(getPrimaryCompletionLabel(recommendation.collection))}</button>
         <button type="button" data-action="snooze" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Snooze</button>
         <button type="button" data-action="skip" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Skip</button>
         ${recommendation.collection === "recommendations" ? `<button type="button" data-action="dismiss-recommendation" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
@@ -1668,7 +1764,7 @@ function renderDecisionCard(recommendation) {
       </dl>
       <div class="button-row">
         <button type="button" data-action="do-it-now" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Do It Now</button>
-        <button type="button" data-action="mark-done" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Done</button>
+        <button type="button" data-action="mark-done" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">${escapeHtml(getPrimaryCompletionLabel(recommendation.collection))}</button>
         <button type="button" data-action="snooze" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Snooze</button>
         <button type="button" data-action="skip" data-collection="${recommendation.collection}" data-id="${escapeHtml(recommendation.item.id)}">Skip</button>
         ${recommendation.collection === "morningRoutine" ? `<button type="button" data-action="dismiss-morning-routine" data-id="${escapeHtml(recommendation.item.id)}">Dismiss</button>` : ""}
@@ -1677,6 +1773,10 @@ function renderDecisionCard(recommendation) {
       </div>
     </article>
   `;
+}
+
+function getPrimaryCompletionLabel(collection) {
+  return collection === "habitItems" ? "Add One" : "Done";
 }
 
 function renderRecommendationExplanation(recommendation) {
@@ -2230,6 +2330,98 @@ function renderTimeline() {
   `;
 }
 
+function renderHourlyView() {
+  const hours = buildHourlyViewItems();
+
+  return `
+    <section id="hourly-view" class="section hourly-view-section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Hourly View</p>
+          <h2>Your day by the hour</h2>
+          <p class="empty-copy">Open an hour to see what is happening there. This is the third display after the day glimpse and Working Mode.</p>
+        </div>
+      </div>
+      <div class="hourly-list">
+        ${hours.map((hour) => renderHourBlock(hour)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function buildHourlyViewItems() {
+  const state = getState();
+  const events = state.timeline.map((event) => ({
+    ...event,
+    displayTime: event.time ?? event.startTime ?? "Today",
+    hour: getHourFromTime(event.time ?? event.startTime),
+  }));
+
+  return Array.from({ length: 16 }, (_, index) => {
+    const hour = index + 6;
+    return {
+      hour,
+      label: formatHourLabel(hour),
+      events: events.filter((event) => event.hour === hour),
+    };
+  });
+}
+
+function renderHourBlock(hour) {
+  const open = hour.events.length > 0 ? "open" : "";
+  return `
+    <details class="hour-block" ${open}>
+      <summary>
+        <span>${escapeHtml(hour.label)}</span>
+        ${pill(`${hour.events.length} item${hour.events.length === 1 ? "" : "s"}`, hour.events.length ? "strong" : "neutral")}
+      </summary>
+      ${
+        hour.events.length === 0
+          ? `<p class="empty-copy">Nothing scheduled for this hour.</p>`
+          : `<ul>${hour.events.map((event) => renderHourlyEvent(event)).join("")}</ul>`
+      }
+    </details>
+  `;
+}
+
+function renderHourlyEvent(event) {
+  return `
+    <li class="${isDone(event) ? "is-complete" : ""}">
+      <time>${escapeHtml(event.displayTime)}</time>
+      <div>
+        <strong>${escapeHtml(event.title)}</strong>
+        <span>${escapeHtml(event.type)} - ${escapeHtml(areaName(event.areaId))} - ${escapeHtml(statusText(event))}</span>
+      </div>
+      <div class="item-actions">
+        ${renderActionButtons("timeline", event)}
+      </div>
+    </li>
+  `;
+}
+
+function getHourFromTime(value) {
+  const match = String(value ?? "").match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
+  if (!match) {
+    return -1;
+  }
+
+  let hour = Number(match[1]);
+  const period = match[3]?.toUpperCase();
+  if (period === "PM" && hour !== 12) {
+    hour += 12;
+  }
+  if (period === "AM" && hour === 12) {
+    hour = 0;
+  }
+  return hour;
+}
+
+function formatHourLabel(hour) {
+  const period = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 || 12;
+  return `${hour12}:00 ${period}`;
+}
+
 function renderFocus() {
   const state = getState();
 
@@ -2329,6 +2521,7 @@ function renderActiveView(activeView, fullDashboard) {
     "command-center": renderCommandCenter,
     today: renderToday,
     working: renderWorkingMode,
+    hourly: renderHourlyView,
     goals: renderGoalSetting,
     habits: renderHabitTracking,
     routines: renderRoutineBuilder,

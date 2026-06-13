@@ -84,7 +84,7 @@ export function completeHabit(state, id, date = new Date()) {
   }
 
   const dateKey = getDateKey(date);
-  state.habitCompletions[habitId] = [...new Set([...(state.habitCompletions[habitId] ?? []), dateKey])].slice(-120);
+  state.habitCompletions[habitId] = [...(state.habitCompletions[habitId] ?? []), dateKey].slice(-240);
   return habit;
 }
 
@@ -101,15 +101,27 @@ export function buildDueHabitItems({ state, today = new Date() }) {
       workType: "none",
       type: "Habit",
       source: "Habit Tracking",
-      title: habit.name,
+      title: getHabitItemTitle(state, habit, today),
       habitName: habit.name,
       frequencyType: habit.frequencyType,
+      dailyTargetCount: getDailyTargetCount(habit),
+      todayCompletionCount: getHabitCompletionCountForDate(state, habit.id, getDateKey(today)),
+      remainingTodayCount: getRemainingHabitCountForDate(state, habit, getDateKey(today)),
       priority: "Low",
       estimatedEffortMinutes: 5,
       timingType: "flexible",
-      reason: `${habit.frequencyType === "daily" ? "Daily" : "Weekly"} habit`,
+      reason: getHabitReason(state, habit, today),
       streak: getHabitStreak(state, habit, today),
     }));
+}
+
+function getHabitItemTitle(state, habit, today) {
+  if (habit.frequencyType !== "daily" || getDailyTargetCount(habit) <= 1) {
+    return habit.name;
+  }
+
+  const dateKey = getDateKey(today);
+  return `${habit.name} (${getHabitCompletionCountForDate(state, habit.id, dateKey)}/${getDailyTargetCount(habit)} today)`;
 }
 
 export function getHabitInfluenceForItem(state, item, inferTimingType) {
@@ -154,6 +166,7 @@ function buildHabitFromForm(formData, id) {
   const category = normalizeHabitCategory(String(formData.get("habitCategory") ?? "Personal"));
   const frequencyType = normalizeFrequencyType(String(formData.get("habitFrequencyType") ?? "daily"));
   const targetDays = parseTargetDays(String(formData.get("habitTargetDays") ?? ""));
+  const dailyTargetCount = Math.max(1, Number(formData.get("habitDailyTargetCount") ?? 1));
   const weeklyTargetCount = Math.max(1, Number(formData.get("habitWeeklyTargetCount") ?? 1));
 
   return {
@@ -162,6 +175,7 @@ function buildHabitFromForm(formData, id) {
     category,
     frequencyType,
     targetDays,
+    dailyTargetCount: Number.isFinite(dailyTargetCount) ? dailyTargetCount : 1,
     weeklyTargetCount: Number.isFinite(weeklyTargetCount) ? weeklyTargetCount : 1,
     active: formData.get("habitActive") !== "inactive",
     createdAt: new Date().toISOString(),
@@ -173,14 +187,16 @@ function isHabitDue(habit, state, today) {
   if (habit.frequencyType === "daily") {
     const dayName = DAY_NAMES[today.getDay()];
     const targetDays = habit.targetDays?.length ? habit.targetDays : DAY_NAMES;
-    return targetDays.includes(dayName) && !isHabitCompletedOnDate(state, habit.id, getDateKey(today));
+    return targetDays.includes(dayName) && getRemainingHabitCountForDate(state, habit, getDateKey(today)) > 0;
   }
 
   return getHabitCompletionCount(state, habit.id, 7) < Number(habit.weeklyTargetCount ?? 1);
 }
 
 function isHabitCompletedOnDate(state, habitId, dateKey) {
-  return (state.habitCompletions[habitId] ?? []).includes(dateKey);
+  const habit = state.habits.find((item) => item.id === habitId);
+  const target = habit?.frequencyType === "daily" ? getDailyTargetCount(habit) : 1;
+  return getHabitCompletionCountForDate(state, habitId, dateKey) >= target;
 }
 
 function withHabitStreak(state, habit, today) {
@@ -191,7 +207,7 @@ function withHabitStreak(state, habit, today) {
 }
 
 function getDailyHabitStreak(state, habit, today) {
-  const completionSet = new Set(state.habitCompletions[habit.id] ?? []);
+  const completionSet = getCompletedDailyTargetSet(state, habit);
   const applicableDateKeys = getApplicableDailyDateKeys(habit, today, 120);
   const latestCompletedIndex = applicableDateKeys.findIndex((dateKey) => completionSet.has(dateKey));
   const longestStreak = getLongestSequentialCompletionRun(applicableDateKeys, completionSet);
@@ -218,6 +234,38 @@ function getDailyHabitStreak(state, habit, today) {
     status: recoveryAvailable ? "Recovery available" : "On track",
     message: recoveryAvailable ? "One missed day is recoverable. A small check-in keeps momentum alive." : "Momentum is active.",
   };
+}
+
+function getDailyTargetCount(habit) {
+  return Math.max(1, Number(habit.dailyTargetCount ?? 1));
+}
+
+function getRemainingHabitCountForDate(state, habit, dateKey) {
+  return Math.max(0, getDailyTargetCount(habit) - getHabitCompletionCountForDate(state, habit.id, dateKey));
+}
+
+function getHabitCompletionCountForDate(state, habitId, dateKey) {
+  return (state.habitCompletions[habitId] ?? []).filter((completionDate) => completionDate === dateKey).length;
+}
+
+function getCompletedDailyTargetSet(state, habit) {
+  const target = getDailyTargetCount(habit);
+  const counts = new Map();
+  for (const dateKey of state.habitCompletions[habit.id] ?? []) {
+    counts.set(dateKey, (counts.get(dateKey) ?? 0) + 1);
+  }
+
+  return new Set([...counts.entries()].filter(([, count]) => count >= target).map(([dateKey]) => dateKey));
+}
+
+function getHabitReason(state, habit, today) {
+  if (habit.frequencyType === "daily") {
+    const dateKey = getDateKey(today);
+    const completed = getHabitCompletionCountForDate(state, habit.id, dateKey);
+    return `Daily habit: ${completed}/${getDailyTargetCount(habit)} today`;
+  }
+
+  return `Weekly habit: ${getHabitCompletionCount(state, habit.id, 7)}/${Number(habit.weeklyTargetCount ?? 1)} this week`;
 }
 
 function getWeeklyHabitStreak(state, habit, today) {

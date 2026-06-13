@@ -158,7 +158,7 @@ function parseStepLines(value) {
 }
 
 function normalizeRoutineType(type) {
-  if (type === "morning" || type === "evening") {
+  if (type === "morning" || type === "afternoon" || type === "evening") {
     return type;
   }
 
