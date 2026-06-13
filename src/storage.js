@@ -37,6 +37,11 @@ function mergeState(base, stored) {
     ui: {
       ...base.ui,
       ...stored.ui,
+      setup: {
+        ...base.ui?.setup,
+        ...stored.ui?.setup,
+        skippedSteps: arrayOrDefault(stored.ui?.setup?.skippedSteps, base.ui?.setup?.skippedSteps ?? []),
+      },
       appearance: { ...base.ui?.appearance, ...stored.ui?.appearance },
       account: {
         ...base.ui?.account,

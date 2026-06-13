@@ -52,6 +52,7 @@ import {
   getRecurringTaskData,
   getRoutineBuilderData,
   getScoredActionableItems,
+  getSetupJourneyData,
   getState,
   getSmartReschedulingSummary,
   getTodayStats,
@@ -66,6 +67,7 @@ import {
   resetLocalData,
   setActiveView,
   skipItem,
+  skipSetupStep,
   snoozeItem,
   pauseFocus,
   markGoalComplete,
@@ -86,6 +88,7 @@ import {
   deleteSavedVoiceListItem,
   updateVoiceListItem,
   startFocus,
+  startSetupStep,
   startMyDay,
   statusText,
   statusTone,
@@ -99,6 +102,7 @@ const app = document.querySelector("#app");
 let workingModeTimer = null;
 
 const navItems = [
+  ["setup", "Setup"],
   ["command-center", "Command Center"],
   ["today", "Today"],
   ["working", "Working Mode"],
@@ -436,6 +440,7 @@ function renderMorningBriefing() {
         </div>
         <button type="button" data-action="start-working">Start My Day</button>
       </div>
+      ${renderSetupGuide("briefing")}
       ${renderEnergyMoodCheckIn(briefing.energyMood)}
       ${renderTipCard(briefing.tip)}
       ${renderInterventionCard(briefing.intervention, "briefing")}
@@ -528,6 +533,7 @@ function renderRoutineBuilder(data = getRoutineBuilderData()) {
         </div>
         ${pill(`${data.routines.length} saved`, "strong")}
       </div>
+      ${renderSetupGuide("routines")}
       <article class="routine-explainer">
         <div>
           <h3>How Routines Work</h3>
@@ -730,6 +736,7 @@ function renderGoalSetting(data = getGoalSettingData(), briefingGoals = null) {
         </div>
         ${pill(`${data.activeGoals.length} active`, "strong")}
       </div>
+      ${renderSetupGuide("goals")}
       <div class="goal-setting-grid">
         <form class="panel goal-form" data-action="save-goal">
           <input type="hidden" name="goalId" value="${escapeHtml(draft?.id ?? "")}" />
@@ -816,6 +823,7 @@ function renderHabitTracking(data = getHabitTrackingData()) {
         </div>
         ${pill(`${data.dueHabitItems.length} due`, "strong")}
       </div>
+      ${renderSetupGuide("habits")}
       <article class="habit-explainer">
         <div>
           <h3>Habits Are Repeatable Actions</h3>
@@ -956,6 +964,7 @@ function renderRecurringTasks(data = getRecurringTaskData()) {
         </div>
         ${pill(`${data.dueOccurrences.length} due`, "strong")}
       </div>
+      ${renderSetupGuide("recurring-tasks")}
       <div class="recurring-task-grid">
         <form class="panel recurring-task-form" data-action="save-recurring-task">
           <input type="hidden" name="recurringTaskId" value="${escapeHtml(draft?.id ?? "")}" />
@@ -1233,6 +1242,76 @@ function renderProgressView() {
   `;
 }
 
+function renderSetupJourney() {
+  const journey = getSetupJourneyData();
+  return `
+    <section id="setup" class="section setup-view">
+      <div class="setup-hero panel">
+        <p class="eyebrow">Welcome</p>
+        <h2>Let us shape your assistant one step at a time.</h2>
+        <p>You do not have to fill everything out today. Each stop teaches the assistant a different part of your life, and you can skip anything you are not ready to use yet.</p>
+        <div class="button-row">
+          ${journey.nextStep ? `<button type="button" data-action="start-setup-step" data-step-id="${escapeHtml(journey.nextStep.id)}">Start Next: ${escapeHtml(journey.nextStep.title)}</button>` : `<button type="button" data-action="show-command-center">Go To Command Center</button>`}
+          <button type="button" class="secondary-button" data-action="show-command-center">Use The App Now</button>
+        </div>
+      </div>
+      <article class="panel">
+        <div class="panel-title">
+          <div>
+            <h3>What you will be asked to do</h3>
+            <p class="empty-copy">These match the main sections at the top. Open one, fill out what you want, or skip it and come back later.</p>
+          </div>
+          ${pill(`${journey.completeCount}/${journey.totalCount} done`, "strong")}
+        </div>
+        <div class="setup-step-list">
+          ${journey.steps.map(renderSetupStep).join("")}
+        </div>
+      </article>
+    </section>
+  `;
+}
+
+function renderSetupStep(step) {
+  const tone = step.complete ? "strong" : step.skipped ? "warn" : "neutral";
+  return `
+    <article class="setup-step ${step.complete ? "is-complete" : ""} ${step.skipped ? "is-skipped" : ""}">
+      <div>
+        <div class="setup-step-heading">
+          <h3>${escapeHtml(step.title)}</h3>
+          ${pill(step.status, tone)}
+        </div>
+        <p>${escapeHtml(step.summary)}</p>
+        <p class="empty-copy">${escapeHtml(step.why)}</p>
+      </div>
+      <div class="button-row">
+        <button type="button" data-action="start-setup-step" data-step-id="${escapeHtml(step.id)}">${step.complete ? "Review" : "Open Step"}</button>
+        ${step.complete ? "" : `<button type="button" class="secondary-button" data-action="skip-setup-step" data-step-id="${escapeHtml(step.id)}">Skip For Now</button>`}
+      </div>
+    </article>
+  `;
+}
+
+function renderSetupGuide(stepId) {
+  const step = getSetupJourneyData().steps.find((item) => item.id === stepId);
+  if (!step) {
+    return "";
+  }
+
+  return `
+    <aside class="setup-guide">
+      <div>
+        <p class="eyebrow">Setup Stop</p>
+        <strong>${escapeHtml(step.title)}</strong>
+        <p>${escapeHtml(step.summary)}</p>
+      </div>
+      <div class="button-row">
+        <button type="button" class="secondary-button" data-action="show-setup">Back To Setup</button>
+        ${step.complete ? "" : `<button type="button" class="secondary-button" data-action="skip-setup-step" data-step-id="${escapeHtml(step.id)}">Skip This Stop</button>`}
+      </div>
+    </aside>
+  `;
+}
+
 function renderPlaceholderView(viewName, title, copy) {
   return `
     <section id="${escapeHtml(viewName)}" class="section placeholder-view">
@@ -1260,6 +1339,7 @@ function renderAccountView() {
         </div>
         ${account.privacyLock.enabled ? `<button type="button" data-action="lock-app">Lock App</button>` : ""}
       </div>
+      ${renderSetupGuide("account")}
       <div class="account-grid">
         <article class="panel account-profile-panel">
           <div class="profile-photo-preview">
@@ -1348,6 +1428,7 @@ function renderSettingsView() {
           <p class="empty-copy">Choose a calm color or use one of your own photos as the backdrop. The overlay keeps the assistant readable.</p>
         </div>
       </div>
+      ${renderSetupGuide("settings")}
       <article class="panel appearance-panel">
         <div class="panel-title">
           <div>
@@ -1404,6 +1485,7 @@ function renderShopView() {
           <p class="empty-copy">Start by telling the assistant what food you have. This gives it useful context for future meal and shopping suggestions.</p>
         </div>
       </div>
+      ${renderSetupGuide("shop")}
       <div class="shop-list-grid">
         ${renderVoiceListEntry(getVoiceListEntryData("foodMeals"))}
         ${renderVoiceListEntry(getVoiceListEntryData("shoppingList"))}
@@ -2098,6 +2180,7 @@ function renderOnboarding() {
         </div>
         <button type="button" data-action="start-working">Start My Day</button>
       </div>
+      ${renderSetupGuide("interview")}
       <div class="onboarding-grid">
         <article class="panel interview-panel conversation-panel">
           <div class="panel-title">
@@ -2710,6 +2793,7 @@ function renderApp() {
 
 function renderActiveView(activeView, fullDashboard) {
   const views = {
+    setup: renderSetupJourney,
     briefing: renderMorningBriefing,
     "command-center": renderCommandCenter,
     today: renderToday,
@@ -2761,6 +2845,19 @@ app.addEventListener("click", (event) => {
   const { action, collection, id } = button.dataset;
   if (action === "navigate") {
     setActiveView(button.dataset.view);
+    renderApp();
+  }
+  if (action === "show-setup") {
+    setActiveView("setup");
+    renderApp();
+  }
+  if (action === "start-setup-step") {
+    startSetupStep(button.dataset.stepId);
+    renderApp();
+  }
+  if (action === "skip-setup-step") {
+    skipSetupStep(button.dataset.stepId);
+    setActiveView("setup");
     renderApp();
   }
   if (action === "mark-done") {

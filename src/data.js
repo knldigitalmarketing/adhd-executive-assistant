@@ -20,8 +20,11 @@ export const appState = {
     completed: false,
   },
   ui: {
-    activeView: "working",
+    activeView: "setup",
     lastMorningBriefingDate: null,
+    setup: {
+      skippedSteps: [],
+    },
     appearance: {
       backgroundType: "color",
       backgroundColor: "#dfeeff",
@@ -30,7 +33,7 @@ export const appState = {
       imageName: "",
     },
     account: {
-      displayName: "Frank",
+      displayName: "",
       profilePhotoDataUrl: "",
       profilePhotoName: "",
       privacyLock: {

@@ -366,6 +366,62 @@ export function setActiveView(activeView) {
   saveState(state);
 }
 
+export function getSetupJourneyData() {
+  const skippedSteps = new Set(state.ui?.setup?.skippedSteps ?? []);
+  const steps = getSetupStepDefinitions().map((step) => {
+    const complete = isSetupStepComplete(step.id);
+    return {
+      ...step,
+      complete,
+      skipped: skippedSteps.has(step.id) && !complete,
+      status: complete ? "Done" : skippedSteps.has(step.id) ? "Skipped for now" : "Ready",
+    };
+  });
+  const nextStep = steps.find((step) => !step.complete && !step.skipped) ?? steps.find((step) => !step.complete) ?? null;
+
+  return {
+    steps,
+    nextStep,
+    completeCount: steps.filter((step) => step.complete).length,
+    totalCount: steps.length,
+  };
+}
+
+export function startSetupStep(stepId) {
+  const step = getSetupStepDefinitions().find((item) => item.id === stepId);
+  if (!step) {
+    return;
+  }
+
+  state.ui = {
+    ...state.ui,
+    activeView: step.view,
+    setup: {
+      ...state.ui?.setup,
+      skippedSteps: (state.ui?.setup?.skippedSteps ?? []).filter((id) => id !== stepId),
+    },
+  };
+  saveState(state);
+}
+
+export function skipSetupStep(stepId) {
+  const stepIds = new Set(getSetupStepDefinitions().map((step) => step.id));
+  if (!stepIds.has(stepId)) {
+    return;
+  }
+
+  const skippedSteps = new Set(state.ui?.setup?.skippedSteps ?? []);
+  skippedSteps.add(stepId);
+  state.ui = {
+    ...state.ui,
+    setup: {
+      ...state.ui?.setup,
+      skippedSteps: [...skippedSteps],
+    },
+  };
+  saveState(state);
+}
+
 export function startMyDay() {
   state.ui = {
     ...state.ui,
@@ -2150,6 +2206,108 @@ function isDeadlineWithinHours(item, hours) {
 
 function getTodayKey() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function getSetupStepDefinitions() {
+  return [
+    {
+      id: "account",
+      view: "account",
+      title: "Account and privacy",
+      summary: "Add your name, optional picture, and turn on the local privacy lock.",
+      why: "This gives the app a front door before someone adds personal life details.",
+    },
+    {
+      id: "interview",
+      view: "dashboard",
+      title: "Support interview",
+      summary: "Answer a few questions so the assistant knows what kind of help to turn on first.",
+      why: "These answers activate support modes and shape what gets recommended.",
+    },
+    {
+      id: "goals",
+      view: "goals",
+      title: "Goals",
+      summary: "Add the bigger outcomes the assistant should help protect.",
+      why: "Goals help the app connect daily actions to the life someone wants more of.",
+    },
+    {
+      id: "habits",
+      view: "habits",
+      title: "Habits",
+      summary: "Add repeatable actions that should stay visible, like water, medication, or movement.",
+      why: "Habits are tracked gently so consistency builds without guilt.",
+    },
+    {
+      id: "routines",
+      view: "routines",
+      title: "Routines",
+      summary: "Build step-by-step flows for mornings, evenings, or custom repeatable moments.",
+      why: "Routines reduce thinking by turning a cluster of actions into a guided path.",
+    },
+    {
+      id: "recurring-tasks",
+      view: "recurring-tasks",
+      title: "Recurring tasks",
+      summary: "Add responsibilities that come back daily, weekly, monthly, or on a custom rhythm.",
+      why: "Recurring tasks keep important life maintenance from sneaking up.",
+    },
+    {
+      id: "shop",
+      view: "shop",
+      title: "Food and shopping support",
+      summary: "Add pantry foods, meal ideas, or shopping items using typing, paste, or voice.",
+      why: "This gives the assistant context for future food and shopping guidance.",
+    },
+    {
+      id: "settings",
+      view: "settings",
+      title: "Appearance",
+      summary: "Choose a calm color or use a personal photo as the background.",
+      why: "The space should feel personal enough that someone wants to come back.",
+    },
+    {
+      id: "briefing",
+      view: "briefing",
+      title: "Day Glimpse",
+      summary: "Review the first daily orientation screen before entering the working flow.",
+      why: "This is where the assistant shows what matters before the day starts moving.",
+    },
+  ];
+}
+
+function isSetupStepComplete(stepId) {
+  if (stepId === "account") {
+    const account = state.ui?.account ?? {};
+    return Boolean(account.displayName || account.profilePhotoDataUrl || account.privacyLock?.passcodeHash);
+  }
+  if (stepId === "interview") {
+    return getInterviewState().progress.answered > 0 || Boolean(state.interview?.completed);
+  }
+  if (stepId === "goals") {
+    return (state.goals ?? []).some((goal) => !goal.isDraft);
+  }
+  if (stepId === "habits") {
+    return (state.habits ?? []).some((habit) => !habit.isDraft);
+  }
+  if (stepId === "routines") {
+    return (state.routinePlans ?? []).some((routine) => !routine.isDraft);
+  }
+  if (stepId === "recurring-tasks") {
+    return (state.recurringTasks ?? []).some((task) => !task.isDraft);
+  }
+  if (stepId === "shop") {
+    const savedLists = state.voiceListEntry?.savedLists ?? {};
+    return Object.values(savedLists).some((items) => Array.isArray(items) && items.length > 0);
+  }
+  if (stepId === "settings") {
+    const appearance = getAppearanceSettings();
+    return appearance.backgroundType === "image" || appearance.backgroundColor !== "#dfeeff";
+  }
+  if (stepId === "briefing") {
+    return Boolean(state.ui?.lastMorningBriefingDate);
+  }
+  return false;
 }
 
 function createDemoState(demoId) {
