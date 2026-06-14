@@ -380,11 +380,91 @@ export function getSetupJourneyData() {
   const nextStep = steps.find((step) => !step.complete && !step.skipped) ?? steps.find((step) => !step.complete) ?? null;
 
   return {
+    progressive: getProgressiveSetupData(),
     steps,
     nextStep,
     completeCount: steps.filter((step) => step.complete).length,
     totalCount: steps.length,
   };
+}
+
+export function getProgressiveSetupData() {
+  const progressive = ensureProgressiveSetup();
+  const helpArea = getProgressiveHelpArea(progressive.helpArea);
+  return {
+    ...progressive,
+    helpAreas: getProgressiveHelpAreas(),
+    selectedHelpArea: helpArea,
+    followUpPrompt: helpArea?.prompt ?? "",
+    helperText: "Start with one thing. You can add more later as your assistant becomes useful.",
+    optionalText: "If you already know several things you want help with, you can add more now. But you do not need to fill everything out today.",
+    promptExamples: getProgressivePromptExamples(),
+  };
+}
+
+export function startProgressiveSetup() {
+  const progressive = ensureProgressiveSetup();
+  progressive.introSeen = true;
+  progressive.step = progressive.name ? "help" : "name";
+  saveState(state);
+}
+
+export function resetProgressiveOnboarding() {
+  state.ui = {
+    ...state.ui,
+    activeView: "setup",
+    setup: {
+      ...state.ui?.setup,
+      progressive: getDefaultProgressiveSetup(),
+    },
+  };
+  saveState(state);
+}
+
+export function saveProgressiveName(formData) {
+  const name = String(formData.get("progressiveName") ?? "").trim();
+  const progressive = ensureProgressiveSetup();
+  progressive.name = name;
+  progressive.step = "help";
+  state.ui.account = {
+    ...state.ui?.account,
+    displayName: name,
+  };
+  state.user = {
+    ...state.user,
+    firstName: name || state.user?.firstName,
+  };
+  saveState(state);
+}
+
+export function saveProgressiveHelpArea(formData) {
+  const helpArea = String(formData.get("helpArea") ?? "").trim();
+  const progressive = ensureProgressiveSetup();
+  if (!getProgressiveHelpArea(helpArea)) {
+    return;
+  }
+
+  progressive.helpArea = helpArea;
+  progressive.step = "detail";
+  saveState(state);
+}
+
+export function completeProgressiveSetup(formData) {
+  const firstThing = String(formData.get("firstThing") ?? "").trim();
+  const moreThings = String(formData.get("moreThings") ?? "").trim();
+  const progressive = ensureProgressiveSetup();
+  if (!firstThing) {
+    return false;
+  }
+
+  progressive.firstThing = firstThing;
+  progressive.moreThings = moreThings;
+  progressive.completed = true;
+  progressive.step = "complete";
+  progressive.starterItem = createProgressiveStarterItem(progressive.helpArea, firstThing);
+  state.ui.activeView = "command-center";
+  saveState(state);
+  return true;
 }
 
 export function startSetupStep(stepId) {
@@ -2206,6 +2286,136 @@ function isDeadlineWithinHours(item, hours) {
 
 function getTodayKey() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function ensureProgressiveSetup() {
+  state.ui = state.ui ?? {};
+  state.ui.setup = state.ui.setup ?? {};
+  state.ui.setup.progressive = {
+    ...getDefaultProgressiveSetup(),
+    ...state.ui.setup.progressive,
+  };
+  return state.ui.setup.progressive;
+}
+
+function getDefaultProgressiveSetup() {
+  return {
+    step: "intro",
+    introSeen: false,
+    name: "",
+    helpArea: "",
+    firstThing: "",
+    moreThings: "",
+    completed: false,
+    starterItem: null,
+  };
+}
+
+function getProgressiveHelpAreas() {
+  return [
+    { id: "health", label: "Health", prompt: "What's one health thing you'd like to improve?", category: "Health" },
+    { id: "work", label: "Work", prompt: "What's one work thing you want help staying on top of?", category: "Work" },
+    { id: "home", label: "Home", prompt: "What's one home responsibility you want less stress around?", category: "Home" },
+    { id: "money", label: "Money", prompt: "What's one money task or goal you want help with?", category: "Money" },
+    { id: "relationships", label: "Relationships", prompt: "Who or what would you like to stay more connected to?", category: "Relationships" },
+    { id: "hobbies", label: "Hobbies", prompt: "What's something fun or meaningful you'd like to make more room for?", category: "Personal" },
+    { id: "organized", label: "Just getting organized", prompt: "What's one thing that feels scattered right now?", category: "Personal" },
+  ];
+}
+
+function getProgressiveHelpArea(id) {
+  return getProgressiveHelpAreas().find((area) => area.id === id) ?? null;
+}
+
+function getProgressivePromptExamples() {
+  return [
+    "This sounds like something you do every day. Want to track it as a habit?",
+    "This has multiple steps. Want me to turn it into a routine?",
+    "Meal suggestions would work better if I know a few foods you keep around. Want to add some now?",
+    "This sounds like a recurring responsibility. Want me to set it up once so it comes back automatically?",
+    "When you're ready, you can add things like medications, supplements, bills, meals, and routines so I can help with more of the legwork.",
+  ];
+}
+
+function createProgressiveStarterItem(helpAreaId, firstThing) {
+  const helpArea = getProgressiveHelpArea(helpAreaId) ?? getProgressiveHelpArea("organized");
+  const now = new Date().toISOString();
+  const baseId = `starter-${Date.now()}`;
+  state.actions = Array.isArray(state.actions) ? state.actions : [];
+  ensureHabitState(state);
+  ensureGoalState(state);
+  ensureRecurringTaskState(state);
+
+  if (helpArea.id === "health") {
+    const habit = {
+      id: `habit-${baseId}`,
+      name: firstThing,
+      category: "Health",
+      frequencyType: "daily",
+      targetDays: [],
+      dailyTargetCount: 1,
+      weeklyTargetCount: 1,
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+      source: "progressive-setup",
+    };
+    state.habits.unshift(habit);
+    return { type: "Habit", title: habit.name, message: "I added this as a starter habit so it can stay visible." };
+  }
+
+  if (helpArea.id === "money" || helpArea.id === "hobbies") {
+    const goal = {
+      id: `goal-${baseId}`,
+      title: firstThing,
+      category: helpArea.category,
+      priority: helpArea.id === "money" ? "High" : "Medium",
+      deadline: "",
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+      source: "progressive-setup",
+    };
+    state.goals.unshift(goal);
+    return { type: "Goal", title: goal.title, message: "I added this as a starter goal so daily actions can connect back to it." };
+  }
+
+  if (helpArea.id === "relationships") {
+    const task = {
+      id: `recurring-${baseId}`,
+      name: `Stay connected: ${firstThing}`,
+      recurrenceType: "weekly",
+      nextOccurrence: getTodayKey(),
+      customSchedule: "",
+      category: "Relationships",
+      priority: "Medium",
+      active: true,
+      completionHistory: [],
+      createdAt: now,
+      updatedAt: now,
+      source: "progressive-setup",
+    };
+    state.recurringTasks.unshift(task);
+    return { type: "Recurring task", title: task.name, message: "I set this up as a gentle recurring responsibility so it can come back automatically." };
+  }
+
+  const action = {
+    id: `action-${baseId}`,
+    areaId: helpArea.id === "work" ? "business" : helpArea.id === "home" ? "home" : "projects",
+    title: firstThing,
+    category: helpArea.category,
+    workType: helpArea.id === "work" ? "follow_up" : "none",
+    timingType: "flexible",
+    preferredWindow: "Today",
+    dueDate: "Today",
+    status: "todo",
+    priority: helpArea.id === "work" ? "High" : "Medium",
+    estimatedEffortMinutes: 15,
+    createdAt: now,
+    source: "progressive-setup",
+  };
+  state.actions.unshift(action);
+  return { type: "Task", title: action.title, message: "I added this as a starter task so there is one useful next step waiting." };
 }
 
 function getSetupStepDefinitions() {

@@ -65,11 +65,13 @@ import {
   lockApp,
   markDone,
   resetLocalData,
+  resetProgressiveOnboarding,
   setActiveView,
   skipItem,
   skipSetupStep,
   snoozeItem,
   pauseFocus,
+  completeProgressiveSetup,
   markGoalComplete,
   reactivateCompletedGoal,
   resumeFocus,
@@ -89,12 +91,15 @@ import {
   updateVoiceListItem,
   startFocus,
   startSetupStep,
+  startProgressiveSetup,
   startMyDay,
   statusText,
   statusTone,
   savePrivacyLock,
   saveProfilePhoto,
   unlockApp,
+  saveProgressiveHelpArea,
+  saveProgressiveName,
 } from "./state.js";
 import { formatRoutineStepLines, startVoiceRecognition } from "./voice-list-entry.js";
 
@@ -1246,20 +1251,139 @@ function renderSetupJourney() {
   const journey = getSetupJourneyData();
   return `
     <section id="setup" class="section setup-view">
+      ${renderProgressiveSetup(journey.progressive)}
+      ${renderTeachMorePanel(journey)}
+    </section>
+  `;
+}
+
+function renderProgressiveSetup(progressive) {
+  if (progressive.completed) {
+    return `
       <div class="setup-hero panel">
-        <p class="eyebrow">Welcome</p>
-        <h2>Let us shape your assistant one step at a time.</h2>
-        <p>You do not have to fill everything out today. Each stop teaches the assistant a different part of your life, and you can skip anything you are not ready to use yet.</p>
+        <p class="eyebrow">Ready</p>
+        <h2>You taught your assistant where to begin.</h2>
+        <p>${escapeHtml(progressive.starterItem?.message ?? "I created one useful starting point and brought you to Command Center.")}</p>
+        <div class="starter-summary">
+          <strong>${escapeHtml(progressive.starterItem?.type ?? "Starter item")}</strong>
+          <span>${escapeHtml(progressive.starterItem?.title ?? progressive.firstThing)}</span>
+        </div>
         <div class="button-row">
-          ${journey.nextStep ? `<button type="button" data-action="start-setup-step" data-step-id="${escapeHtml(journey.nextStep.id)}">Start Next: ${escapeHtml(journey.nextStep.title)}</button>` : `<button type="button" data-action="show-command-center">Go To Command Center</button>`}
-          <button type="button" class="secondary-button" data-action="show-command-center">Use The App Now</button>
+          <button type="button" data-action="show-command-center">Go To Command Center</button>
+          <button type="button" class="secondary-button" data-action="show-teach-more">Teach My Assistant More</button>
         </div>
       </div>
-      <article class="panel">
+    `;
+  }
+
+  if (progressive.step === "name") {
+    return renderProgressiveNameStep(progressive);
+  }
+
+  if (progressive.step === "help") {
+    return renderProgressiveHelpStep(progressive);
+  }
+
+  if (progressive.step === "detail") {
+    return renderProgressiveDetailStep(progressive);
+  }
+
+  return renderLandingIntro();
+}
+
+function renderLandingIntro() {
+  return `
+    <div class="landing-intro panel">
+      <div class="video-placeholder" aria-label="Intro video placeholder">
+        <div>
+          <span>Video</span>
+          <strong>Intro video placeholder</strong>
+          <p>Add the welcome video embed here later.</p>
+        </div>
+      </div>
+      <div class="landing-copy">
+        <p class="eyebrow">Life Enablement Assistant</p>
+        <h2>You make the final choice. Your assistant clears the path.</h2>
+        <p>This is a personal assistant for the legwork of life: remembering what matters, reducing small decisions, and helping you start with one useful next step.</p>
+        <p>You only need one thing to begin. As the assistant becomes useful, you can teach it more about goals, habits, routines, bills, meals, health details, and the life you want more room for.</p>
+        <div class="button-row">
+          <button type="button" data-action="start-progressive-setup">Start Building My Assistant</button>
+          <button type="button" class="secondary-button" data-action="show-teach-more">Teach My Assistant More</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderProgressiveNameStep(progressive) {
+  return `
+    <article class="panel progressive-card">
+      <p class="eyebrow">Step 1</p>
+      <h2>What should I call you?</h2>
+      <p class="empty-copy">This is only used to make the assistant feel more personal in this browser.</p>
+      <form class="progressive-form" data-action="save-progressive-name">
+        <label for="progressive-name">Name</label>
+        <input id="progressive-name" name="progressiveName" type="text" value="${escapeHtml(progressive.name)}" placeholder="Your name" required />
+        <button type="submit">Continue</button>
+      </form>
+    </article>
+  `;
+}
+
+function renderProgressiveHelpStep(progressive) {
+  return `
+    <article class="panel progressive-card">
+      <p class="eyebrow">Step 2</p>
+      <h2>What would you like help with first?</h2>
+      <p class="empty-copy">Choose one area. This does not lock you in; it just gives the assistant a useful place to begin.</p>
+      <form class="progressive-choice-grid" data-action="save-progressive-help">
+        ${progressive.helpAreas
+          .map(
+            (area) => `
+              <label class="choice-card">
+                <input type="radio" name="helpArea" value="${escapeHtml(area.id)}" ${progressive.helpArea === area.id ? "checked" : ""} required />
+                <span>${escapeHtml(area.label)}</span>
+              </label>
+            `,
+          )
+          .join("")}
+        <button type="submit">Continue</button>
+      </form>
+    </article>
+  `;
+}
+
+function renderProgressiveDetailStep(progressive) {
+  return `
+    <article class="panel progressive-card">
+      <p class="eyebrow">Step 3</p>
+      <h2>${escapeHtml(progressive.followUpPrompt)}</h2>
+      <p class="empty-copy">${escapeHtml(progressive.helperText)}</p>
+      <form class="progressive-form" data-action="complete-progressive-setup">
+        <label for="first-thing">One thing to start with</label>
+        <input id="first-thing" name="firstThing" type="text" value="${escapeHtml(progressive.firstThing)}" placeholder="Example: walk after breakfast, pay insurance, call Mom" required />
+        <label for="more-things">Optional: add more if you already know them</label>
+        <textarea id="more-things" name="moreThings" rows="3" placeholder="One per line, or leave this blank">${escapeHtml(progressive.moreThings)}</textarea>
+        <p class="field-help">${escapeHtml(progressive.optionalText)}</p>
+        <button type="submit">Start With This</button>
+      </form>
+    </article>
+  `;
+}
+
+function renderTeachMorePanel(journey) {
+  return `
+    <details class="teach-more-panel panel" id="teach-more">
+      <summary>Teach My Assistant More</summary>
+      <div class="teach-more-intro">
+        <p>You do not need to complete this now. Add more when you feel ready.</p>
+        <p>More detail helps the assistant give better suggestions. Personal information like medications, supplements, bills, meals, and routines can be added later when you are comfortable.</p>
+      </div>
+      <article>
         <div class="panel-title">
           <div>
-            <h3>What you will be asked to do</h3>
-            <p class="empty-copy">These match the main sections at the top. Open one, fill out what you want, or skip it and come back later.</p>
+            <h3>Optional setup areas</h3>
+            <p class="empty-copy">Open one, fill out what you want, or skip it and come back later.</p>
           </div>
           ${pill(`${journey.completeCount}/${journey.totalCount} done`, "strong")}
         </div>
@@ -1267,7 +1391,13 @@ function renderSetupJourney() {
           ${journey.steps.map(renderSetupStep).join("")}
         </div>
       </article>
-    </section>
+      <article class="progressive-prompts">
+        <h3>Examples of how your assistant may ask for more later</h3>
+        <ul>
+          ${journey.progressive.promptExamples.map((example) => `<li>${escapeHtml(example)}</li>`).join("")}
+        </ul>
+      </article>
+    </details>
   `;
 }
 
@@ -1491,6 +1621,17 @@ function renderSettingsView() {
           <label for="appearance-image">Use one of my photos</label>
           <input id="appearance-image" type="file" accept="image/*" data-action="upload-appearance-image" />
           <p class="empty-copy">Choose a sunset, flower, or landscape image. Very large photos may need to be resized later for production, but this works for testing.</p>
+        </div>
+      </article>
+      <article class="panel settings-testing-panel">
+        <div class="panel-title">
+          <div>
+            <h3>Testing</h3>
+            <p class="empty-copy">Replay the first-run intro and fast setup without clearing the rest of the app data.</p>
+          </div>
+        </div>
+        <div class="button-row">
+          <button type="button" class="secondary-button" data-action="reset-progressive-onboarding">Reset Onboarding For Testing</button>
         </div>
       </article>
     </section>
@@ -2873,6 +3014,15 @@ app.addEventListener("click", (event) => {
     setActiveView("setup");
     renderApp();
   }
+  if (action === "show-teach-more") {
+    setActiveView("setup");
+    renderApp();
+    queueMicrotask(() => document.querySelector("#teach-more")?.setAttribute("open", ""));
+  }
+  if (action === "start-progressive-setup") {
+    startProgressiveSetup();
+    renderApp();
+  }
   if (action === "start-setup-step") {
     startSetupStep(button.dataset.stepId);
     renderApp();
@@ -2948,6 +3098,10 @@ app.addEventListener("click", (event) => {
   }
   if (action === "reset-local-data") {
     resetLocalData();
+    renderApp();
+  }
+  if (action === "reset-progressive-onboarding") {
+    resetProgressiveOnboarding();
     renderApp();
   }
   if (action === "load-demo") {
@@ -3103,6 +3257,30 @@ app.addEventListener("click", (event) => {
 });
 
 app.addEventListener("submit", async (event) => {
+  const progressiveNameForm = event.target.closest("form[data-action='save-progressive-name']");
+  if (progressiveNameForm) {
+    event.preventDefault();
+    saveProgressiveName(new FormData(progressiveNameForm));
+    renderApp();
+    return;
+  }
+
+  const progressiveHelpForm = event.target.closest("form[data-action='save-progressive-help']");
+  if (progressiveHelpForm) {
+    event.preventDefault();
+    saveProgressiveHelpArea(new FormData(progressiveHelpForm));
+    renderApp();
+    return;
+  }
+
+  const progressiveDetailForm = event.target.closest("form[data-action='complete-progressive-setup']");
+  if (progressiveDetailForm) {
+    event.preventDefault();
+    completeProgressiveSetup(new FormData(progressiveDetailForm));
+    renderApp();
+    return;
+  }
+
   const unlockForm = event.target.closest("form[data-action='unlock-app']");
   if (unlockForm) {
     event.preventDefault();

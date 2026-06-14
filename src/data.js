@@ -23,6 +23,16 @@ export const appState = {
     activeView: "setup",
     lastMorningBriefingDate: null,
     setup: {
+      progressive: {
+        step: "intro",
+        introSeen: false,
+        name: "",
+        helpArea: "",
+        firstThing: "",
+        moreThings: "",
+        completed: false,
+        starterItem: null,
+      },
       skippedSteps: [],
     },
     appearance: {
