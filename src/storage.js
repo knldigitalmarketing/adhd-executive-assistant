@@ -40,6 +40,7 @@ function mergeState(base, stored) {
       setup: {
         ...base.ui?.setup,
         ...stored.ui?.setup,
+        progressive: { ...base.ui?.setup?.progressive, ...stored.ui?.setup?.progressive },
         skippedSteps: arrayOrDefault(stored.ui?.setup?.skippedSteps, base.ui?.setup?.skippedSteps ?? []),
       },
       appearance: { ...base.ui?.appearance, ...stored.ui?.appearance },
