@@ -1294,12 +1294,13 @@ function renderProgressiveSetup(progressive) {
 function renderLandingIntro() {
   return `
     <div class="landing-intro panel">
-      <div class="video-placeholder" aria-label="Intro video placeholder">
-        <div>
-          <span>Video</span>
-          <strong>Intro video placeholder</strong>
-          <p>Add the welcome video embed here later.</p>
-        </div>
+      <div class="video-placeholder">
+        <iframe
+          src="https://www.youtube.com/embed/dBDXQkTPAUg"
+          title="Life Enablement Assistant intro video"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen>
+        </iframe>
       </div>
       <div class="landing-copy">
         <p class="eyebrow">Life Enablement Assistant</p>
