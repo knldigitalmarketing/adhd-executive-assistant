@@ -205,6 +205,28 @@ function renderTestModePanel() {
   `;
 }
 
+function renderQuickCapture() {
+  return `
+    <section class="quick-capture" aria-label="Quick Capture">
+      <details>
+        <summary>Quick Capture</summary>
+        <form data-action="add-task">
+          <label for="quick-task-title">Capture a task, thought, or one-off thing</label>
+          <input id="quick-task-title" name="title" type="text" placeholder="Example: call insurance, order filters, ask Joe about invoice" required />
+          <input type="hidden" name="timingType" value="flexible" />
+          <input type="hidden" name="when" value="Today" />
+          <input type="hidden" name="priority" value="Medium" />
+          <input type="hidden" name="category" value="Personal" />
+          <input type="hidden" name="workType" value="None" />
+          <input type="hidden" name="areaId" value="projects" />
+          <button type="submit">Save Task</button>
+        </form>
+        <p>Use this when something pops into your head and you need it out of your brain fast. You can organize it later.</p>
+      </details>
+    </section>
+  `;
+}
+
 function renderEndOfDayReview() {
   const review = getEndOfDayReviewData();
 
@@ -1298,6 +1320,7 @@ function renderLandingIntro() {
         <iframe
           src="https://www.youtube.com/embed/dBDXQkTPAUg"
           title="Life Enablement Assistant intro video"
+          style="width: 100%; aspect-ratio: 16 / 9; min-height: 320px; border: 0; display: block;"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowfullscreen>
         </iframe>
@@ -2949,6 +2972,7 @@ function renderApp() {
     ${renderHeader()}
     ${renderTestModePanel()}
     <main>
+      ${activeView === "setup" ? "" : renderQuickCapture()}
       ${renderActiveView(activeView, fullDashboard)}
     </main>
   `;

@@ -196,6 +196,49 @@ main {
   font-size: 0.84rem;
 }
 
+.quick-capture {
+  margin-top: -12px;
+}
+
+.quick-capture details {
+  border: 1px solid var(--line);
+  border-left: 5px solid var(--yellow);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.quick-capture summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  color: var(--blue-ink);
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.quick-capture form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 0 14px 12px;
+}
+
+.quick-capture label {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.quick-capture p {
+  margin: 0;
+  padding: 0 14px 14px;
+  color: var(--muted);
+}
+
 .section {
   display: grid;
   gap: 16px;
@@ -2306,6 +2349,10 @@ dd {
   .panel-title {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .quick-capture form {
+    grid-template-columns: 1fr;
   }
 
   .item-actions {
