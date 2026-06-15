@@ -106,21 +106,50 @@ import { formatRoutineStepLines, startVoiceRecognition } from "./voice-list-entr
 const app = document.querySelector("#app");
 let workingModeTimer = null;
 
-const navItems = [
-  ["setup", "Setup"],
-  ["command-center", "Command Center"],
-  ["today", "Today"],
-  ["working", "Working Mode"],
-  ["hourly", "Hourly View"],
-  ["goals", "Goals"],
-  ["habits", "Habits"],
-  ["routines", "Routines"],
-  ["recurring-tasks", "Recurring Tasks"],
-  ["progress", "Progress"],
-  ["learn", "Learn"],
-  ["shop", "Shop"],
-  ["account", "Account"],
-  ["settings", "Settings"],
+const navGroups = [
+  {
+    label: "View",
+    items: [
+      ["command-center", "Command Center"],
+      ["today", "Today"],
+      ["working", "Working Mode"],
+      ["briefing", "Day Glimpse"],
+      ["hourly", "Hourly View"],
+      ["progress", "Progress"],
+    ],
+  },
+  {
+    label: "Add Something",
+    items: [
+      ["quick-capture", "Quick Task"],
+      ["shop", "Food & Shopping"],
+    ],
+  },
+  {
+    label: "Build My Assistant",
+    items: [
+      ["setup", "Setup"],
+      ["goals", "Goals"],
+      ["habits", "Habits"],
+      ["routines", "Routines"],
+      ["recurring-tasks", "Recurring Tasks"],
+    ],
+  },
+  {
+    label: "Resources",
+    items: [
+      ["help", "Help"],
+      ["learn", "Learn"],
+      ["store", "Store"],
+    ],
+  },
+  {
+    label: "Account & Settings",
+    items: [
+      ["account", "Account"],
+      ["settings", "Settings"],
+    ],
+  },
 ];
 
 function areaMap() {
@@ -176,14 +205,41 @@ function renderHeader() {
         <p class="eyebrow">Interactive local-first MVP</p>
         <h1>Life Enablement Assistant</h1>
       </div>
-      <nav class="app-nav" aria-label="Primary">
-        ${navItems.map(([view, label]) => renderNavButton(view, label, activeView)).join("")}
-      </nav>
+      <details class="app-menu">
+        <summary aria-label="Open navigation menu">
+          <span></span>
+          <span></span>
+          <span></span>
+          <strong>Menu</strong>
+        </summary>
+        <nav class="app-nav" aria-label="Primary">
+          ${navGroups.map((group) => renderNavGroup(group, activeView)).join("")}
+        </nav>
+      </details>
     </header>
   `;
 }
 
+function renderNavGroup(group, activeView) {
+  return `
+    <section>
+      <h2>${escapeHtml(group.label)}</h2>
+      <div>
+        ${group.items.map(([view, label]) => renderNavButton(view, label, activeView)).join("")}
+      </div>
+    </section>
+  `;
+}
+
 function renderNavButton(view, label, activeView) {
+  if (view === "quick-capture") {
+    return `
+      <button type="button" data-action="focus-quick-capture">
+        ${escapeHtml(label)}
+      </button>
+    `;
+  }
+
   return `
     <button type="button" class="${activeView === view ? "is-active" : ""}" data-action="navigate" data-view="${escapeHtml(view)}" aria-current="${activeView === view ? "page" : "false"}">
       ${escapeHtml(label)}
@@ -208,21 +264,21 @@ function renderTestModePanel() {
 function renderQuickCapture() {
   return `
     <section class="quick-capture" aria-label="Quick Capture">
-      <details>
-        <summary>Quick Capture</summary>
-        <form data-action="add-task">
-          <label for="quick-task-title">Capture a task, thought, or one-off thing</label>
-          <input id="quick-task-title" name="title" type="text" placeholder="Example: call insurance, order filters, ask Joe about invoice" required />
-          <input type="hidden" name="timingType" value="flexible" />
-          <input type="hidden" name="when" value="Today" />
-          <input type="hidden" name="priority" value="Medium" />
-          <input type="hidden" name="category" value="Personal" />
-          <input type="hidden" name="workType" value="None" />
-          <input type="hidden" name="areaId" value="projects" />
-          <button type="submit">Save Task</button>
-        </form>
-        <p>Use this when something pops into your head and you need it out of your brain fast. You can organize it later.</p>
-      </details>
+      <div>
+        <strong>Add Quick Task</strong>
+        <p>Use this when something pops into your head and you need it out of your brain fast.</p>
+      </div>
+      <form data-action="add-task">
+        <label class="sr-only" for="quick-task-title">Task to save</label>
+        <input id="quick-task-title" name="title" type="text" placeholder="Example: call insurance, order filters, ask Joe about invoice" required />
+        <input type="hidden" name="timingType" value="flexible" />
+        <input type="hidden" name="when" value="Today" />
+        <input type="hidden" name="priority" value="Medium" />
+        <input type="hidden" name="category" value="Personal" />
+        <input type="hidden" name="workType" value="None" />
+        <input type="hidden" name="areaId" value="projects" />
+        <button type="submit">Save Task</button>
+      </form>
     </section>
   `;
 }
@@ -1269,6 +1325,46 @@ function renderProgressView() {
   `;
 }
 
+function renderHelpView() {
+  return `
+    <section id="help" class="section help-view">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Help</p>
+          <h2>How to use this assistant</h2>
+          <p class="empty-copy">Start small. Add one useful thing, let the assistant help, then teach it more when you are ready.</p>
+        </div>
+      </div>
+      <div class="help-grid">
+        <article class="panel">
+          <h3>When something pops into your head</h3>
+          <p>Use <strong>Add Something → Quick Task</strong>. Type the task and press Save Task. It gets the thought out of your head fast.</p>
+        </article>
+        <article class="panel">
+          <h3>When you want to know what to do now</h3>
+          <p>Use <strong>View → Command Center</strong> or <strong>View → Working Mode</strong>. These are the places for the next action.</p>
+        </article>
+        <article class="panel">
+          <h3>When you want to teach the assistant more</h3>
+          <p>Use <strong>Build My Assistant</strong> for goals, habits, routines, and recurring tasks. These make recommendations smarter over time.</p>
+        </article>
+        <article class="panel">
+          <h3>When you are setting up your day</h3>
+          <p>Use <strong>View → Day Glimpse</strong>. It shows big things, scheduled items, issues, and the best way to start.</p>
+        </article>
+        <article class="panel">
+          <h3>When food or shopping comes up</h3>
+          <p>Use <strong>Add Something → Food & Shopping</strong>. You can type, paste, or speak items, then approve the cleaned list.</p>
+        </article>
+        <article class="panel">
+          <h3>What is not built yet</h3>
+          <p>Real wake-up alarms, phone notifications, calendar sync, email, accounts, and cloud backup are not active yet. This version is local-first.</p>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
 function renderSetupJourney() {
   const journey = getSetupJourneyData();
   return `
@@ -1678,6 +1774,39 @@ function renderShopView() {
         ${renderVoiceListEntry(getVoiceListEntryData("shoppingList"))}
       </div>
       <p class="empty-copy">These are local prototype lists only. No shopping, delivery, account, payment, or integration flow is active.</p>
+    </section>
+  `;
+}
+
+function renderStoreView() {
+  return `
+    <section id="store" class="section store-view">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Store</p>
+          <h2>Helpful products and resources</h2>
+          <p class="empty-copy">This area is for resources that support daily structure, wellness routines, and the kind of steady follow-through this assistant is built around.</p>
+        </div>
+      </div>
+      <div class="store-grid">
+        <article class="panel store-feature">
+          <p class="eyebrow">Coming later</p>
+          <h3>Products and resources</h3>
+          <p>Supplements and wellness tools can be part of a bigger support system: routines, hydration, movement, planning, and better daily structure. This area is a placeholder for a future shop link, without turning the assistant itself into a checkout screen.</p>
+          <div class="button-row">
+            <a class="button-link" href="#">Open Store</a>
+          </div>
+        </article>
+        <article class="panel">
+          <h3>How this fits the assistant</h3>
+          <p>The assistant can help someone remember routines, notice what is working, and make space for healthier habits. The store is separate: it is where related products and resources can live when someone wants to look deeper.</p>
+        </article>
+        <article class="panel">
+          <h3>Clear and honest wording</h3>
+          <p>This area should talk about personal experience, wellness support, and daily routines. It should not claim that products treat, cure, or fix medical conditions.</p>
+        </article>
+      </div>
+      <p class="empty-copy">No payment, account, checkout, or supplement tracking is active inside this prototype. The store link will be connected later.</p>
     </section>
   `;
 }
@@ -2994,8 +3123,10 @@ function renderActiveView(activeView, fullDashboard) {
     progress: renderProgressView,
     review: renderEndOfDayReview,
     "life-areas": renderLifeAreaDashboard,
+    help: renderHelpView,
     learn: () => renderPlaceholderView("learn", "Learn", "Helpful strategies and life enablement learning content will live here later."),
     shop: renderShopView,
+    store: renderStoreView,
     account: renderAccountView,
     settings: renderSettingsView,
     dashboard: () => fullDashboard,
@@ -3034,6 +3165,10 @@ app.addEventListener("click", (event) => {
   if (action === "navigate") {
     setActiveView(button.dataset.view);
     renderApp();
+  }
+  if (action === "focus-quick-capture") {
+    document.querySelector(".app-menu")?.removeAttribute("open");
+    document.querySelector("#quick-task-title")?.focus();
   }
   if (action === "show-setup") {
     setActiveView("setup");

@@ -110,10 +110,77 @@ textarea {
   color: #ffffff;
 }
 
+.app-menu {
+  position: relative;
+}
+
+.app-menu summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #ffffff;
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--blue-ink);
+  cursor: pointer;
+  font-weight: 850;
+  list-style: none;
+}
+
+.app-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.app-menu summary span {
+  display: block;
+  width: 15px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--blue-ink);
+}
+
+.app-menu summary strong {
+  font-size: 0.84rem;
+}
+
+.app-menu[open] summary {
+  border-color: var(--yellow);
+  box-shadow: inset 0 -3px 0 var(--yellow);
+}
+
 .app-nav {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 10;
+  display: grid;
+  gap: 14px;
+  width: min(88vw, 430px);
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.app-nav section {
+  display: grid;
+  gap: 8px;
+}
+
+.app-nav h2 {
+  margin: 0;
+  color: var(--blue-ink);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-nav section div {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
   gap: 6px;
 }
 
@@ -129,8 +196,8 @@ button {
 }
 
 .app-nav button {
-  border-color: #ffffff;
-  background: var(--surface);
+  border-color: var(--line);
+  background: var(--blue-wash);
   color: var(--blue-ink);
   padding: 0 9px;
   font-size: 0.84rem;
@@ -197,10 +264,12 @@ main {
 }
 
 .quick-capture {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.55fr) minmax(260px, 1.45fr);
+  gap: 14px;
+  align-items: center;
   margin-top: -12px;
-}
-
-.quick-capture details {
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-left: 5px solid var(--yellow);
   border-radius: 8px;
@@ -208,35 +277,34 @@ main {
   box-shadow: var(--shadow);
 }
 
-.quick-capture summary {
-  display: flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0 14px;
+.quick-capture strong {
+  display: block;
   color: var(--blue-ink);
-  cursor: pointer;
   font-weight: 900;
+}
+
+.quick-capture p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .quick-capture form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
-  align-items: end;
-  padding: 0 14px 12px;
+  align-items: center;
 }
 
-.quick-capture label {
-  grid-column: 1 / -1;
-  color: var(--muted);
-  font-size: 0.9rem;
-  font-weight: 750;
-}
-
-.quick-capture p {
-  margin: 0;
-  padding: 0 14px 14px;
-  color: var(--muted);
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .section {
@@ -250,6 +318,58 @@ main {
 
 .placeholder-view h2 {
   margin: 0;
+}
+
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.help-grid h3 {
+  margin: 0;
+}
+
+.help-grid p {
+  margin-bottom: 0;
+}
+
+.store-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(220px, 0.85fr) minmax(220px, 0.85fr);
+  gap: 16px;
+}
+
+.store-feature {
+  border-color: var(--blue);
+  background: linear-gradient(135deg, #ffffff 0%, var(--blue-wash) 100%);
+}
+
+.store-grid h3 {
+  margin: 0;
+}
+
+.store-grid p {
+  margin-bottom: 0;
+}
+
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--blue);
+  border-radius: 8px;
+  background: var(--blue);
+  color: #ffffff;
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.button-link:hover {
+  background: var(--blue-dark);
 }
 
 .setup-view {
@@ -2228,12 +2348,7 @@ dd {
 
 @media (max-width: 980px) {
   .topbar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .app-nav {
-    justify-content: flex-start;
+    align-items: center;
   }
 
   .onboarding-grid,
@@ -2255,6 +2370,7 @@ dd {
   .guided-step-grid,
   .tomorrow-planning-grid,
   .shop-list-grid,
+  .store-grid,
   .account-grid,
   .landing-intro,
   .add-task-form {
@@ -2302,8 +2418,13 @@ dd {
   }
 
   .app-nav {
+    right: -4px;
+    width: min(92vw, 360px);
     gap: 5px;
-    justify-content: flex-start;
+  }
+
+  .app-nav section div {
+    gap: 5px;
   }
 
   .app-nav button {
@@ -2349,6 +2470,10 @@ dd {
   .panel-title {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .quick-capture {
+    grid-template-columns: 1fr;
   }
 
   .quick-capture form {
