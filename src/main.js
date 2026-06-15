@@ -105,6 +105,7 @@ import { formatRoutineStepLines, startVoiceRecognition } from "./voice-list-entr
 
 const app = document.querySelector("#app");
 let workingModeTimer = null;
+let quickCaptureDraft = null;
 
 const navGroups = [
   {
@@ -121,7 +122,7 @@ const navGroups = [
   {
     label: "Quick Add",
     items: [
-      ["quick-capture", "Quick Task"],
+      ["quick-capture", "Capture"],
       ["shop", "Food + Pantry"],
     ],
   },
@@ -196,6 +197,211 @@ function pill(text, tone = "neutral") {
   return `<span class="pill pill-${tone}">${escapeHtml(text)}</span>`;
 }
 
+function makeFormData(values) {
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(values)) {
+    formData.append(key, value ?? "");
+  }
+  return formData;
+}
+
+function buildQuickCaptureDraft(text) {
+  const rawText = String(text ?? "").trim();
+  const title = cleanCaptureTitle(rawText);
+  const type = classifyQuickCapture(rawText);
+
+  return {
+    rawText,
+    title,
+    type,
+    reason: getQuickCaptureReason(type, rawText),
+  };
+}
+
+function classifyQuickCapture(text) {
+  const value = text.toLowerCase();
+
+  if (/\b(routine|steps|morning routine|evening routine|night routine)\b/.test(value)) {
+    return "routine";
+  }
+
+  if (/\b(every monday|every tuesday|every wednesday|every thursday|every friday|every saturday|every sunday|every week|weekly|monthly|every month|every \d+ days?)\b/.test(value)) {
+    return "recurring";
+  }
+
+  if (/\b(habit|daily|every day|times a day|per day|each day|drink water|take meds|take vitamins|supplement)\b/.test(value)) {
+    return "habit";
+  }
+
+  if (/\b(food|pantry|foods i have|in the house|fridge|freezer|meal)\b/.test(value)) {
+    return "food";
+  }
+
+  if (/\b(shopping|shop|buy|grocery|groceries|need to get|pick up)\b/.test(value)) {
+    return "shopping";
+  }
+
+  if (/\b(goal|want to|i want|improve|lose weight|gain muscle|save money|get healthier|make room for)\b/.test(value)) {
+    return "goal";
+  }
+
+  return "task";
+}
+
+function getQuickCaptureReason(type, text) {
+  const reasons = {
+    task: "This sounds like a one-off thing to get out of your head.",
+    goal: "This sounds like a direction you want the assistant to help you move toward.",
+    habit: "This sounds like something repeatable that you want to build consistency around.",
+    routine: "This sounds like a sequence of steps the assistant can guide you through.",
+    recurring: "This sounds like something that should come back automatically.",
+    food: "This sounds like food or pantry information the assistant should remember.",
+    shopping: "This sounds like something to add to a shopping list.",
+  };
+
+  if (/\btomorrow\b/i.test(text) && type === "task") {
+    return "This sounds like a one-off task, probably for tomorrow.";
+  }
+
+  return reasons[type] ?? reasons.task;
+}
+
+function cleanCaptureTitle(text) {
+  return String(text)
+    .replace(/^\s*(hey|ok|okay|please)\s+/i, "")
+    .replace(/^\s*(add|create|save|remember|remind me to|i need to|i have to|i want to|my goal is)\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function quickCaptureTypeLabel(type) {
+  return {
+    task: "Quick Task",
+    goal: "Goal",
+    habit: "Habit",
+    routine: "Routine",
+    recurring: "Recurring Task",
+    food: "Food + Pantry",
+    shopping: "Shopping List",
+  }[type] ?? "Quick Task";
+}
+
+function inferCaptureCategory(text) {
+  const value = text.toLowerCase();
+  if (/\b(health|doctor|medicine|meds|pill|sleep|water)\b/.test(value)) return "Health";
+  if (/\b(fitness|walk|workout|exercise|gym|muscle)\b/.test(value)) return "Fitness";
+  if (/\b(work|client|invoice|email|call|meeting|follow up|revenue)\b/.test(value)) return "Work";
+  if (/\b(money|bill|irs|insurance|budget|save)\b/.test(value)) return "Money";
+  if (/\b(friend|family|wife|husband|relationship|call mom|call dad)\b/.test(value)) return "Relationships";
+  if (/\b(home|house|trash|laundry|clean|yard)\b/.test(value)) return "Home";
+  return "Personal";
+}
+
+function inferCaptureWorkType(text) {
+  const value = text.toLowerCase();
+  if (/\b(revenue|sale|sales|proposal|invoice|client)\b/.test(value)) return "Revenue";
+  if (/\b(admin|paperwork|file|forms|irs|insurance)\b/.test(value)) return "Admin";
+  if (/\b(follow up|call back|reply|email)\b/.test(value)) return "Follow-up";
+  if (/\b(write|design|brainstorm|create)\b/.test(value)) return "Creative";
+  if (/\b(clean|maintenance|repair|organize)\b/.test(value)) return "Maintenance";
+  return "None";
+}
+
+function inferHabitDailyTarget(text) {
+  const value = text.toLowerCase();
+  const numericMatch = value.match(/\b(\d+)\s*(times|x)\s*(a|per)?\s*day\b/);
+  if (numericMatch) {
+    return numericMatch[1];
+  }
+
+  const words = { one: 1, once: 1, two: 2, twice: 2, three: 3, four: 4, five: 5, six: 6 };
+  for (const [word, count] of Object.entries(words)) {
+    if (new RegExp(`\\b${word}\\s*(times)?\\s*(a|per)?\\s*day\\b`).test(value)) {
+      return String(count);
+    }
+  }
+
+  return "1";
+}
+
+function saveQuickCaptureDraft(formData) {
+  const type = String(formData.get("captureType") ?? "task");
+  const title = String(formData.get("captureTitle") ?? "").trim();
+  const rawText = String(formData.get("captureRawText") ?? title).trim();
+  if (!title) {
+    return;
+  }
+
+  const category = inferCaptureCategory(rawText);
+  const workType = inferCaptureWorkType(rawText);
+
+  if (type === "goal") {
+    saveGoal(makeFormData({ goalTitle: title, goalCategory: category, goalPriority: "Medium", goalDeadline: "" }));
+    return;
+  }
+
+  if (type === "habit") {
+    saveHabit(
+      makeFormData({
+        habitName: title,
+        habitCategory: category,
+        habitFrequencyType: "daily",
+        habitTargetDays: "",
+        habitDailyTargetCount: inferHabitDailyTarget(rawText),
+        habitWeeklyTargetCount: "1",
+        habitActive: "active",
+      }),
+    );
+    return;
+  }
+
+  if (type === "routine") {
+    saveRoutine(
+      makeFormData({
+        routineName: title,
+        routineType: /evening|night|bed/i.test(rawText) ? "evening" : "custom",
+        routineActive: "active",
+        routineSteps: `${title} - 5`,
+      }),
+    );
+    return;
+  }
+
+  if (type === "recurring") {
+    saveRecurringTask(
+      makeFormData({
+        recurringTaskName: title,
+        recurringTaskType: /monthly|every month/i.test(rawText) ? "monthly" : /weekly|every monday|every tuesday|every wednesday|every thursday|every friday|every saturday|every sunday|every week/i.test(rawText) ? "weekly" : "daily",
+        recurringTaskNextOccurrence: getTodayDateInputValue(),
+        recurringTaskCustomSchedule: "",
+        recurringTaskCategory: category,
+        recurringTaskPriority: "Medium",
+        recurringTaskActive: "active",
+      }),
+    );
+    return;
+  }
+
+  if (type === "food" || type === "shopping") {
+    const targetId = type === "food" ? "foodMeals" : "shoppingList";
+    reviewVoiceListText(targetId, rawText);
+    approveVoiceListItems(targetId);
+    return;
+  }
+
+  addTask(
+    makeFormData({
+      title,
+      timingType: "flexible",
+      when: /\btomorrow\b/i.test(rawText) ? "Tomorrow" : "Today",
+      priority: "Medium",
+      category,
+      workType,
+      areaId: "projects",
+    }),
+  );
+}
+
 function renderHeader() {
   const activeView = getActiveView();
 
@@ -253,21 +459,46 @@ function renderQuickCapture() {
   return `
     <section class="quick-capture" aria-label="Quick Capture">
       <div>
-        <strong>Add Quick Task</strong>
-        <p>Use this when something pops into your head and you need it out of your brain fast.</p>
+        <strong>Capture</strong>
+        <p>Speak or type one thing. The assistant will guess where it belongs before saving it.</p>
       </div>
-      <form data-action="add-task">
-        <label class="sr-only" for="quick-task-title">Task to save</label>
-        <input id="quick-task-title" name="title" type="text" placeholder="Example: call insurance, order filters, ask Joe about invoice" required />
-        <input type="hidden" name="timingType" value="flexible" />
-        <input type="hidden" name="when" value="Today" />
-        <input type="hidden" name="priority" value="Medium" />
-        <input type="hidden" name="category" value="Personal" />
-        <input type="hidden" name="workType" value="None" />
-        <input type="hidden" name="areaId" value="projects" />
-        <button type="submit">Save Task</button>
-      </form>
+      <div class="capture-workspace">
+        <form data-action="review-quick-capture">
+          <label class="sr-only" for="quick-capture-text">What do you want to capture?</label>
+          <input id="quick-capture-text" name="captureText" type="text" placeholder="Say or type: drink water 3 times a day, call insurance tomorrow, my goal is..." required />
+          <button type="button" class="voice-capture-button" data-action="start-quick-capture-voice">Voice</button>
+          <button type="submit">Figure It Out</button>
+        </form>
+        ${renderQuickCaptureDraft()}
+      </div>
     </section>
+  `;
+}
+
+function renderQuickCaptureDraft() {
+  if (!quickCaptureDraft) {
+    return "";
+  }
+
+  return `
+    <form class="capture-review" data-action="save-quick-capture">
+      <input type="hidden" name="captureRawText" value="${escapeHtml(quickCaptureDraft.rawText)}" />
+      <div>
+        <span>I think this is:</span>
+        <select name="captureType" aria-label="Capture type">
+          ${["task", "habit", "goal", "routine", "recurring", "food", "shopping"].map((type) => `<option value="${type}" ${type === quickCaptureDraft.type ? "selected" : ""}>${quickCaptureTypeLabel(type)}</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <label for="capture-title">Save as</label>
+        <input id="capture-title" name="captureTitle" type="text" value="${escapeHtml(quickCaptureDraft.title)}" required />
+      </div>
+      <p>${escapeHtml(quickCaptureDraft.reason)}</p>
+      <div class="button-row">
+        <button type="submit">Save This</button>
+        <button type="button" class="secondary-button" data-action="clear-quick-capture">Cancel</button>
+      </div>
+    </form>
   `;
 }
 
@@ -1341,7 +1572,7 @@ function renderHelpView() {
       <div class="help-grid">
         <article class="panel">
           <h3>When something pops into your head</h3>
-          <p>Use <strong>Quick Add - Quick Task</strong>. Type the task and press Save Task. It gets the thought out of your head fast.</p>
+          <p>Use <strong>Quick Add - Capture</strong>. Speak or type one thing, then let the assistant guess where it belongs before saving it.</p>
         </article>
         <article class="panel">
           <h3>When you want to know what to do now</h3>
@@ -3174,7 +3405,14 @@ app.addEventListener("click", (event) => {
   }
   if (action === "focus-quick-capture") {
     document.querySelector(".app-menu")?.removeAttribute("open");
-    document.querySelector("#quick-task-title")?.focus();
+    document.querySelector("#quick-capture-text")?.focus();
+  }
+  if (action === "start-quick-capture-voice") {
+    startQuickCaptureVoice(button);
+  }
+  if (action === "clear-quick-capture") {
+    quickCaptureDraft = null;
+    renderApp();
   }
   if (action === "show-setup") {
     setActiveView("setup");
@@ -3480,6 +3718,23 @@ app.addEventListener("submit", async (event) => {
     return;
   }
 
+  const quickCaptureForm = event.target.closest("form[data-action='review-quick-capture']");
+  if (quickCaptureForm) {
+    event.preventDefault();
+    quickCaptureDraft = buildQuickCaptureDraft(new FormData(quickCaptureForm).get("captureText"));
+    renderApp();
+    return;
+  }
+
+  const saveQuickCaptureForm = event.target.closest("form[data-action='save-quick-capture']");
+  if (saveQuickCaptureForm) {
+    event.preventDefault();
+    saveQuickCaptureDraft(new FormData(saveQuickCaptureForm));
+    quickCaptureDraft = null;
+    renderApp();
+    return;
+  }
+
   const voiceListForm = event.target.closest("form[data-action='review-voice-list']");
   if (voiceListForm) {
     event.preventDefault();
@@ -3594,6 +3849,26 @@ function startVoiceListCapture(targetId, button) {
     },
     onEnd: () => {
       button.textContent = "Start Voice";
+      button.disabled = false;
+    },
+  });
+}
+
+function startQuickCaptureVoice(button) {
+  const originalText = button.textContent;
+  button.textContent = "Listening...";
+  button.disabled = true;
+  startVoiceRecognition({
+    onResult: (transcript) => {
+      quickCaptureDraft = buildQuickCaptureDraft(transcript);
+      renderApp();
+    },
+    onError: () => {
+      button.textContent = originalText;
+      button.disabled = false;
+    },
+    onEnd: () => {
+      button.textContent = originalText;
       button.disabled = false;
     },
   });

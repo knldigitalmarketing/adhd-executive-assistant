@@ -263,7 +263,7 @@ main {
   display: grid;
   grid-template-columns: minmax(180px, 0.55fr) minmax(260px, 1.45fr);
   gap: 14px;
-  align-items: center;
+  align-items: start;
   margin-top: -12px;
   padding: 12px 14px;
   border: 1px solid var(--line);
@@ -285,11 +285,54 @@ main {
   font-size: 0.9rem;
 }
 
-.quick-capture form {
+.quick-capture form[data-action="review-quick-capture"] {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 10px;
   align-items: center;
+}
+
+.capture-workspace {
+  display: grid;
+  gap: 10px;
+}
+
+.voice-capture-button {
+  border-color: var(--yellow);
+  background: #ffffff;
+  color: var(--blue-ink);
+}
+
+.quick-capture .capture-review {
+  display: grid;
+  grid-template-columns: minmax(145px, 0.55fr) minmax(220px, 1fr) minmax(180px, 0.9fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--blue-wash);
+}
+
+.capture-review > div {
+  display: grid;
+  gap: 4px;
+}
+
+.capture-review span,
+.capture-review label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.capture-review p {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.capture-review .button-row {
+  justify-content: flex-end;
 }
 
 .sr-only {
@@ -2566,7 +2609,8 @@ dd {
     grid-template-columns: 1fr;
   }
 
-  .quick-capture form {
+  .quick-capture form[data-action="review-quick-capture"],
+  .capture-review {
     grid-template-columns: 1fr;
   }
 
