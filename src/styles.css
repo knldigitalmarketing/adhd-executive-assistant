@@ -295,6 +295,7 @@ main {
 .capture-workspace {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .voice-capture-button {
@@ -305,10 +306,11 @@ main {
 
 .quick-capture .capture-review {
   display: grid;
-  grid-template-columns: minmax(145px, 0.55fr) minmax(220px, 1fr) minmax(180px, 0.9fr) auto;
-  gap: 10px;
-  align-items: center;
-  padding: 10px;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: stretch;
+  min-width: 0;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--blue-wash);
@@ -317,6 +319,7 @@ main {
 .capture-review > div {
   display: grid;
   gap: 4px;
+  min-width: 0;
 }
 
 .capture-review span,
@@ -347,7 +350,17 @@ main {
 }
 
 .capture-review .button-row {
-  justify-content: flex-end;
+  justify-content: flex-start;
+}
+
+.capture-review .button-row button {
+  min-width: 96px;
+}
+
+.quick-capture input,
+.quick-capture select,
+.quick-capture button {
+  max-width: 100%;
 }
 
 .capture-result {
