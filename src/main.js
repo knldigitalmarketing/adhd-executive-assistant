@@ -112,23 +112,23 @@ const navGroups = [
     items: [
       ["command-center", "Command Center"],
       ["today", "Today"],
-      ["working", "Working Mode"],
+      ["working", "Focus View"],
       ["briefing", "Day Glimpse"],
       ["hourly", "Hourly View"],
       ["progress", "Progress"],
     ],
   },
   {
-    label: "Add Something",
+    label: "Quick Add",
     items: [
       ["quick-capture", "Quick Task"],
-      ["shop", "Food & Shopping"],
+      ["shop", "Food + Pantry"],
     ],
   },
   {
-    label: "Build My Assistant",
+    label: "Teach Assistant",
     items: [
-      ["setup", "Setup"],
+      ["setup", "Guided Setup"],
       ["goals", "Goals"],
       ["habits", "Habits"],
       ["routines", "Routines"],
@@ -140,11 +140,11 @@ const navGroups = [
     items: [
       ["help", "Help"],
       ["learn", "Learn"],
-      ["store", "Store"],
+      ["store", "Shop"],
     ],
   },
   {
-    label: "Account & Settings",
+    label: "Account",
     items: [
       ["account", "Account"],
       ["settings", "Settings"],
@@ -246,20 +246,6 @@ function renderNavButton(view, label, activeView) {
     <button type="button" class="${activeView === view ? "is-active" : ""}" data-action="navigate" data-view="${escapeHtml(view)}" aria-current="${activeView === view ? "page" : "false"}">
       ${escapeHtml(label)}
     </button>
-  `;
-}
-
-function renderTestModePanel() {
-  return `
-    <aside class="test-mode-panel" aria-label="Prototype Tools">
-      <strong>Test Mode / Prototype Tools</strong>
-      <div>
-        <button type="button" data-action="reset-local-data">Reset App Data</button>
-        <button type="button" data-action="load-demo" data-demo-id="adhd-weight-loss">Load Focus + Weight Loss Demo</button>
-        <button type="button" data-action="load-demo" data-demo-id="adhd-muscle-gain">Load Focus + Muscle Gain Demo</button>
-        <button type="button" data-action="load-demo" data-demo-id="self-employed">Load Self Employed Demo</button>
-      </div>
-    </aside>
   `;
 }
 
@@ -818,6 +804,7 @@ function renderGoalSetting(data = getGoalSettingData(), briefingGoals = null) {
         <div>
           <p class="eyebrow">Goal Setting</p>
           <h2>Choose the direction</h2>
+          <p class="empty-copy">Goals tell the assistant what kind of life you are trying to move toward. They help it choose better next steps without making every task feel equally important.</p>
         </div>
         ${pill(`${data.activeGoals.length} active`, "strong")}
       </div>
@@ -825,6 +812,10 @@ function renderGoalSetting(data = getGoalSettingData(), briefingGoals = null) {
       <div class="goal-setting-grid">
         <form class="panel goal-form" data-action="save-goal">
           <input type="hidden" name="goalId" value="${escapeHtml(draft?.id ?? "")}" />
+          <div class="form-intro">
+            <h3>${draft ? "Update This Goal" : "Teach One Goal"}</h3>
+            <p>Start with one direction that matters. The assistant will use it as a gentle signal, not as a command to overload your day.</p>
+          </div>
           <div>
             <label for="goal-title">Goal title</label>
             <input id="goal-title" name="goalTitle" type="text" value="${escapeHtml(draft?.title ?? "")}" placeholder="Improve sleep consistency" required />
@@ -905,6 +896,7 @@ function renderHabitTracking(data = getHabitTrackingData()) {
         <div>
           <p class="eyebrow">Habit Tracking</p>
           <h2>Keep the loop visible</h2>
+          <p class="empty-copy">Habits are repeatable actions you want the assistant to notice, encourage, and bring forward at the right time.</p>
         </div>
         ${pill(`${data.dueHabitItems.length} due`, "strong")}
       </div>
@@ -922,6 +914,10 @@ function renderHabitTracking(data = getHabitTrackingData()) {
       <div class="habit-tracking-grid">
         <form class="panel habit-form" data-action="save-habit">
           <input type="hidden" name="habitId" value="${escapeHtml(draft?.id ?? "")}" />
+          <div class="form-intro">
+            <h3>${draft ? "Update This Habit" : "Teach One Habit"}</h3>
+            <p>Use this for something that repeats. It can happen once a day, several times a day, or a few times per week.</p>
+          </div>
           <div>
             <label for="habit-name">Habit name</label>
             <input id="habit-name" name="habitName" type="text" value="${escapeHtml(draft?.name ?? "")}" placeholder="Drink water" required />
@@ -1046,6 +1042,7 @@ function renderRecurringTasks(data = getRecurringTaskData()) {
         <div>
           <p class="eyebrow">Recurring Tasks</p>
           <h2>Repeat without rethinking</h2>
+          <p class="empty-copy">Recurring tasks are responsibilities you set up once so they come back automatically. Use them for repeating life maintenance, bills, chores, wellness tasks, and follow-ups.</p>
         </div>
         ${pill(`${data.dueOccurrences.length} due`, "strong")}
       </div>
@@ -1053,6 +1050,10 @@ function renderRecurringTasks(data = getRecurringTaskData()) {
       <div class="recurring-task-grid">
         <form class="panel recurring-task-form" data-action="save-recurring-task">
           <input type="hidden" name="recurringTaskId" value="${escapeHtml(draft?.id ?? "")}" />
+          <div class="form-intro">
+            <h3>${draft ? "Update This Repeat" : "Teach One Repeat"}</h3>
+            <p>Tell the assistant what should come back and when. It will create the next occurrence after you complete it.</p>
+          </div>
           <div>
             <label for="recurring-task-name">Task name</label>
             <input id="recurring-task-name" name="recurringTaskName" type="text" value="${escapeHtml(draft?.name ?? "")}" placeholder="Take out trash" required />
@@ -1340,23 +1341,23 @@ function renderHelpView() {
       <div class="help-grid">
         <article class="panel">
           <h3>When something pops into your head</h3>
-          <p>Use <strong>Add Something → Quick Task</strong>. Type the task and press Save Task. It gets the thought out of your head fast.</p>
+          <p>Use <strong>Quick Add - Quick Task</strong>. Type the task and press Save Task. It gets the thought out of your head fast.</p>
         </article>
         <article class="panel">
           <h3>When you want to know what to do now</h3>
-          <p>Use <strong>View → Command Center</strong> or <strong>View → Working Mode</strong>. These are the places for the next action.</p>
+          <p>Use <strong>View - Command Center</strong> or <strong>View - Focus View</strong>. These are the places for the next action.</p>
         </article>
         <article class="panel">
           <h3>When you want to teach the assistant more</h3>
-          <p>Use <strong>Build My Assistant</strong> for goals, habits, routines, and recurring tasks. These make recommendations smarter over time.</p>
+          <p>Use <strong>Teach Assistant</strong> for goals, habits, routines, and recurring tasks. These make recommendations smarter over time.</p>
         </article>
         <article class="panel">
           <h3>When you are setting up your day</h3>
-          <p>Use <strong>View → Day Glimpse</strong>. It shows big things, scheduled items, issues, and the best way to start.</p>
+          <p>Use <strong>View - Day Glimpse</strong>. It shows big things, scheduled items, issues, and the best way to start.</p>
         </article>
         <article class="panel">
           <h3>When food or shopping comes up</h3>
-          <p>Use <strong>Add Something → Food & Shopping</strong>. You can type, paste, or speak items, then approve the cleaned list.</p>
+          <p>Use <strong>Quick Add - Food + Pantry</strong>. You can type, paste, or speak items, then approve the cleaned list.</p>
         </article>
         <article class="panel">
           <h3>What is not built yet</h3>
@@ -1745,17 +1746,21 @@ function renderSettingsView() {
           <p class="empty-copy">Choose a sunset, flower, or landscape image. Very large photos may need to be resized later for production, but this works for testing.</p>
         </div>
       </article>
-      <article class="panel settings-testing-panel">
-        <div class="panel-title">
-          <div>
-            <h3>Testing</h3>
-            <p class="empty-copy">Replay the first-run intro and fast setup without clearing the rest of the app data.</p>
-          </div>
+      <details class="panel settings-testing-panel">
+        <summary>
+          <span>
+            <strong>Prototype tools</strong>
+            <small>Reset onboarding or load sample data for testing.</small>
+          </span>
+        </summary>
+        <div class="prototype-tool-grid">
+          <button type="button" class="secondary-button" data-action="reset-progressive-onboarding">Reset Onboarding</button>
+          <button type="button" class="secondary-button" data-action="reset-local-data">Reset App Data</button>
+          <button type="button" class="secondary-button" data-action="load-demo" data-demo-id="adhd-weight-loss">Load Focus + Weight Loss Demo</button>
+          <button type="button" class="secondary-button" data-action="load-demo" data-demo-id="adhd-muscle-gain">Load Focus + Muscle Gain Demo</button>
+          <button type="button" class="secondary-button" data-action="load-demo" data-demo-id="self-employed">Load Self Employed Demo</button>
         </div>
-        <div class="button-row">
-          <button type="button" class="secondary-button" data-action="reset-progressive-onboarding">Reset Onboarding For Testing</button>
-        </div>
-      </article>
+      </details>
     </section>
   `;
 }
@@ -3101,7 +3106,6 @@ function renderApp() {
 
   app.innerHTML = `
     ${renderHeader()}
-    ${renderTestModePanel()}
     <main>
       ${activeView === "setup" ? "" : renderQuickCapture()}
       ${renderActiveView(activeView, fullDashboard)}
