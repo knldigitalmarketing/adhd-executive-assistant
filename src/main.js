@@ -207,9 +207,11 @@ function renderHeader() {
       </div>
       <details class="app-menu">
         <summary aria-label="Open navigation menu">
-          <span></span>
-          <span></span>
-          <span></span>
+          <span class="hamburger-icon" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
           <strong>Menu</strong>
         </summary>
         <nav class="app-nav" aria-label="Primary">

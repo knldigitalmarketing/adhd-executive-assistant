@@ -117,9 +117,9 @@ textarea {
 .app-menu summary {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   min-height: 34px;
-  padding: 0 10px;
+  padding: 0 9px;
   border: 1px solid #ffffff;
   border-radius: 7px;
   background: #ffffff;
@@ -133,9 +133,16 @@ textarea {
   display: none;
 }
 
-.app-menu summary span {
+.hamburger-icon {
+  display: inline-grid;
+  gap: 3px;
+  width: 18px;
+  padding-block: 2px;
+}
+
+.hamburger-icon span {
   display: block;
-  width: 15px;
+  width: 18px;
   height: 2px;
   border-radius: 999px;
   background: var(--blue-ink);
