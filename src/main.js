@@ -106,6 +106,7 @@ import { formatRoutineStepLines, startVoiceRecognition } from "./voice-list-entr
 const app = document.querySelector("#app");
 let workingModeTimer = null;
 let quickCaptureDraft = null;
+let quickCaptureResult = null;
 
 const navGroups = [
   {
@@ -207,19 +208,23 @@ function makeFormData(values) {
 
 function buildQuickCaptureDraft(text) {
   const rawText = String(text ?? "").trim();
-  const title = cleanCaptureTitle(rawText);
+  const assistanceIntent = detectAssistanceIntent(rawText);
+  const title = cleanCaptureTitle(rawText, assistanceIntent);
   const type = classifyQuickCapture(rawText);
 
   return {
     rawText,
     title,
     type,
-    reason: getQuickCaptureReason(type, rawText),
+    assistanceIntent,
+    reason: getQuickCaptureReason(type, rawText, assistanceIntent),
+    nextStep: getAssistanceNextStep(type, rawText, assistanceIntent),
   };
 }
 
 function classifyQuickCapture(text) {
   const value = text.toLowerCase();
+  const assistanceIntent = detectAssistanceIntent(text);
 
   if (/\b(routine|steps|morning routine|evening routine|night routine)\b/.test(value)) {
     return "routine";
@@ -230,6 +235,10 @@ function classifyQuickCapture(text) {
   }
 
   if (/\b(habit|daily|every day|times a day|per day|each day|drink water|take meds|take vitamins|supplement)\b/.test(value)) {
+    return "habit";
+  }
+
+  if (assistanceIntent && /\b(remember|forget|forgetting|medication|medications|meds|pill|pills|vitamin|vitamins|supplement|supplements)\b/.test(value)) {
     return "habit";
   }
 
@@ -245,10 +254,19 @@ function classifyQuickCapture(text) {
     return "goal";
   }
 
+  if (assistanceIntent) {
+    return "goal";
+  }
+
   return "task";
 }
 
-function getQuickCaptureReason(type, text) {
+function detectAssistanceIntent(text) {
+  const value = String(text).toLowerCase();
+  return /\b(i need help|need help|help me|can you help|could you help|i'm trying to|im trying to|i am trying to|how do i|how can i|what's the best way|what is the best way|i want to)\b/.test(value);
+}
+
+function getQuickCaptureReason(type, text, assistanceIntent = false) {
   const reasons = {
     task: "This sounds like a one-off thing to get out of your head.",
     goal: "This sounds like a direction you want the assistant to help you move toward.",
@@ -259,6 +277,14 @@ function getQuickCaptureReason(type, text) {
     shopping: "This sounds like something to add to a shopping list.",
   };
 
+  if (assistanceIntent && type === "goal") {
+    return "You asked for help, so I will save the direction first. Then you can choose one next step when you are ready.";
+  }
+
+  if (assistanceIntent && type === "habit") {
+    return "You asked for help with remembering or repeating something, so this is probably a habit to track.";
+  }
+
   if (/\btomorrow\b/i.test(text) && type === "task") {
     return "This sounds like a one-off task, probably for tomorrow.";
   }
@@ -266,12 +292,51 @@ function getQuickCaptureReason(type, text) {
   return reasons[type] ?? reasons.task;
 }
 
-function cleanCaptureTitle(text) {
-  return String(text)
+function getAssistanceNextStep(type, text, assistanceIntent = false) {
+  if (!assistanceIntent) {
+    return "";
+  }
+
+  const value = String(text).toLowerCase();
+
+  if (type === "habit") {
+    return "Next option: turn this into a simple daily reminder pattern or add it into a routine later.";
+  }
+
+  if (/\b(organized|organised|scattered|mess|overwhelmed)\b/.test(value)) {
+    return "Next option: create one starter task so the first move is obvious.";
+  }
+
+  if (/\b(bill|bills|money|budget|irs|insurance)\b/.test(value)) {
+    return "Next option: add one money task or recurring responsibility so it does not stay vague.";
+  }
+
+  if (/\b(weight|lose|healthier|fitness|muscle|walk|exercise)\b/.test(value)) {
+    return "Next option: add one small habit or routine that supports this goal.";
+  }
+
+  if (/\b(research|best way|how do i|how can i)\b/.test(value)) {
+    return "Next option: research and planning support can come later. For now, save the direction and add one first step.";
+  }
+
+  return "Next option: add one first step, habit, or routine around this when you are ready.";
+}
+
+function cleanCaptureTitle(text, assistanceIntent = false) {
+  const cleaned = String(text)
     .replace(/^\s*(hey|ok|okay|please)\s+/i, "")
-    .replace(/^\s*(add|create|save|remember|remind me to|i need to|i have to|i want to|my goal is)\s+/i, "")
+    .replace(/^\s*(add|create|save|remember|remind me to|i need to|i have to|my goal is)\s+/i, "")
+    .replace(/^\s*(i need help|need help|help me|can you help me|could you help me|can you help|could you help)\s+(with|to|me with)?\s*/i, "")
+    .replace(/^\s*(i'm trying to|im trying to|i am trying to|i want to)\s+/i, "")
+    .replace(/^\s*(how do i|how can i|what's the best way to|what is the best way to)\s+/i, "")
     .replace(/\s+/g, " ")
     .trim();
+
+  if (!assistanceIntent) {
+    return cleaned;
+  }
+
+  return titleCase(cleaned || text);
 }
 
 function quickCaptureTypeLabel(type) {
@@ -334,10 +399,17 @@ function saveQuickCaptureDraft(formData) {
 
   const category = inferCaptureCategory(rawText);
   const workType = inferCaptureWorkType(rawText);
+  const assistanceIntent = detectAssistanceIntent(rawText);
+  const result = {
+    title,
+    type,
+    message: `Saved "${title}" as ${quickCaptureTypeLabel(type)}.`,
+    nextStep: getAssistanceNextStep(type, rawText, assistanceIntent),
+  };
 
   if (type === "goal") {
     saveGoal(makeFormData({ goalTitle: title, goalCategory: category, goalPriority: "Medium", goalDeadline: "" }));
-    return;
+    return result;
   }
 
   if (type === "habit") {
@@ -352,7 +424,7 @@ function saveQuickCaptureDraft(formData) {
         habitActive: "active",
       }),
     );
-    return;
+    return result;
   }
 
   if (type === "routine") {
@@ -364,7 +436,7 @@ function saveQuickCaptureDraft(formData) {
         routineSteps: `${title} - 5`,
       }),
     );
-    return;
+    return result;
   }
 
   if (type === "recurring") {
@@ -379,14 +451,14 @@ function saveQuickCaptureDraft(formData) {
         recurringTaskActive: "active",
       }),
     );
-    return;
+    return result;
   }
 
   if (type === "food" || type === "shopping") {
     const targetId = type === "food" ? "foodMeals" : "shoppingList";
     reviewVoiceListText(targetId, rawText);
     approveVoiceListItems(targetId);
-    return;
+    return result;
   }
 
   addTask(
@@ -400,6 +472,7 @@ function saveQuickCaptureDraft(formData) {
       areaId: "projects",
     }),
   );
+  return result;
 }
 
 function renderHeader() {
@@ -470,6 +543,7 @@ function renderQuickCapture() {
           <button type="submit">Figure It Out</button>
         </form>
         ${renderQuickCaptureDraft()}
+        ${renderQuickCaptureResult()}
       </div>
     </section>
   `;
@@ -483,6 +557,7 @@ function renderQuickCaptureDraft() {
   return `
     <form class="capture-review" data-action="save-quick-capture">
       <input type="hidden" name="captureRawText" value="${escapeHtml(quickCaptureDraft.rawText)}" />
+      ${quickCaptureDraft.assistanceIntent ? `<p class="capture-intent">You asked for help. I will save the main direction first, then offer one next step.</p>` : ""}
       <div>
         <span>I think this is:</span>
         <select name="captureType" aria-label="Capture type">
@@ -494,11 +569,25 @@ function renderQuickCaptureDraft() {
         <input id="capture-title" name="captureTitle" type="text" value="${escapeHtml(quickCaptureDraft.title)}" required />
       </div>
       <p>${escapeHtml(quickCaptureDraft.reason)}</p>
+      ${quickCaptureDraft.nextStep ? `<p class="capture-next-step">${escapeHtml(quickCaptureDraft.nextStep)}</p>` : ""}
       <div class="button-row">
         <button type="submit">Save This</button>
         <button type="button" class="secondary-button" data-action="clear-quick-capture">Cancel</button>
       </div>
     </form>
+  `;
+}
+
+function renderQuickCaptureResult() {
+  if (!quickCaptureResult) {
+    return "";
+  }
+
+  return `
+    <aside class="capture-result" aria-live="polite">
+      <strong>${escapeHtml(quickCaptureResult.message)}</strong>
+      ${quickCaptureResult.nextStep ? `<p>${escapeHtml(quickCaptureResult.nextStep)}</p>` : ""}
+    </aside>
   `;
 }
 
@@ -3412,6 +3501,7 @@ app.addEventListener("click", (event) => {
   }
   if (action === "clear-quick-capture") {
     quickCaptureDraft = null;
+    quickCaptureResult = null;
     renderApp();
   }
   if (action === "show-setup") {
@@ -3722,6 +3812,7 @@ app.addEventListener("submit", async (event) => {
   if (quickCaptureForm) {
     event.preventDefault();
     quickCaptureDraft = buildQuickCaptureDraft(new FormData(quickCaptureForm).get("captureText"));
+    quickCaptureResult = null;
     renderApp();
     return;
   }
@@ -3729,7 +3820,7 @@ app.addEventListener("submit", async (event) => {
   const saveQuickCaptureForm = event.target.closest("form[data-action='save-quick-capture']");
   if (saveQuickCaptureForm) {
     event.preventDefault();
-    saveQuickCaptureDraft(new FormData(saveQuickCaptureForm));
+    quickCaptureResult = saveQuickCaptureDraft(new FormData(saveQuickCaptureForm));
     quickCaptureDraft = null;
     renderApp();
     return;
@@ -3861,6 +3952,7 @@ function startQuickCaptureVoice(button) {
   startVoiceRecognition({
     onResult: (transcript) => {
       quickCaptureDraft = buildQuickCaptureDraft(transcript);
+      quickCaptureResult = null;
       renderApp();
     },
     onError: () => {
