@@ -273,6 +273,21 @@ main {
   box-shadow: var(--shadow);
 }
 
+.quick-capture.is-collapsed {
+  grid-template-columns: 1fr;
+  gap: 0;
+  padding-block: 9px;
+  box-shadow: none;
+}
+
+.capture-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
 .quick-capture strong {
   display: block;
   color: var(--blue-ink);
@@ -283,6 +298,13 @@ main {
   margin: 3px 0 0;
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.capture-toggle {
+  flex: 0 0 auto;
+  border-color: var(--line);
+  background: #ffffff;
+  color: var(--blue-ink);
 }
 
 .quick-capture form[data-action="review-quick-capture"] {
@@ -335,12 +357,22 @@ main {
 }
 
 .capture-review .capture-intent,
+.capture-review .capture-heard,
 .capture-review .capture-next-step {
   grid-column: 1 / -1;
   padding: 8px 10px;
   border-radius: 8px;
   background: #ffffff;
   color: var(--blue-ink);
+}
+
+.capture-review .capture-heard {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.capture-review .capture-heard strong {
+  color: var(--blue-dark);
 }
 
 .capture-review .capture-next-step {

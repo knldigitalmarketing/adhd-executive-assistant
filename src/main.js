@@ -107,6 +107,8 @@ const app = document.querySelector("#app");
 let workingModeTimer = null;
 let quickCaptureDraft = null;
 let quickCaptureResult = null;
+let quickCaptureText = "";
+let quickCaptureCollapsed = false;
 
 const navGroups = [
   {
@@ -546,16 +548,22 @@ function renderNavButton(view, label, activeView) {
 }
 
 function renderQuickCapture() {
+  const collapsed = quickCaptureCollapsed && !quickCaptureDraft;
   return `
-    <section class="quick-capture" aria-label="Quick Capture">
-      <div>
-        <strong>Capture</strong>
-        <p>Speak or type one thing. The assistant will guess where it belongs before saving it.</p>
+    <section class="quick-capture ${collapsed ? "is-collapsed" : ""}" aria-label="Quick Capture">
+      <div class="capture-heading">
+        <div>
+          <strong>Capture</strong>
+          <p>${collapsed ? "Tap to speak or type something in." : "Speak or type one thing. The assistant will guess where it belongs before saving it."}</p>
+        </div>
+        <button type="button" class="capture-toggle" data-action="toggle-quick-capture" aria-expanded="${collapsed ? "false" : "true"}">
+          ${collapsed ? "Open" : "Collapse"}
+        </button>
       </div>
-      <div class="capture-workspace">
+      <div class="capture-workspace" ${collapsed ? "hidden" : ""}>
         <form data-action="review-quick-capture">
           <label class="sr-only" for="quick-capture-text">What do you want to capture?</label>
-          <input id="quick-capture-text" name="captureText" type="text" placeholder="Say or type: drink water 3 times a day, call insurance tomorrow, my goal is..." required />
+          <input id="quick-capture-text" name="captureText" type="text" value="${escapeHtml(quickCaptureText)}" placeholder="Say or type: drink water 3 times a day, call insurance tomorrow, my goal is..." required />
           <button type="button" class="voice-capture-button" data-action="start-quick-capture-voice">Voice</button>
           <button type="submit">Figure It Out</button>
         </form>
@@ -575,6 +583,7 @@ function renderQuickCaptureDraft() {
     <form class="capture-review" data-action="save-quick-capture">
       <input type="hidden" name="captureRawText" value="${escapeHtml(quickCaptureDraft.rawText)}" />
       ${quickCaptureDraft.assistanceIntent ? `<p class="capture-intent">You asked for help. I will save the main direction first, then offer one next step.</p>` : ""}
+      <p class="capture-heard"><strong>Captured:</strong> ${escapeHtml(quickCaptureDraft.rawText)}</p>
       <div>
         <span>I think this is:</span>
         <select name="captureType" aria-label="Capture type">
@@ -609,6 +618,12 @@ function renderQuickCaptureResult() {
       ${quickCaptureResult.nextStep ? `<p>${escapeHtml(quickCaptureResult.nextStep)}</p>` : ""}
     </aside>
   `;
+}
+
+function scrollCaptureReviewIntoView() {
+  queueMicrotask(() => {
+    document.querySelector(".capture-review")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  });
 }
 
 function renderEndOfDayReview() {
@@ -3513,15 +3528,23 @@ app.addEventListener("click", (event) => {
     renderApp();
   }
   if (action === "focus-quick-capture") {
+    quickCaptureCollapsed = false;
     document.querySelector(".app-menu")?.removeAttribute("open");
+    renderApp();
     document.querySelector("#quick-capture-text")?.focus();
   }
+  if (action === "toggle-quick-capture") {
+    quickCaptureCollapsed = !quickCaptureCollapsed;
+    renderApp();
+  }
   if (action === "start-quick-capture-voice") {
+    quickCaptureCollapsed = false;
     startQuickCaptureVoice(button);
   }
   if (action === "clear-quick-capture") {
     quickCaptureDraft = null;
     quickCaptureResult = null;
+    quickCaptureText = "";
     renderApp();
   }
   if (action === "show-setup") {
@@ -3831,9 +3854,12 @@ app.addEventListener("submit", async (event) => {
   const quickCaptureForm = event.target.closest("form[data-action='review-quick-capture']");
   if (quickCaptureForm) {
     event.preventDefault();
-    quickCaptureDraft = buildQuickCaptureDraft(new FormData(quickCaptureForm).get("captureText"));
+    quickCaptureText = String(new FormData(quickCaptureForm).get("captureText") ?? "").trim();
+    quickCaptureDraft = buildQuickCaptureDraft(quickCaptureText);
     quickCaptureResult = null;
+    quickCaptureCollapsed = false;
     renderApp();
+    scrollCaptureReviewIntoView();
     return;
   }
 
@@ -3842,6 +3868,8 @@ app.addEventListener("submit", async (event) => {
     event.preventDefault();
     quickCaptureResult = saveQuickCaptureDraft(new FormData(saveQuickCaptureForm));
     quickCaptureDraft = null;
+    quickCaptureText = "";
+    quickCaptureCollapsed = false;
     renderApp();
     return;
   }
@@ -3971,9 +3999,12 @@ function startQuickCaptureVoice(button) {
   button.disabled = true;
   startVoiceRecognition({
     onResult: (transcript) => {
+      quickCaptureText = transcript;
       quickCaptureDraft = buildQuickCaptureDraft(transcript);
       quickCaptureResult = null;
+      quickCaptureCollapsed = false;
       renderApp();
+      scrollCaptureReviewIntoView();
     },
     onError: () => {
       button.textContent = originalText;
