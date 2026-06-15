@@ -234,7 +234,7 @@ function classifyQuickCapture(text) {
     return "recurring";
   }
 
-  if (/\b(habit|daily|every day|times a day|per day|each day|drink water|take meds|take vitamins|supplement)\b/.test(value)) {
+  if (/\b(habit|daily|every day|times a day|per day|each day|each morning|each evening|each night|every morning|every evening|every night|drink water|take meds|take medication|take my|take vitamins|supplement)\b/.test(value)) {
     return "habit";
   }
 
@@ -300,6 +300,9 @@ function getAssistanceNextStep(type, text, assistanceIntent = false) {
   const value = String(text).toLowerCase();
 
   if (type === "habit") {
+    if (/\b(medication|medications|meds|pill|pills|amlodipine)\b/.test(value)) {
+      return "Next option: open Habits to confirm the daily pattern. Later this can become part of your morning routine.";
+    }
     return "Next option: turn this into a simple daily reminder pattern or add it into a routine later.";
   }
 
@@ -351,9 +354,21 @@ function quickCaptureTypeLabel(type) {
   }[type] ?? "Quick Task";
 }
 
+function quickCaptureViewForType(type) {
+  return {
+    task: "today",
+    goal: "goals",
+    habit: "habits",
+    routine: "routines",
+    recurring: "recurring-tasks",
+    food: "shop",
+    shopping: "shop",
+  }[type] ?? "today";
+}
+
 function inferCaptureCategory(text) {
   const value = text.toLowerCase();
-  if (/\b(health|doctor|medicine|meds|pill|sleep|water)\b/.test(value)) return "Health";
+  if (/\b(health|doctor|medicine|medication|medications|meds|pill|amlodipine|sleep|water)\b/.test(value)) return "Health";
   if (/\b(fitness|walk|workout|exercise|gym|muscle)\b/.test(value)) return "Fitness";
   if (/\b(work|client|invoice|email|call|meeting|follow up|revenue)\b/.test(value)) return "Work";
   if (/\b(money|bill|irs|insurance|budget|save)\b/.test(value)) return "Money";
@@ -403,8 +418,10 @@ function saveQuickCaptureDraft(formData) {
   const result = {
     title,
     type,
-    message: `Saved "${title}" as ${quickCaptureTypeLabel(type)}.`,
+    message: `Saved "${title}" as`,
+    typeLabel: quickCaptureTypeLabel(type),
     nextStep: getAssistanceNextStep(type, rawText, assistanceIntent),
+    view: quickCaptureViewForType(type),
   };
 
   if (type === "goal") {
@@ -585,7 +602,10 @@ function renderQuickCaptureResult() {
 
   return `
     <aside class="capture-result" aria-live="polite">
-      <strong>${escapeHtml(quickCaptureResult.message)}</strong>
+      <strong>
+        ${escapeHtml(quickCaptureResult.message)}
+        <button type="button" class="inline-nav-link" data-action="navigate" data-view="${escapeHtml(quickCaptureResult.view)}">${escapeHtml(quickCaptureResult.typeLabel)}</button>.
+      </strong>
       ${quickCaptureResult.nextStep ? `<p>${escapeHtml(quickCaptureResult.nextStep)}</p>` : ""}
     </aside>
   `;

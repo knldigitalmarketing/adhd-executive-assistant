@@ -377,6 +377,24 @@ main {
   color: var(--green);
 }
 
+.inline-nav-link {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--blue-dark);
+  font: inherit;
+  font-weight: 900;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.inline-nav-link:hover {
+  background: transparent;
+  color: var(--blue-ink);
+}
+
 .capture-result p {
   margin: 0;
   color: var(--muted);
