@@ -29,6 +29,7 @@ import {
   doItNow,
   editRoutine,
   editRecurringTask,
+  editProgressiveStarterAnswer,
   endFocus,
   editInterviewAnswer,
   editGoal,
@@ -109,6 +110,7 @@ let quickCaptureDraft = null;
 let quickCaptureResult = null;
 let quickCaptureText = "";
 let quickCaptureCollapsed = false;
+const collapsedWindows = new Set();
 
 const navGroups = [
   {
@@ -552,20 +554,20 @@ function renderQuickCapture() {
   return `
     <section class="quick-capture ${collapsed ? "is-collapsed" : ""}" aria-label="Quick Capture">
       <div class="capture-heading">
+        <button type="button" class="capture-toggle" data-action="toggle-quick-capture" aria-expanded="${collapsed ? "false" : "true"}" aria-label="${collapsed ? "Open Capture" : "Collapse Capture"}"></button>
         <div>
           <strong>Capture</strong>
-          <p>${collapsed ? "Tap to speak or type something in." : "Speak or type one thing. The assistant will guess where it belongs before saving it."}</p>
+          ${collapsed ? "" : `<p>Speak or type one thing. Review it before it saves.</p>`}
         </div>
-        <button type="button" class="capture-toggle" data-action="toggle-quick-capture" aria-expanded="${collapsed ? "false" : "true"}">
-          ${collapsed ? "Open" : "Collapse"}
-        </button>
       </div>
       <div class="capture-workspace" ${collapsed ? "hidden" : ""}>
         <form data-action="review-quick-capture">
           <label class="sr-only" for="quick-capture-text">What do you want to capture?</label>
-          <input id="quick-capture-text" name="captureText" type="text" value="${escapeHtml(quickCaptureText)}" placeholder="Say or type: drink water 3 times a day, call insurance tomorrow, my goal is..." required />
-          <button type="button" class="voice-capture-button" data-action="start-quick-capture-voice">Voice</button>
-          <button type="submit">Figure It Out</button>
+          <input id="quick-capture-text" name="captureText" type="text" value="${escapeHtml(quickCaptureText)}" placeholder="Say or type one thing..." required />
+          <div class="capture-actions">
+            <button type="button" class="voice-capture-button" data-action="start-quick-capture-voice">Voice</button>
+            <button type="submit">Start Adding</button>
+          </div>
         </form>
         ${renderQuickCaptureDraft()}
         ${renderQuickCaptureResult()}
@@ -1658,11 +1660,10 @@ function renderCommandCenter() {
       <div class="command-center-grid">
         ${renderCommandNow(now)}
         ${renderCommandNext(next)}
+        ${renderCommandMiddlePrompt({ tip: briefing.tip, reinforcement })}
         ${renderCommandToday(important)}
         ${renderCommandStatus({ stats, energyMood, briefing, smartRescheduling })}
-        ${renderCommandTip(briefing.tip)}
         ${renderCommandAlerts({ intervention: working.intervention ?? briefing.intervention, smartRescheduling })}
-        ${renderCommandPositiveMessage(reinforcement)}
       </div>
     </section>
   `;
@@ -1764,6 +1765,10 @@ function renderProgressiveSetup(progressive) {
     return renderProgressiveDetailStep(progressive);
   }
 
+  if (progressive.step === "review") {
+    return renderProgressiveReviewStep(progressive);
+  }
+
   return renderLandingIntro();
 }
 
@@ -1781,7 +1786,6 @@ function renderLandingIntro() {
       </div>
       <div class="landing-copy">
         <p class="eyebrow">Life Enablement Assistant</p>
-        <h2>You make the final choice. Your assistant clears the path.</h2>
         <p>This is a personal assistant for the legwork of life: remembering what matters, reducing small decisions, and helping you start with one useful next step.</p>
         <p>You only need one thing to begin. As the assistant becomes useful, you can teach it more about goals, habits, routines, bills, meals, health details, and the life you want more room for.</p>
         <div class="button-row">
@@ -1844,6 +1848,38 @@ function renderProgressiveDetailStep(progressive) {
         <textarea id="more-things" name="moreThings" rows="3" placeholder="One per line, or leave this blank">${escapeHtml(progressive.moreThings)}</textarea>
         <p class="field-help">${escapeHtml(progressive.optionalText)}</p>
         <button type="submit">Start With This</button>
+      </form>
+    </article>
+  `;
+}
+
+function renderProgressiveReviewStep(progressive) {
+  const starterType = progressive.starterItem?.type ?? "Task";
+
+  return `
+    <article class="panel progressive-card">
+      <p class="eyebrow">Review</p>
+      <h2>Does this look right?</h2>
+      <p class="empty-copy">Your assistant guessed where this belongs. Change it if the guess is wrong, then save it.</p>
+      <form class="progressive-form" data-action="complete-progressive-setup">
+        <input type="hidden" name="confirmProgressiveSetup" value="true" />
+        <input type="hidden" name="firstThing" value="${escapeHtml(progressive.firstThing)}" />
+        <input type="hidden" name="moreThings" value="${escapeHtml(progressive.moreThings)}" />
+        <div class="starter-summary">
+          <strong>Captured</strong>
+          <span>${escapeHtml(progressive.firstThing)}</span>
+        </div>
+        <div>
+          <label for="starter-type">Save this as</label>
+          <select id="starter-type" name="starterType">
+            ${["Goal", "Habit", "Task"].map((type) => `<option value="${type}" ${type === starterType ? "selected" : ""}>${type}</option>`).join("")}
+          </select>
+        </div>
+        <p class="field-help">${escapeHtml(progressive.starterItem?.message ?? "Choose where this belongs before saving.")}</p>
+        <div class="button-row">
+          <button type="submit">Save This</button>
+          <button type="button" class="secondary-button" data-action="restart-progressive-detail">Edit My Answer</button>
+        </div>
       </form>
     </article>
   `;
@@ -2258,11 +2294,19 @@ function renderSavedVoiceList(data) {
   `;
 }
 
+function renderCommandHeader(label, action, ariaLabel) {
+  return `
+    <button type="button" class="command-section-link" data-action="${escapeHtml(action)}" aria-label="${escapeHtml(ariaLabel)}">
+      ${escapeHtml(label)}
+    </button>
+  `;
+}
+
 function renderCommandNow(recommendation) {
   if (!recommendation) {
     return `
-      <article class="panel command-card command-now">
-        <p class="eyebrow">Now</p>
+      <article class="panel command-card command-now" data-window-title="Now">
+        ${renderCommandHeader("Now", "start-working", "Open Working Mode")}
         <h3>Nothing urgent is waiting.</h3>
         <p class="empty-copy">The assistant has no open next action right now.</p>
       </article>
@@ -2270,8 +2314,8 @@ function renderCommandNow(recommendation) {
   }
 
   return `
-    <article class="panel command-card command-now">
-      <p class="eyebrow">Now</p>
+    <article class="panel command-card command-now" data-window-title="Now">
+      ${renderCommandHeader("Now", "start-working", "Open Working Mode")}
       <h3>${escapeHtml(recommendation.title)}</h3>
       <p>${escapeHtml(getShortWhy(recommendation))}</p>
       <div class="command-meta">
@@ -2291,8 +2335,8 @@ function renderCommandNow(recommendation) {
 function renderCommandNext(item) {
   if (!item) {
     return `
-      <article class="panel command-card">
-        <p class="eyebrow">Next</p>
+      <article class="panel command-card command-next" data-window-title="Next">
+        ${renderCommandHeader("Next", "show-dashboard", "Open Day Glimpse")}
         <h3>No upcoming item.</h3>
         <p class="empty-copy">The next slot is open.</p>
       </article>
@@ -2300,8 +2344,8 @@ function renderCommandNext(item) {
   }
 
   return `
-    <article class="panel command-card">
-      <p class="eyebrow">Next</p>
+    <article class="panel command-card command-next" data-window-title="Next">
+      ${renderCommandHeader("Next", "show-dashboard", "Open Day Glimpse")}
       <h3>${escapeHtml(item.title ?? item.name)}</h3>
       <p>${escapeHtml(item.startTime ?? item.time ?? item.dueDate ?? item.deadline ?? item.type ?? "Up next")}</p>
     </article>
@@ -2310,9 +2354,9 @@ function renderCommandNext(item) {
 
 function renderCommandToday(items) {
   return `
-    <article class="panel command-card command-today">
+    <article class="panel command-card command-today" data-window-title="Today">
       <div class="panel-title">
-        <h3>Today</h3>
+        ${renderCommandHeader("Today", "show-dashboard", "Open Today")}
         ${pill(`${items.length} important`, "strong")}
       </div>
       ${
@@ -2339,14 +2383,32 @@ function renderCommandTodayItem(candidate) {
   `;
 }
 
+function renderCommandMiddlePrompt({ tip, reinforcement }) {
+  if (tip) {
+    return `
+      <article class="panel command-middle-prompt" data-window-title="Tip">
+        <strong>${escapeHtml(tip.category)}</strong>
+        <span>${escapeHtml(tip.text)}</span>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="panel command-middle-prompt" data-window-title="Positive Message">
+      <strong>${escapeHtml(reinforcement.text)}</strong>
+      <span>${escapeHtml(reinforcement.source)}</span>
+    </article>
+  `;
+}
+
 function renderCommandStatus({ stats, energyMood, briefing, smartRescheduling }) {
   const latest = energyMood.latestCheckIn;
   const strongestHabit = [...briefing.habits.activeHabits].sort((left, right) => (right.streak?.currentStreak ?? 0) - (left.streak?.currentStreak ?? 0))[0];
   const workload = smartRescheduling.load?.today ?? { items: stats.open, minutes: 0 };
 
   return `
-    <article class="panel command-card">
-      <p class="eyebrow">Status</p>
+    <article class="panel command-card command-status-card" data-window-title="Status">
+      ${renderCommandHeader("Status", "focus-status-update", "Update Status")}
       <dl class="command-status">
         <div><dt>Mood</dt><dd>${escapeHtml(latest?.mood ? titleCase(latest.mood) : "Not checked")}</dd></div>
         <div><dt>Energy</dt><dd>${escapeHtml(latest?.energy ? titleCase(latest.energy) : "Not checked")}</dd></div>
@@ -2354,6 +2416,22 @@ function renderCommandStatus({ stats, energyMood, briefing, smartRescheduling })
         <div><dt>Streak</dt><dd>${escapeHtml(strongestHabit ? `${strongestHabit.name}: ${strongestHabit.streak.currentStreak}` : "No active streak yet")}</dd></div>
         <div><dt>Workload</dt><dd>${workload.items} items / ${workload.minutes} min</dd></div>
       </dl>
+      <form class="command-status-form" data-action="save-energy-mood">
+        <div>
+          <label for="command-status-mood">Update mood</label>
+          <select id="command-status-mood" name="mood">
+            ${renderOptionList(energyMood.moods, latest?.mood ?? "steady", titleCase)}
+          </select>
+        </div>
+        <div>
+          <label for="command-status-energy">Update energy</label>
+          <select id="command-status-energy" name="energy">
+            ${renderOptionList(energyMood.energyLevels, latest?.energy ?? "medium", titleCase)}
+          </select>
+        </div>
+        <input type="hidden" name="energyMoodNote" value="" />
+        <button type="submit">Update Status</button>
+      </form>
     </article>
   `;
 }
@@ -2364,8 +2442,8 @@ function renderCommandTip(tip) {
   }
 
   return `
-    <article class="panel command-card">
-      <p class="eyebrow">Tip</p>
+    <article class="panel command-card" data-window-title="Tip">
+      ${renderCommandHeader("Tip", "show-learn", "Open Learn")}
       <h3>${escapeHtml(tip.category)}</h3>
       <p>${escapeHtml(tip.text)}</p>
     </article>
@@ -2380,9 +2458,9 @@ function renderCommandAlerts({ intervention, smartRescheduling }) {
   ];
 
   return `
-    <article class="panel command-card command-alerts">
+    <article class="panel command-card command-alerts" data-window-title="Alerts">
       <div class="panel-title">
-        <h3>Alerts</h3>
+        ${renderCommandHeader("Alerts", "show-dashboard", "Open Today")}
         ${pill(`${notices.length}`, notices.length ? "warn" : "strong")}
       </div>
       ${
@@ -2396,8 +2474,8 @@ function renderCommandAlerts({ intervention, smartRescheduling }) {
 
 function renderCommandPositiveMessage(message) {
   return `
-    <article class="panel command-card command-positive">
-      <p class="eyebrow">Positive Message</p>
+    <article class="panel command-card command-positive" data-window-title="Positive Message">
+      ${renderCommandHeader("Positive Message", "show-progress", "Open Progress")}
       <h3>${escapeHtml(message.text)}</h3>
       <span>${escapeHtml(message.source)}</span>
     </article>
@@ -3462,11 +3540,75 @@ function renderApp() {
   app.innerHTML = `
     ${renderHeader()}
     <main>
-      ${activeView === "setup" ? "" : renderQuickCapture()}
+      ${shouldShowQuickCapture(activeView) ? renderQuickCapture() : ""}
       ${renderActiveView(activeView, fullDashboard)}
     </main>
   `;
+  enhanceCollapsibleWindows();
   scheduleWorkingModeRefresh(activeView);
+}
+
+function shouldShowQuickCapture(activeView) {
+  return new Set(["command-center", "today", "working", "hourly", "briefing", "dashboard"]).has(activeView);
+}
+
+function enhanceCollapsibleWindows() {
+  const activeView = getActiveView();
+  const collapseEnabledViews = new Set(["command-center", "today", "working", "briefing", "progress", "review", "life-areas"]);
+  if (!collapseEnabledViews.has(activeView)) {
+    return;
+  }
+
+  const windows = Array.from(
+    document.querySelectorAll(
+      "main [data-window-title], main .working-card, main .command-card, main .tip-card, main .intervention-card, main .priority-panel, main .morning-routine-panel, main .life-area-card",
+    ),
+  ).filter((element) => !element.closest(".quick-capture") && !element.classList.contains("lock-card"));
+
+  windows.forEach((element, index) => {
+    const title = getWindowTitle(element);
+    if (!title) {
+      return;
+    }
+
+    const sectionId = element.closest("section")?.id ?? "main";
+    const collapseId = `${sectionId}-${index}-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+    element.dataset.collapseId = collapseId;
+    element.classList.add("collapsible-window");
+    element.classList.toggle("is-window-collapsed", collapsedWindows.has(collapseId));
+
+    if (element.querySelector(":scope > .window-collapse-bar")) {
+      return;
+    }
+
+    const bar = document.createElement("div");
+    bar.className = "window-collapse-bar";
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "window-collapse-toggle";
+    button.dataset.action = "toggle-window-collapse";
+    button.dataset.collapseId = collapseId;
+    button.setAttribute("aria-label", `${collapsedWindows.has(collapseId) ? "Open" : "Collapse"} ${title}`);
+    button.setAttribute("aria-expanded", collapsedWindows.has(collapseId) ? "false" : "true");
+
+    const titleNode = document.createElement("strong");
+    titleNode.textContent = title;
+
+    bar.append(button, titleNode);
+    element.prepend(bar);
+  });
+}
+
+function getWindowTitle(element) {
+  return (
+    element.dataset.windowTitle ||
+    element.querySelector(":scope > .panel-title h3")?.textContent?.trim() ||
+    element.querySelector(":scope h3")?.textContent?.trim() ||
+    element.querySelector(":scope h2")?.textContent?.trim() ||
+    element.querySelector(":scope .eyebrow")?.textContent?.trim() ||
+    ""
+  );
 }
 
 function renderActiveView(activeView, fullDashboard) {
@@ -3537,6 +3679,15 @@ app.addEventListener("click", (event) => {
     quickCaptureCollapsed = !quickCaptureCollapsed;
     renderApp();
   }
+  if (action === "toggle-window-collapse") {
+    const collapseId = button.dataset.collapseId;
+    if (collapsedWindows.has(collapseId)) {
+      collapsedWindows.delete(collapseId);
+    } else {
+      collapsedWindows.add(collapseId);
+    }
+    renderApp();
+  }
   if (action === "start-quick-capture-voice") {
     quickCaptureCollapsed = false;
     startQuickCaptureVoice(button);
@@ -3555,6 +3706,10 @@ app.addEventListener("click", (event) => {
     setActiveView("setup");
     renderApp();
     queueMicrotask(() => document.querySelector("#teach-more")?.setAttribute("open", ""));
+  }
+  if (action === "restart-progressive-detail") {
+    editProgressiveStarterAnswer();
+    renderApp();
   }
   if (action === "start-progressive-setup") {
     startProgressiveSetup();
@@ -3656,6 +3811,17 @@ app.addEventListener("click", (event) => {
   if (action === "show-dashboard") {
     setActiveView("dashboard");
     renderApp();
+  }
+  if (action === "show-learn") {
+    setActiveView("learn");
+    renderApp();
+  }
+  if (action === "show-progress") {
+    setActiveView("progress");
+    renderApp();
+  }
+  if (action === "focus-status-update") {
+    document.querySelector("#command-status-mood")?.focus();
   }
   if (action === "show-review") {
     setActiveView("review");
