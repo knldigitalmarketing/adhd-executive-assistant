@@ -457,6 +457,35 @@ main {
   color: var(--green);
 }
 
+.starter-acknowledgement {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 1px solid #b9dece;
+  border-left: 5px solid var(--green);
+  border-radius: 8px;
+  background: #f3fbf8;
+  box-shadow: 0 8px 24px rgba(23, 115, 82, 0.1);
+}
+
+.starter-acknowledgement strong,
+.starter-acknowledgement span {
+  display: block;
+}
+
+.starter-acknowledgement p {
+  margin: 4px 0;
+  color: var(--ink);
+}
+
+.starter-acknowledgement span {
+  color: var(--green);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
 .inline-nav-link {
   min-height: 0;
   padding: 0;
@@ -2006,6 +2035,18 @@ main {
   gap: 16px;
 }
 
+.lists-view {
+  max-width: 980px;
+}
+
+.general-list-name-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.35fr) auto;
+  gap: 12px;
+  align-items: end;
+  background: #eef6ff;
+}
+
 .voice-list-entry {
   display: grid;
   gap: 14px;
@@ -2111,6 +2152,41 @@ main {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-soft);
+}
+
+.saved-general-lists {
+  gap: 14px;
+}
+
+.saved-list-group {
+  display: grid;
+  gap: 8px;
+}
+
+.saved-list-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.saved-list-group h5 {
+  margin: 0;
+  color: var(--blue-dark);
+  font-size: 0.96rem;
+}
+
+.saved-list-group p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.saved-voice-list li.is-list-item-done span {
+  color: var(--muted);
+  text-decoration: line-through;
+  background: #eef5f1;
 }
 
 .field-help {
@@ -2974,6 +3050,20 @@ dd {
   }
 
   .positive-reinforcement-banner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .starter-acknowledgement {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .general-list-name-form {
+    grid-template-columns: 1fr;
+  }
+
+  .saved-list-group-heading {
     align-items: flex-start;
     flex-direction: column;
   }

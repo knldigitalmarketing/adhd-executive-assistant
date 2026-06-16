@@ -82,12 +82,15 @@ function mergeState(base, stored) {
     voiceListEntry: {
       ...base.voiceListEntry,
       ...stored.voiceListEntry,
+      activeGeneralListName: stored.voiceListEntry?.activeGeneralListName ?? base.voiceListEntry?.activeGeneralListName,
+      activeGeneralListType: stored.voiceListEntry?.activeGeneralListType ?? base.voiceListEntry?.activeGeneralListType,
       drafts: { ...base.voiceListEntry?.drafts, ...stored.voiceListEntry?.drafts },
       savedLists: {
         ...base.voiceListEntry?.savedLists,
         ...stored.voiceListEntry?.savedLists,
         foodMeals: arrayOrDefault(stored.voiceListEntry?.savedLists?.foodMeals, base.voiceListEntry?.savedLists?.foodMeals ?? []),
         shoppingList: arrayOrDefault(stored.voiceListEntry?.savedLists?.shoppingList, base.voiceListEntry?.savedLists?.shoppingList ?? []),
+        generalList: arrayOrDefault(stored.voiceListEntry?.savedLists?.generalList, base.voiceListEntry?.savedLists?.generalList ?? []),
         routineSteps: arrayOrDefault(stored.voiceListEntry?.savedLists?.routineSteps, base.voiceListEntry?.savedLists?.routineSteps ?? []),
       },
     },

@@ -127,8 +127,12 @@ import {
   ensureVoiceListEntryState,
   getVoiceListEntryData as buildVoiceListEntryData,
   reviewVoiceListText as reviewVoiceListEntryText,
+  setSavedVoiceListGroupDone,
+  setSavedVoiceListItemDone,
+  setGeneralListType as setVoiceListGeneralListType,
   updateVoiceListItem as updateVoiceListEntryItem,
   removeVoiceListItem as removeVoiceListEntryItem,
+  setGeneralListName as setVoiceListGeneralListName,
 } from "./voice-list-entry.js";
 
 let state = loadState(defaultState);
@@ -485,6 +489,8 @@ export function completeProgressiveSetup(formData) {
   progressive.completed = true;
   progressive.step = "complete";
   progressive.starterItem = createProgressiveStarterItem(progressive.helpArea, firstThing, starterType || progressive.starterItem?.type);
+  progressive.starterAcknowledgementDismissed = false;
+  state.ui.activeView = "command-center";
   saveState(state);
   return true;
 }
@@ -492,6 +498,12 @@ export function completeProgressiveSetup(formData) {
 export function editProgressiveStarterAnswer() {
   const progressive = ensureProgressiveSetup();
   progressive.step = "detail";
+  saveState(state);
+}
+
+export function dismissProgressiveStarterAcknowledgement() {
+  const progressive = ensureProgressiveSetup();
+  progressive.starterAcknowledgementDismissed = true;
   saveState(state);
 }
 
@@ -1354,6 +1366,37 @@ export function deleteSavedVoiceListItem(targetId, itemId) {
   saveState(state);
 }
 
+export function markSavedVoiceListItemDone(targetId, itemId) {
+  setSavedVoiceListItemDone(state, targetId, itemId, true);
+  saveState(state);
+}
+
+export function reopenSavedVoiceListItem(targetId, itemId) {
+  setSavedVoiceListItemDone(state, targetId, itemId, false);
+  saveState(state);
+}
+
+export function markGeneralListDone(listName) {
+  setSavedVoiceListGroupDone(state, listName, true);
+  saveState(state);
+}
+
+export function reopenGeneralList(listName) {
+  setSavedVoiceListGroupDone(state, listName, false);
+  saveState(state);
+}
+
+export function setGeneralListName(listName) {
+  setVoiceListGeneralListName(state, listName);
+  saveState(state);
+}
+
+export function setGeneralListDetails(listName, listType) {
+  setVoiceListGeneralListName(state, listName);
+  setVoiceListGeneralListType(state, listType);
+  saveState(state);
+}
+
 export function saveRoutine(formData) {
   const id = String(formData.get("routineId") ?? "").trim();
   if (id) {
@@ -1757,6 +1800,7 @@ async function hashPasscode(passcode) {
 export function getScoredActionableItems() {
   return getActionableCandidates()
     .filter((candidate) => !isDone(candidate.item))
+    .filter((candidate) => !candidate.item.hideFromNow)
     .filter((candidate) => isEligibleCandidate(candidate.item))
     .map(scoreCandidate)
     .sort((left, right) => right.score - left.score || left.order - right.order);
@@ -2574,7 +2618,7 @@ function createProgressiveStarterItem(helpAreaId, firstThing, starterTypeOverrid
       source: "progressive-setup",
     };
     state.goals.unshift(goal);
-    return { type: "Goal", title: goal.title, message: "I added this as a starter goal so daily actions can connect back to it." };
+    return { type: "Goal", title: goal.title, location: "Goals", message: "Saved as a goal. I will use it to guide future suggestions without treating it like something due right now." };
   }
 
   if (starterType === "Habit") {
@@ -2587,12 +2631,13 @@ function createProgressiveStarterItem(helpAreaId, firstThing, starterTypeOverrid
       dailyTargetCount: 1,
       weeklyTargetCount: 1,
       active: true,
+      hideFromNow: true,
       createdAt: now,
       updatedAt: now,
       source: "progressive-setup",
     };
     state.habits.unshift(habit);
-    return { type: "Habit", title: habit.name, message: "I added this as a starter habit so it can stay visible." };
+    return { type: "Habit", title: habit.name, location: "Habits", message: "Saved as a habit. It will be there when you are ready to build it into your day." };
   }
 
   const action = {
@@ -2607,11 +2652,12 @@ function createProgressiveStarterItem(helpAreaId, firstThing, starterTypeOverrid
     status: "todo",
     priority: helpArea.id === "work" ? "High" : "Medium",
     estimatedEffortMinutes: 15,
+    hideFromNow: true,
     createdAt: now,
     source: "progressive-setup",
   };
   state.actions.unshift(action);
-  return { type: "Task", title: action.title, message: "I added this as a starter task so there is one useful next step waiting." };
+  return { type: "Task", title: action.title, location: "Today", message: "Saved as a task. It is in Today, but I will not force it into Now unless it becomes time-sensitive." };
 }
 
 function previewProgressiveStarterItem(helpAreaId, firstThing, starterType = "") {

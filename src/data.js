@@ -146,10 +146,13 @@ export const appState = {
     currentByContext: {},
   },
   voiceListEntry: {
+    activeGeneralListName: "General List",
+    activeGeneralListType: "checklist",
     drafts: {},
     savedLists: {
       foodMeals: [],
       shoppingList: [],
+      generalList: [],
       routineSteps: [],
     },
   },

@@ -24,6 +24,7 @@ import {
   deleteHabit,
   deleteProject,
   deleteRecurringTask,
+  dismissProgressiveStarterAcknowledgement,
   dismissRecommendation,
   dismissGuidance,
   dismissMorningRoutine,
@@ -71,8 +72,12 @@ import {
   loadDemo,
   lockApp,
   markDone,
+  markGeneralListDone,
+  markSavedVoiceListItemDone,
   resetLocalData,
   resetProgressiveOnboarding,
+  reopenGeneralList,
+  reopenSavedVoiceListItem,
   setActiveView,
   skipItem,
   skipSetupStep,
@@ -89,6 +94,7 @@ import {
   saveAppearanceSettings,
   saveGoal,
   saveHabit,
+  setGeneralListDetails,
   saveProject,
   saveEnergyMoodCheckIn,
   saveRecurringTask,
@@ -115,6 +121,7 @@ import { formatRoutineStepLines, startVoiceRecognition } from "./voice-list-entr
 
 const app = document.querySelector("#app");
 let workingModeTimer = null;
+let starterAcknowledgementTimer = null;
 let quickCaptureDraft = null;
 let quickCaptureResult = null;
 let quickCaptureText = "";
@@ -137,6 +144,7 @@ const navGroups = [
     label: "Quick Add",
     items: [
       ["quick-capture", "Capture"],
+      ["lists", "Lists"],
       ["shop", "Food + Pantry"],
     ],
   },
@@ -223,8 +231,8 @@ function makeFormData(values) {
 function buildQuickCaptureDraft(text) {
   const rawText = String(text ?? "").trim();
   const assistanceIntent = detectAssistanceIntent(rawText);
-  const title = cleanCaptureTitle(rawText, assistanceIntent);
   const type = classifyQuickCapture(rawText);
+  const title = getQuickCaptureDefaultTitle(type, rawText, assistanceIntent);
 
   return {
     rawText,
@@ -236,9 +244,34 @@ function buildQuickCaptureDraft(text) {
   };
 }
 
+function getQuickCaptureDefaultTitle(type, rawText, assistanceIntent) {
+  if (type === "shoppingTool") {
+    return "Shopping List";
+  }
+  if (type === "foodTool") {
+    return "Food Input";
+  }
+  if (type === "listTool") {
+    return inferGeneralListName(rawText);
+  }
+  return cleanCaptureTitle(rawText, assistanceIntent);
+}
+
 function classifyQuickCapture(text) {
   const value = text.toLowerCase();
   const assistanceIntent = detectAssistanceIntent(text);
+
+  if (isShoppingListToolIntent(value)) {
+    return "shoppingTool";
+  }
+
+  if (isFoodInputToolIntent(value)) {
+    return "foodTool";
+  }
+
+  if (isGeneralListToolIntent(value)) {
+    return "listTool";
+  }
 
   if (/\b(routine|steps|morning routine|evening routine|night routine)\b/.test(value)) {
     return "routine";
@@ -279,6 +312,57 @@ function classifyQuickCapture(text) {
   return "task";
 }
 
+function isShoppingListToolIntent(text) {
+  return /\b(create|make|start|open|build|set up|put together|work on)\b.*\b(shopping list|grocery list)\b/.test(String(text).toLowerCase());
+}
+
+function isFoodInputToolIntent(text) {
+  return /\b(open|start|add|enter|input|load|tell you|teach you)\b.*\b(food input|pantry|foods i have|food i have|what food i have)\b/.test(String(text).toLowerCase());
+}
+
+function isGeneralListToolIntent(text) {
+  const value = String(text).toLowerCase();
+  return /\b(create|make|start|open|build|set up|put together|work on)\b.*\blist\b/.test(value);
+}
+
+function inferGeneralListName(text) {
+  const value = String(text ?? "")
+    .replace(/^\s*(i'd like to|i would like to|i want to|can you|could you|please|help me|let's|lets)\s+/i, "")
+    .replace(/^\s*(create|make|start|open|build|set up|put together|work on)\s+(a|an|the)?\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const listMatch = value.match(/(.+\blist\b)(\s+for\s+.+)?/i);
+  if (listMatch) {
+    return titleWords(listMatch[0].replace(/^a\s+/i, "").trim());
+  }
+  return "New List";
+}
+
+function inferGeneralListType(text) {
+  const value = String(text ?? "").toLowerCase();
+  if (/\b(to do|todo|task list|action list|things to do|chores)\b/.test(value)) {
+    return "todo";
+  }
+  if (/\b(pack|packing|camping|trip|travel|bring)\b/.test(value)) {
+    return "packing";
+  }
+  if (/\b(parts|supplies|materials|things to get|need to get|buy|get for|shopping)\b/.test(value)) {
+    return "supplies";
+  }
+  if (/\b(reference|ideas|notes|brainstorm)\b/.test(value)) {
+    return "reference";
+  }
+  return "checklist";
+}
+
+function titleWords(value) {
+  return String(value ?? "")
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function isSafetyCaptureText(text) {
   return /\b(child|children|kid|kids|baby|toddler|school drop-off|school pickup|drop off.*(kid|kids|child|children|school|daycare)|pick up.*(kid|kids|child|children|school|daycare)|car seat|in car|daycare)\b/.test(String(text).toLowerCase());
 }
@@ -297,6 +381,9 @@ function getQuickCaptureReason(type, text, assistanceIntent = false) {
     recurring: "This sounds like something that should come back automatically.",
     food: "This sounds like food or pantry information the assistant should remember.",
     shopping: "This sounds like something to add to a shopping list.",
+    foodTool: "This sounds like you want to open the Food Input tool, not save a task.",
+    shoppingTool: "This sounds like you want to open the Shopping List tool, not save a task.",
+    listTool: "This sounds like you want to create or open a list, not save a task.",
   };
 
   if (assistanceIntent && type === "goal") {
@@ -319,6 +406,18 @@ function getQuickCaptureReason(type, text, assistanceIntent = false) {
 }
 
 function getAssistanceNextStep(type, text, assistanceIntent = false) {
+  if (type === "shoppingTool") {
+    return "Next step: open Shopping List, then type, paste, or use voice to add the items you need.";
+  }
+
+  if (type === "foodTool") {
+    return "Next step: open Food Input, then type, paste, or use voice to add foods you have.";
+  }
+
+  if (type === "listTool") {
+    return "Next step: open Lists, then type, paste, or use voice to add the items.";
+  }
+
   if (!assistanceIntent) {
     return "";
   }
@@ -377,6 +476,9 @@ function quickCaptureTypeLabel(type) {
     recurring: "Recurring Task",
     food: "Food + Pantry",
     shopping: "Shopping List",
+    foodTool: "Open Food Input",
+    shoppingTool: "Open Shopping List",
+    listTool: "Open List Builder",
   }[type] ?? "Quick Task";
 }
 
@@ -389,6 +491,9 @@ function quickCaptureViewForType(type) {
     recurring: "recurring-tasks",
     food: "shop",
     shopping: "shop",
+    foodTool: "shop",
+    shoppingTool: "shop",
+    listTool: "lists",
   }[type] ?? "today";
 }
 
@@ -450,6 +555,24 @@ function saveQuickCaptureDraft(formData) {
     nextStep: getAssistanceNextStep(type, rawText, assistanceIntent),
     view: quickCaptureViewForType(type),
   };
+
+  if (type === "shoppingTool" || type === "foodTool" || type === "listTool") {
+    const isListTool = type === "listTool";
+    if (isListTool) {
+      setGeneralListDetails(title, inferGeneralListType(rawText));
+    }
+    setActiveView(isListTool ? "lists" : "shop");
+    return {
+      ...result,
+      message: "Opened",
+      title: isListTool ? title : type === "shoppingTool" ? "Shopping List" : "Food Input",
+      typeLabel: isListTool ? title : type === "shoppingTool" ? "Shopping List" : "Food Input",
+      nextStep: getAssistanceNextStep(type, rawText, assistanceIntent),
+      actionOnly: true,
+      focusTargetId: isListTool ? "generalList" : type === "shoppingTool" ? "shoppingList" : "foodMeals",
+      view: isListTool ? "lists" : "shop",
+    };
+  }
 
   if (type === "goal") {
     saveGoal(makeFormData({ goalTitle: title, goalCategory: category, goalPriority: "Medium", goalDeadline: "" }));
@@ -607,6 +730,8 @@ function renderQuickCaptureDraft() {
     return "";
   }
 
+  const toolIntent = isCaptureToolType(quickCaptureDraft.type);
+
   return `
     <form class="capture-review" data-action="save-quick-capture">
       <input type="hidden" name="captureRawText" value="${escapeHtml(quickCaptureDraft.rawText)}" />
@@ -615,22 +740,26 @@ function renderQuickCaptureDraft() {
       <div>
         <span>I think this is:</span>
         <select name="captureType" aria-label="Capture type">
-          ${["task", "habit", "goal", "routine", "recurring", "food", "shopping"].map((type) => `<option value="${type}" ${type === quickCaptureDraft.type ? "selected" : ""}>${quickCaptureTypeLabel(type)}</option>`).join("")}
+          ${["task", "habit", "goal", "routine", "recurring", "food", "shopping", "foodTool", "shoppingTool", "listTool"].map((type) => `<option value="${type}" ${type === quickCaptureDraft.type ? "selected" : ""}>${quickCaptureTypeLabel(type)}</option>`).join("")}
         </select>
       </div>
       <div>
-        <label for="capture-title">Save as</label>
+        <label for="capture-title">${toolIntent ? "Open" : "Save as"}</label>
         <input id="capture-title" name="captureTitle" type="text" value="${escapeHtml(quickCaptureDraft.title)}" required />
       </div>
       ${renderQuickCaptureTaskDetails(quickCaptureDraft)}
       <p>${escapeHtml(quickCaptureDraft.reason)}</p>
       ${quickCaptureDraft.nextStep ? `<p class="capture-next-step">${escapeHtml(quickCaptureDraft.nextStep)}</p>` : ""}
       <div class="button-row">
-        <button type="submit">Save This</button>
+        <button type="submit">${toolIntent ? "Open This" : "Save This"}</button>
         <button type="button" class="secondary-button" data-action="clear-quick-capture">Cancel</button>
       </div>
     </form>
   `;
+}
+
+function isCaptureToolType(type) {
+  return type === "shoppingTool" || type === "foodTool" || type === "listTool";
 }
 
 function renderQuickCaptureTaskDetails(draft) {
@@ -668,8 +797,11 @@ function renderQuickCaptureResult() {
   return `
     <aside class="capture-result" aria-live="polite">
       <strong>
-        ${escapeHtml(quickCaptureResult.message)}
-        <button type="button" class="inline-nav-link" data-action="navigate" data-view="${escapeHtml(quickCaptureResult.view)}">${escapeHtml(quickCaptureResult.typeLabel)}</button>.
+        ${
+          quickCaptureResult.actionOnly
+            ? `${escapeHtml(quickCaptureResult.message)} <button type="button" class="inline-nav-link" data-action="navigate" data-view="${escapeHtml(quickCaptureResult.view)}">${escapeHtml(quickCaptureResult.typeLabel)}</button>.`
+            : `${escapeHtml(quickCaptureResult.message)} <button type="button" class="inline-nav-link" data-action="navigate" data-view="${escapeHtml(quickCaptureResult.view)}">${escapeHtml(quickCaptureResult.typeLabel)}</button>.`
+        }
       </strong>
       ${quickCaptureResult.nextStep ? `<p>${escapeHtml(quickCaptureResult.nextStep)}</p>` : ""}
     </aside>
@@ -1861,6 +1993,7 @@ function renderCommandCenter() {
           <button type="button" class="secondary-button" data-action="show-dashboard">Full dashboard</button>
         </div>
       </div>
+      ${renderStarterAcknowledgement()}
       <div class="command-center-grid">
         ${renderCommandNow(now)}
         ${renderCommandNext(next)}
@@ -1870,6 +2003,24 @@ function renderCommandCenter() {
         ${renderCommandAlerts({ intervention: working.intervention ?? briefing.intervention, smartRescheduling })}
       </div>
     </section>
+  `;
+}
+
+function renderStarterAcknowledgement() {
+  const progressive = getSetupJourneyData().progressive;
+  if (!progressive.completed || progressive.starterAcknowledgementDismissed || !progressive.starterItem) {
+    return "";
+  }
+
+  return `
+    <aside class="starter-acknowledgement" aria-live="polite">
+      <div>
+        <strong>Saved: ${escapeHtml(progressive.starterItem.title)}</strong>
+        <p>${escapeHtml(progressive.starterItem.message)}</p>
+        <span>Location: ${escapeHtml(progressive.starterItem.location ?? progressive.starterItem.type)}</span>
+      </div>
+      <button type="button" class="secondary-button" data-action="dismiss-starter-acknowledgement">Close</button>
+    </aside>
   `;
 }
 
@@ -2389,6 +2540,37 @@ function renderShopView() {
   `;
 }
 
+function renderListsView() {
+  const listData = getVoiceListEntryData("generalList");
+
+  return `
+    <section id="lists" class="section lists-view">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">List Builder</p>
+          <h2>Make any list</h2>
+          <p class="empty-copy">Use this for parts, garden supplies, camping gear, 3D printer materials, packing lists, project supplies, or anything that needs a list without becoming a task.</p>
+        </div>
+      </div>
+      <form class="panel general-list-name-form" data-action="set-general-list-name">
+        <div>
+          <label for="general-list-name">List name</label>
+          <input id="general-list-name" name="generalListName" type="text" value="${escapeHtml(listData.activeListName)}" placeholder="Motorcycle parts list" />
+          <p class="field-help">Name the list first, choose what kind of list it is, then add items by typing, pasting, or voice.</p>
+        </div>
+        <div>
+          <label for="general-list-type">List type</label>
+          <select id="general-list-type" name="generalListType">
+            ${listData.listTypes.map((type) => `<option value="${escapeHtml(type.value)}" ${type.value === listData.activeListType ? "selected" : ""}>${escapeHtml(type.label)}</option>`).join("")}
+          </select>
+        </div>
+        <button type="submit">Use This List</button>
+      </form>
+      ${renderVoiceListEntry(listData)}
+    </section>
+  `;
+}
+
 function renderSavedMealsPanel() {
   const meals = getState().meals ?? [];
 
@@ -2507,6 +2689,10 @@ function renderSavedVoiceList(data) {
     return "";
   }
 
+  if (data.targetId === "generalList") {
+    return renderSavedGeneralLists(data);
+  }
+
   return `
     <div class="saved-voice-list">
       <div class="panel-title">
@@ -2519,10 +2705,82 @@ function renderSavedVoiceList(data) {
       ${
         data.savedItems.length === 0
           ? `<p class="empty-copy">No saved items yet.</p>`
-          : `<ul>${data.savedItems.map((item) => `<li><span>${escapeHtml(item.text)}</span><button type="button" class="secondary-button" data-action="delete-saved-voice-list-item" data-target-id="${escapeHtml(data.targetId)}" data-id="${escapeHtml(item.id)}">Remove</button></li>`).join("")}</ul>`
+          : `<ul>${data.savedItems.map((item) => renderSavedVoiceListItem(data.targetId, item)).join("")}</ul>`
       }
     </div>
   `;
+}
+
+function renderSavedVoiceListItem(targetId, item) {
+  return `
+    <li class="${item.completed ? "is-list-item-done" : ""}">
+      <span>${escapeHtml(item.text)}</span>
+      <div class="item-actions">
+        ${
+          item.completed
+            ? `<button type="button" class="secondary-button" data-action="reopen-saved-voice-list-item" data-target-id="${escapeHtml(targetId)}" data-id="${escapeHtml(item.id)}">Reopen</button>`
+            : `<button type="button" data-action="mark-saved-voice-list-item-done" data-target-id="${escapeHtml(targetId)}" data-id="${escapeHtml(item.id)}">Done</button>`
+        }
+        <button type="button" class="secondary-button" data-action="delete-saved-voice-list-item" data-target-id="${escapeHtml(targetId)}" data-id="${escapeHtml(item.id)}">Remove</button>
+      </div>
+    </li>
+  `;
+}
+
+function renderSavedGeneralLists(data) {
+  return `
+    <div class="saved-voice-list saved-general-lists">
+      <div class="panel-title">
+        <div>
+          <h4>${escapeHtml(data.savedLabel)}</h4>
+          <p class="empty-copy">${escapeHtml(data.savedHelp)}</p>
+        </div>
+        ${pill(`${data.savedItems.length} saved`, "strong")}
+      </div>
+      ${
+        data.savedGroups.length === 0
+          ? `<p class="empty-copy">No saved list items yet.</p>`
+          : data.savedGroups
+              .map(
+                (group) => `
+                  <section class="saved-list-group">
+                    <div class="saved-list-group-heading">
+                      <div>
+                        <h5>${escapeHtml(group.listName)}</h5>
+                        <p>${escapeHtml(getGeneralListProgressText(group))}</p>
+                      </div>
+                      <div class="item-actions">
+                        ${
+                          group.complete
+                            ? `<button type="button" class="secondary-button" data-action="reopen-general-list" data-list-name="${escapeHtml(group.listName)}">Reopen List</button>`
+                            : `<button type="button" data-action="mark-general-list-done" data-list-name="${escapeHtml(group.listName)}">Mark List Done</button>`
+                        }
+                      </div>
+                    </div>
+                    <ul>${group.items.map((item) => renderSavedVoiceListItem(data.targetId, item)).join("")}</ul>
+                  </section>
+                `,
+              )
+              .join("")
+      }
+    </div>
+  `;
+}
+
+function getGeneralListProgressText(group) {
+  if (group.complete) {
+    return `${group.listTypeLabel} complete.`;
+  }
+
+  const noun = {
+    todo: "actions",
+    supplies: "items to get",
+    packing: "items to pack",
+    reference: "items",
+    checklist: "items",
+  }[group.listType] ?? "items";
+
+  return `${group.openCount} ${noun} open, ${group.completedCount} done. Is this list finished yet?`;
 }
 
 function renderCommandHeader(label, action, ariaLabel) {
@@ -3885,10 +4143,28 @@ function renderApp() {
   `;
   enhanceCollapsibleWindows();
   scheduleWorkingModeRefresh(activeView);
+  scheduleStarterAcknowledgementDismiss(activeView);
+}
+
+function scheduleStarterAcknowledgementDismiss(activeView) {
+  if (starterAcknowledgementTimer) {
+    clearTimeout(starterAcknowledgementTimer);
+    starterAcknowledgementTimer = null;
+  }
+
+  const progressive = getSetupJourneyData().progressive;
+  if (activeView !== "command-center" || !progressive.completed || progressive.starterAcknowledgementDismissed || !progressive.starterItem) {
+    return;
+  }
+
+  starterAcknowledgementTimer = setTimeout(() => {
+    dismissProgressiveStarterAcknowledgement();
+    renderApp();
+  }, 7000);
 }
 
 function shouldShowQuickCapture(activeView) {
-  return new Set(["command-center", "working", "hourly", "briefing", "dashboard"]).has(activeView);
+  return new Set(["command-center", "working", "hourly", "briefing", "dashboard", "lists"]).has(activeView);
 }
 
 function enhanceCollapsibleWindows() {
@@ -3968,6 +4244,7 @@ function renderActiveView(activeView, fullDashboard) {
     "life-areas": renderLifeAreaDashboard,
     help: renderHelpView,
     learn: () => renderPlaceholderView("learn", "Learn", "Helpful strategies and life enablement learning content will live here later."),
+    lists: renderListsView,
     shop: renderShopView,
     store: renderStoreView,
     account: renderAccountView,
@@ -4033,6 +4310,10 @@ app.addEventListener("click", (event) => {
     quickCaptureDraft = null;
     quickCaptureResult = null;
     quickCaptureText = "";
+    renderApp();
+  }
+  if (action === "dismiss-starter-acknowledgement") {
+    dismissProgressiveStarterAcknowledgement();
     renderApp();
   }
   if (action === "show-setup") {
@@ -4303,6 +4584,22 @@ app.addEventListener("click", (event) => {
   if (action === "approve-voice-list") {
     approveVoiceListFromDom(button.dataset.targetId, button);
   }
+  if (action === "mark-saved-voice-list-item-done") {
+    markSavedVoiceListItemDone(button.dataset.targetId, id);
+    renderApp();
+  }
+  if (action === "reopen-saved-voice-list-item") {
+    reopenSavedVoiceListItem(button.dataset.targetId, id);
+    renderApp();
+  }
+  if (action === "mark-general-list-done") {
+    markGeneralListDone(button.dataset.listName);
+    renderApp();
+  }
+  if (action === "reopen-general-list") {
+    reopenGeneralList(button.dataset.listName);
+    renderApp();
+  }
   if (action === "delete-saved-voice-list-item") {
     deleteSavedVoiceListItem(button.dataset.targetId, id);
     renderApp();
@@ -4403,6 +4700,7 @@ app.addEventListener("submit", async (event) => {
     quickCaptureText = "";
     quickCaptureCollapsed = false;
     renderApp();
+    focusVoiceListTarget(quickCaptureResult?.focusTargetId);
     return;
   }
 
@@ -4412,6 +4710,16 @@ app.addEventListener("submit", async (event) => {
     reviewVoiceListText(voiceListForm.dataset.targetId, new FormData(voiceListForm).get("voiceListText"));
     voiceListForm.reset();
     renderApp();
+    return;
+  }
+
+  const generalListNameForm = event.target.closest("form[data-action='set-general-list-name']");
+  if (generalListNameForm) {
+    event.preventDefault();
+    const formData = new FormData(generalListNameForm);
+    setGeneralListDetails(formData.get("generalListName"), formData.get("generalListType"));
+    renderApp();
+    focusVoiceListTarget("generalList");
     return;
   }
 
@@ -4604,6 +4912,18 @@ function appendApprovedRoutineSteps(items, component) {
   if (review) {
     review.innerHTML = `<p class="empty-copy">Approved items were added to the routine steps.</p>`;
   }
+}
+
+function focusVoiceListTarget(targetId) {
+  if (!targetId) {
+    return;
+  }
+
+  queueMicrotask(() => {
+    const textarea = document.querySelector(`#voice-list-text-${targetId}`);
+    textarea?.focus();
+    textarea?.scrollIntoView({ block: "center", behavior: "smooth" });
+  });
 }
 
 renderApp();
