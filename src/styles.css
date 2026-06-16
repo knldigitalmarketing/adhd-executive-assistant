@@ -2087,6 +2087,120 @@ main {
   gap: 4px;
 }
 
+.medication-routine-helper {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #e3c66b;
+  border-radius: 8px;
+  background: #fff8df;
+}
+
+.medication-routine-helper h4,
+.medication-routine-helper p {
+  margin: 0;
+}
+
+.medication-routine-helper h4 {
+  color: var(--blue-ink);
+  font-size: 1rem;
+  font-weight: 850;
+}
+
+.medication-routine-helper p {
+  color: var(--muted);
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.medication-helper-actions {
+  display: flex;
+  align-items: end;
+}
+
+.optional-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.medication-tracking-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.medication-tracking-list h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.medication-tracking-list ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.medication-tracking-list li {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.medication-tracking-list summary {
+  cursor: pointer;
+}
+
+.medication-tracking-list summary strong,
+.medication-tracking-list summary span {
+  display: block;
+}
+
+.medication-tracking-list summary span {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 750;
+}
+
+.medication-detail-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.template-callout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #b7d4f5;
+  border-radius: 8px;
+  background: var(--blue-wash);
+}
+
+.template-callout strong,
+.template-callout p {
+  margin: 0;
+}
+
+.template-callout strong {
+  color: var(--blue-ink);
+  font-size: 0.98rem;
+}
+
+.template-callout p {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
 .shop-list-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(280px, 1fr));
@@ -2993,6 +3107,20 @@ input[type="checkbox"] {
 .hour-block > .empty-copy {
   margin: 0;
   padding: 0 18px 16px;
+}
+
+.hour-block.is-heavy {
+  border-color: #d6a51d;
+}
+
+.hour-warning {
+  margin: 0 18px 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: #fff8df;
+  color: #67501a;
+  font-size: 0.88rem;
+  font-weight: 800;
 }
 
 .hourly-add-form {

@@ -143,6 +143,7 @@ function getNextOpenOccurrenceDate(state, task, startDateKey, todayKey) {
 
 function toOccurrenceItem(state, task) {
   const occurrenceId = getOccurrenceId(task.id, task.nextOccurrence);
+  const scheduledTime = normalizeScheduledTime(task.scheduledTime ?? "");
   return {
     id: occurrenceId,
     recurringTaskId: task.id,
@@ -155,9 +156,11 @@ function toOccurrenceItem(state, task) {
     title: task.name,
     priority: task.priority ?? "Medium",
     estimatedEffortMinutes: Number(task.estimatedEffortMinutes ?? 15),
-    timingType: "flexible",
+    timingType: scheduledTime ? "scheduled" : "flexible",
+    startTime: scheduledTime || undefined,
+    time: scheduledTime || undefined,
     dueDate: task.nextOccurrence === getDateKey(new Date()) ? "Today" : task.nextOccurrence,
-    reason: `${titleCase(task.recurrenceType)} recurring task`,
+    reason: scheduledTime ? `${titleCase(task.recurrenceType)} recurring task at ${scheduledTime}` : `${titleCase(task.recurrenceType)} recurring task`,
     completionCount: (state.recurringTaskCompletions[task.id] ?? []).length,
   };
 }
@@ -169,6 +172,7 @@ function buildRecurringTaskFromForm(formData, id) {
   const category = normalizeCategory(String(formData.get("recurringTaskCategory") ?? "Personal"));
   const priority = normalizePriority(String(formData.get("recurringTaskPriority") ?? "Medium"));
   const customSchedule = String(formData.get("recurringTaskCustomSchedule") ?? "").trim();
+  const scheduledTime = normalizeScheduledTime(String(formData.get("recurringTaskScheduledTime") ?? ""));
 
   return {
     id,
@@ -178,11 +182,53 @@ function buildRecurringTaskFromForm(formData, id) {
     nextOccurrence,
     category,
     priority,
+    scheduledTime,
     active: formData.get("recurringTaskActive") !== "inactive",
     completionHistory: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
+}
+
+function normalizeScheduledTime(value) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const timeInput = trimmed.match(/^(\d{2}):(\d{2})$/);
+  if (timeInput) {
+    return formatMinutesAsTime(Number(timeInput[1]) * 60 + Number(timeInput[2]));
+  }
+
+  return getMinutesFromTime(trimmed) === null ? "" : trimmed.toUpperCase();
+}
+
+function getMinutesFromTime(value) {
+  const match = String(value ?? "").trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!match) {
+    return null;
+  }
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const period = match[3]?.toUpperCase();
+  if (period === "PM" && hours !== 12) {
+    hours += 12;
+  }
+  if (period === "AM" && hours === 12) {
+    hours = 0;
+  }
+  return hours * 60 + minutes;
+}
+
+function formatMinutesAsTime(totalMinutes) {
+  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+  const hours24 = Math.floor(normalized / 60);
+  const minutes = String(normalized % 60).padStart(2, "0");
+  const period = hours24 >= 12 ? "PM" : "AM";
+  const hours12 = hours24 % 12 || 12;
+  return `${hours12}:${minutes} ${period}`;
 }
 
 function getNextOccurrenceDate(task, dateKey) {

@@ -5,6 +5,7 @@ import {
   activateRecurringTask,
   addTask,
   addHourlyItem,
+  addWaterBreakTemplate,
   answerInterviewQuestion,
   cancelGoalEdit,
   cancelHabitEdit,
@@ -54,6 +55,7 @@ import {
   getInterviewState,
   getLifeAreaDashboardData,
   getMorningBriefingData,
+  getMedicationTrackingData,
   getOpenTodayActions,
   getPositiveReinforcement,
   getProjectTrackingData,
@@ -94,6 +96,8 @@ import {
   saveAppearanceSettings,
   saveGoal,
   saveHabit,
+  saveMedicationDetails,
+  saveMedicationGroup,
   setGeneralListDetails,
   saveProject,
   saveEnergyMoodCheckIn,
@@ -1178,6 +1182,7 @@ function renderMorningBriefing() {
       ${renderRoutineBuilder(briefing.builtRoutines)}
       ${renderGoalSetting(getGoalSettingData(), briefing.goals)}
       ${renderHabitTracking(briefing.habits)}
+      ${renderMedicationBriefingPanel(briefing.medications)}
       ${renderRecurringTasks(briefing.recurringTasks)}
       <article class="panel morning-routine-panel">
         <div class="panel-title">
@@ -1243,6 +1248,30 @@ function renderMorningBriefing() {
   `;
 }
 
+function renderMedicationBriefingPanel(data) {
+  if (!data || data.medications.length === 0) {
+    return "";
+  }
+
+  const upcoming = data.upcomingRefills.filter((item) => Number(item.daysUntilRefill ?? 999) <= 14).slice(0, 4);
+  return `
+    <article class="panel morning-routine-panel">
+      <div class="panel-title">
+        <h3>Meds, Pills, Supplements</h3>
+        ${pill(`${data.medications.length} tracked`, "strong")}
+      </div>
+      ${
+        upcoming.length
+          ? renderBriefingItems(upcoming.map((item) => ({
+              title: item.name,
+              detail: item.daysUntilRefill <= 0 ? "Refill date is here" : `Refill in ${item.daysUntilRefill} day${item.daysUntilRefill === 1 ? "" : "s"}`,
+            })), "No refill dates are coming up.")
+          : `<p class="empty-copy">Saved for routine support. Add refill dates when you want the assistant to help prevent running out.</p>`
+      }
+    </article>
+  `;
+}
+
 function renderRoutineBuilder(data = getRoutineBuilderData()) {
   const draft = data.draftRoutine;
 
@@ -1260,6 +1289,7 @@ function renderRoutineBuilder(data = getRoutineBuilderData()) {
       <article class="routine-explainer">
         <div>
           <h3>How Routines Work</h3>
+          <p>A routine is the path. Habits can be steps inside it. A grouped step can also stand for a smaller routine, like <span>Take morning meds - 3</span>.</p>
           <p><strong>Steps</strong> is the actual routine that gets saved. Put each action on its own line, like <span>Drink water - 2</span>.</p>
           <p>The number after the dash is the estimated time in minutes. <span>Drink water - 2</span> means that step should take about 2 minutes. Make your best guess to start; you can refine it later.</p>
         </div>
@@ -1287,7 +1317,7 @@ function renderRoutineBuilder(data = getRoutineBuilderData()) {
               <span>2</span>
               <div>
                 <h3>Choose When It Helps</h3>
-                <p>Pick the part of the day when this routine should be available.</p>
+                <p>Pick the part of the day, when it should start, and whether you want an in-app alarm-style prompt.</p>
               </div>
             </div>
             <div class="guided-step-grid">
@@ -1304,6 +1334,19 @@ function renderRoutineBuilder(data = getRoutineBuilderData()) {
                   <option value="inactive" ${draft?.active === false ? "selected" : ""}>Inactive</option>
                 </select>
               </div>
+              <div>
+                <label for="routine-start-time">Start time</label>
+                <input id="routine-start-time" name="routineStartTime" type="time" value="${escapeHtml(getRoutineStartTimeInputValue(draft?.startTime))}" />
+                <p class="field-help">This places the routine into Hourly View and gives the steps real times.</p>
+              </div>
+              <div>
+                <label for="routine-alarm">Alarm-style prompt</label>
+                <select id="routine-alarm" name="routineAlarm">
+                  <option value="none" ${draft?.alarmPreference === "prompt" ? "" : "selected"}>No prompt</option>
+                  <option value="prompt" ${draft?.alarmPreference === "prompt" ? "selected" : ""}>Yes, prompt me in the app</option>
+                </select>
+                <p class="field-help">Prototype note: this is saved for in-app prompting. Phone wake-up alarms come later.</p>
+              </div>
             </div>
           </section>
           <section class="guided-step routine-steps-field">
@@ -1315,6 +1358,7 @@ function renderRoutineBuilder(data = getRoutineBuilderData()) {
               </div>
             </div>
             <label for="routine-steps">Steps To Save</label>
+            ${renderMedicationRoutineHelper(getMedicationTrackingData())}
             <textarea id="routine-steps" name="routineSteps" rows="5" placeholder="Drink water - 2&#10;Take meds - 3&#10;Review Today - 5" required>${escapeHtml(getRoutineStepLines(draft))}</textarea>
             <p class="field-help">This is the routine that will be saved. Add one step per line. Use: step name - minutes.</p>
             <div class="button-row routine-save-row">
@@ -1333,6 +1377,7 @@ function renderRoutineBuilder(data = getRoutineBuilderData()) {
             ${pill(`${data.activeSteps.length} active steps`, "strong")}
           </div>
           ${renderRoutinePlanList(data.routines)}
+          ${renderMedicationTrackingList(getMedicationTrackingData())}
         </article>
       </div>
     </section>
@@ -1354,6 +1399,123 @@ function getRoutineStepLines(routine) {
   return (routine?.steps ?? []).map((step) => `${step.title} - ${step.estimatedMinutes}`).join("\n");
 }
 
+function getRoutineStartTimeInputValue(value) {
+  const match = String(value ?? "").trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) {
+    return "";
+  }
+
+  let hours = Number(match[1]);
+  const minutes = match[2];
+  const period = match[3].toUpperCase();
+  if (period === "PM" && hours !== 12) {
+    hours += 12;
+  }
+  if (period === "AM" && hours === 12) {
+    hours = 0;
+  }
+  return `${String(hours).padStart(2, "0")}:${minutes}`;
+}
+
+function renderMedicationRoutineHelper(data) {
+  return `
+    <div class="medication-routine-helper">
+      <div>
+        <h4>Meds, Pills, Or Supplements</h4>
+        <p>If this routine includes taking medication, pills, or supplements, add the individual items here. The assistant will save them quietly for tracking and place one calm grouped step in your routine.</p>
+      </div>
+      <div class="guided-step-grid">
+        <div>
+          <label for="medication-group-name">Routine step name</label>
+          <input id="medication-group-name" type="text" value="Take morning meds" />
+        </div>
+        <div>
+          <label for="medication-schedule">When</label>
+          <select id="medication-schedule">
+            <option value="morning" selected>Morning</option>
+            <option value="afternoon">Afternoon</option>
+            <option value="evening">Evening</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+      </div>
+      <label for="medication-names">Which ones?</label>
+      <textarea id="medication-names" rows="3" placeholder="Amlodipine&#10;Atorvastatin&#10;Vitamin D"></textarea>
+      <div class="guided-step-grid">
+        <div>
+          <label for="medication-refill-date">Next refill date <span class="optional-label">optional</span></label>
+          <input id="medication-refill-date" type="date" />
+        </div>
+        <div class="medication-helper-actions">
+          <button type="button" data-action="add-medication-group-to-routine">Add To Routine</button>
+        </div>
+      </div>
+      <p class="field-help">Start with the names and refill date if you know it. Later, you can add strength, doctor, pharmacy, and notes when that becomes useful.</p>
+      <p class="field-help" data-medication-helper-message>${data.medications.length ? `${data.medications.length} medication or supplement item${data.medications.length === 1 ? "" : "s"} saved.` : ""}</p>
+    </div>
+  `;
+}
+
+function renderMedicationTrackingList(data) {
+  if (data.medications.length === 0) {
+    return `
+      <div class="medication-tracking-list">
+        <h3>Medication Tracking</h3>
+        <p class="empty-copy">No medication or supplement items saved yet. Add them while building a routine.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="medication-tracking-list">
+      <h3>Medication Tracking</h3>
+      <p class="empty-copy">These details are optional. Add more only when you want the assistant to help with refills and follow-through.</p>
+      <ul>
+        ${data.medications.map((item) => renderMedicationTrackingItem(item)).join("")}
+      </ul>
+    </div>
+  `;
+}
+
+function renderMedicationTrackingItem(item) {
+  return `
+    <li>
+      <details>
+        <summary>
+          <strong>${escapeHtml(item.name)}</strong>
+          <span>${escapeHtml(titleCase(item.schedule ?? "custom"))}${item.refillDate ? ` - refill ${escapeHtml(item.refillDate)}` : ""}</span>
+        </summary>
+        <form class="medication-detail-form" data-action="save-medication-details">
+          <input type="hidden" name="medicationId" value="${escapeHtml(item.id)}" />
+          <div class="guided-step-grid">
+            <div>
+              <label for="dose-${escapeHtml(item.id)}">Strength / dose</label>
+              <input id="dose-${escapeHtml(item.id)}" name="medicationDose" type="text" value="${escapeHtml(item.dose ?? "")}" placeholder="Optional" />
+            </div>
+            <div>
+              <label for="refill-${escapeHtml(item.id)}">Next refill</label>
+              <input id="refill-${escapeHtml(item.id)}" name="medicationRefillDate" type="date" value="${escapeHtml(item.refillDate ?? "")}" />
+            </div>
+          </div>
+          <div class="guided-step-grid">
+            <div>
+              <label for="prescriber-${escapeHtml(item.id)}">Doctor / prescriber</label>
+              <input id="prescriber-${escapeHtml(item.id)}" name="medicationPrescriber" type="text" value="${escapeHtml(item.prescriber ?? "")}" placeholder="Optional" />
+            </div>
+            <div>
+              <label for="pharmacy-${escapeHtml(item.id)}">Pharmacy</label>
+              <input id="pharmacy-${escapeHtml(item.id)}" name="medicationPharmacy" type="text" value="${escapeHtml(item.pharmacy ?? "")}" placeholder="Optional" />
+            </div>
+          </div>
+          <label for="notes-${escapeHtml(item.id)}">Notes</label>
+          <textarea id="notes-${escapeHtml(item.id)}" name="medicationNotes" rows="2" placeholder="Optional">${escapeHtml(item.notes ?? "")}</textarea>
+          <button type="submit">Save Details</button>
+        </form>
+      </details>
+    </li>
+  `;
+}
+
 function renderRoutinePlanList(routines) {
   if (routines.length === 0) {
     return `<p class="empty-copy">No custom routines yet.</p>`;
@@ -1373,7 +1535,7 @@ function renderRoutinePlanItem(routine) {
     <li>
       <div>
         <strong>${escapeHtml(routine.name)}</strong>
-        <span>${escapeHtml(titleCase(routine.type))} - ${routine.steps.length} steps - ${totalMinutes} min</span>
+        <span>${escapeHtml(titleCase(routine.type))} - ${routine.steps.length} steps - ${totalMinutes} min${routine.startTime ? ` - starts ${escapeHtml(routine.startTime)}` : ""}${routine.alarmPreference === "prompt" ? " - in-app prompt" : ""}</span>
       </div>
       <div class="item-actions">
         ${pill(routine.active ? "Active" : "Inactive", routine.active ? "strong" : "neutral")}
@@ -1806,6 +1968,13 @@ function renderRecurringTasks(data = getRecurringTaskData()) {
             <h3>${draft ? "Update This Repeat" : "Teach One Repeat"}</h3>
             <p>Tell the assistant what should come back and when. It will create the next occurrence after you complete it.</p>
           </div>
+          <div class="template-callout">
+            <div>
+              <strong>Example: daily water rhythm</strong>
+              <p>Add simple water breaks across the day so they appear in Hourly View beside your projects, calls, and routines.</p>
+            </div>
+            <button type="button" class="secondary-button" data-action="add-water-break-template">Add Water Breaks</button>
+          </div>
           <div>
             <label for="recurring-task-name">Task name</label>
             <input id="recurring-task-name" name="recurringTaskName" type="text" value="${escapeHtml(draft?.name ?? "")}" placeholder="Take out trash" required />
@@ -1819,6 +1988,11 @@ function renderRecurringTasks(data = getRecurringTaskData()) {
           <div>
             <label for="recurring-task-next">Next occurrence</label>
             <input id="recurring-task-next" name="recurringTaskNextOccurrence" type="date" value="${escapeHtml(draft?.nextOccurrence ?? getTodayDateInputValue())}" />
+          </div>
+          <div>
+            <label for="recurring-task-time">Time <span class="optional-label">optional</span></label>
+            <input id="recurring-task-time" name="recurringTaskScheduledTime" type="time" value="${escapeHtml(getRoutineStartTimeInputValue(draft?.scheduledTime))}" />
+            <p class="field-help">Add a time when this belongs in a specific hour. Leave blank if it can float during the day.</p>
           </div>
           <div>
             <label for="recurring-task-custom">Custom schedule</label>
@@ -1893,7 +2067,7 @@ function renderRecurringTaskItem(task) {
     <li>
       <div>
         <strong>${escapeHtml(task.name)}</strong>
-        <span>${escapeHtml(task.category)} - ${escapeHtml(recurrence)} - next ${escapeHtml(task.nextOccurrence)}</span>
+        <span>${escapeHtml(task.category)} - ${escapeHtml(recurrence)} - next ${escapeHtml(task.nextOccurrence)}${task.scheduledTime ? ` at ${escapeHtml(task.scheduledTime)}` : ""}</span>
         <div class="habit-streak">
           <span>${completedCount} completed</span>
           <span>${escapeHtml(task.priority)} priority</span>
@@ -3997,6 +4171,15 @@ function buildHourlyViewItems() {
     displayTime: event.time ?? event.startTime ?? "Today",
     hour: getHourFromTime(event.time ?? event.startTime),
   }));
+  const routineStepEvents = getRoutineBuilderData().scheduledSteps
+    .filter((event) => event.timingType === "scheduled" && event.startTime)
+    .map((event) => ({
+      ...event,
+      collection: "routineSteps",
+      type: "Routine Step",
+      displayTime: event.startTime,
+      hour: getHourFromTime(event.startTime),
+    }));
   const scheduledTasks = state.actions
     .filter((event) => (event.timingType ?? "") === "scheduled" || event.startTime || event.time)
     .map((event) => ({
@@ -4006,7 +4189,16 @@ function buildHourlyViewItems() {
       displayTime: event.startTime ?? event.time ?? "Today",
       hour: getHourFromTime(event.startTime ?? event.time),
     }));
-  const events = [...timelineEvents, ...scheduledTasks];
+  const recurringEvents = getRecurringTaskData().dueOccurrences
+    .filter((event) => event.timingType === "scheduled" && event.startTime)
+    .map((event) => ({
+      ...event,
+      collection: "recurringOccurrences",
+      type: "Recurring Task",
+      displayTime: event.startTime,
+      hour: getHourFromTime(event.startTime),
+    }));
+  const events = [...timelineEvents, ...routineStepEvents, ...recurringEvents, ...scheduledTasks];
 
   return Array.from({ length: 16 }, (_, index) => {
     const hour = index + 6;
@@ -4014,18 +4206,21 @@ function buildHourlyViewItems() {
       hour,
       label: formatHourLabel(hour),
       events: events.filter((event) => event.hour === hour),
+      loadMinutes: events.filter((event) => event.hour === hour).reduce((sum, event) => sum + Number(event.estimatedEffortMinutes ?? 15), 0),
     };
   });
 }
 
 function renderHourBlock(hour) {
   const open = hour.events.length > 0 ? "open" : "";
+  const isHeavy = hour.loadMinutes > 60 || hour.events.length >= 4;
   return `
-    <details class="hour-block" ${open}>
+    <details class="hour-block ${isHeavy ? "is-heavy" : ""}" ${open}>
       <summary>
         <span>${escapeHtml(hour.label)}</span>
         ${pill(`${hour.events.length} item${hour.events.length === 1 ? "" : "s"}`, hour.events.length ? "strong" : "neutral")}
       </summary>
+      ${isHeavy ? `<p class="hour-warning">This hour may be overloaded. Consider moving one item so the hour has breathing room.</p>` : ""}
       ${
         hour.events.length === 0
           ? `<p class="empty-copy">Nothing scheduled for this hour.</p>`
@@ -4488,6 +4683,10 @@ app.addEventListener("click", (event) => {
     startMyDay();
     renderApp();
   }
+  if (action === "add-water-break-template") {
+    addWaterBreakTemplate();
+    renderApp();
+  }
   if (action === "show-command-center") {
     setActiveView("command-center");
     renderApp();
@@ -4515,6 +4714,9 @@ app.addEventListener("click", (event) => {
   if (action === "show-routines") {
     setActiveView("routines");
     renderApp();
+  }
+  if (action === "add-medication-group-to-routine") {
+    addMedicationGroupToRoutine();
   }
   if (action === "dismiss-assistant-nudge") {
     dismissedAssistantNudgeId = id;
@@ -4828,6 +5030,14 @@ app.addEventListener("submit", async (event) => {
     return;
   }
 
+  const medicationDetailsForm = event.target.closest("form[data-action='save-medication-details']");
+  if (medicationDetailsForm) {
+    event.preventDefault();
+    saveMedicationDetails(new FormData(medicationDetailsForm));
+    renderApp();
+    return;
+  }
+
   const goalForm = event.target.closest("form[data-action='save-goal']");
   if (goalForm) {
     event.preventDefault();
@@ -4977,6 +5187,52 @@ function approveVoiceListFromDom(targetId, button) {
   }
 
   renderApp();
+}
+
+function addMedicationGroupToRoutine() {
+  const namesField = document.querySelector("#medication-names");
+  const groupNameField = document.querySelector("#medication-group-name");
+  const scheduleField = document.querySelector("#medication-schedule");
+  const refillDateField = document.querySelector("#medication-refill-date");
+  const message = document.querySelector("[data-medication-helper-message]");
+  const names = String(namesField?.value ?? "").trim();
+
+  if (!names) {
+    if (message) {
+      message.textContent = "Add at least one medication, pill, or supplement first.";
+    }
+    namesField?.focus();
+    return;
+  }
+
+  const result = saveMedicationGroup(makeFormData({
+    medicationGroupName: groupNameField?.value || "Take morning meds",
+    medicationSchedule: scheduleField?.value || "morning",
+    medicationRefillDate: refillDateField?.value || "",
+    medicationNames: names,
+  }));
+
+  appendRoutineStepLine(result.routineStepLine);
+  namesField.value = "";
+  if (message) {
+    message.textContent = `Saved ${result.createdMedications.length} item${result.createdMedications.length === 1 ? "" : "s"} and added "${result.routineStepLine}" to Steps.`;
+  }
+}
+
+function appendRoutineStepLine(line) {
+  const textarea = document.querySelector("#routine-steps");
+  if (!textarea || !line) {
+    return;
+  }
+
+  const lines = textarea.value
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!lines.some((item) => item.toLowerCase() === line.toLowerCase())) {
+    lines.push(line);
+  }
+  textarea.value = lines.join("\n");
 }
 
 function appendApprovedRoutineSteps(items, component) {

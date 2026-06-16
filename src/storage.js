@@ -116,6 +116,8 @@ function mergeState(base, stored) {
     routinePlans: arrayOrDefault(stored.routinePlans, base.routinePlans),
     routineStepState: { ...base.routineStepState, ...stored.routineStepState },
     routineBuilderDraftId: stored.routineBuilderDraftId ?? base.routineBuilderDraftId,
+    medications: arrayOrDefault(stored.medications, base.medications),
+    medicationState: { ...base.medicationState, ...stored.medicationState },
     goals: arrayOrDefault(stored.goals, base.goals),
     goalDraftId: stored.goalDraftId ?? base.goalDraftId,
     projects: arrayOrDefault(stored.projects, base.projects),

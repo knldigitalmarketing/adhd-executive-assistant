@@ -173,6 +173,8 @@ export const appState = {
   routinePlans: [],
   routineStepState: {},
   routineBuilderDraftId: null,
+  medications: [],
+  medicationState: {},
   goals: [],
   goalDraftId: null,
   projects: [],
