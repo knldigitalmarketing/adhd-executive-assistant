@@ -261,16 +261,16 @@ main {
 
 .quick-capture {
   display: grid;
-  grid-template-columns: minmax(150px, 0.34fr) minmax(280px, 1fr);
-  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
   align-items: center;
   margin-top: -12px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
+  padding: 12px 14px;
+  border: 1px solid #f0cf77;
   border-left: 4px solid var(--yellow);
   border-radius: 8px;
-  background: var(--surface);
-  box-shadow: 0 8px 24px rgba(12, 30, 55, 0.08);
+  background: #fff8df;
+  box-shadow: 0 8px 24px rgba(122, 86, 12, 0.1);
 }
 
 .quick-capture.is-collapsed {
@@ -287,10 +287,6 @@ main {
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
-  min-width: 0;
-}
-
-.capture-heading > div {
   min-width: 0;
 }
 
@@ -315,7 +311,7 @@ main {
   height: 26px;
   padding: 0;
   border-color: transparent;
-  background: var(--blue-wash);
+  background: #ffffff;
   color: var(--blue-ink);
 }
 
@@ -344,7 +340,9 @@ main {
 
 .capture-workspace {
   display: grid;
+  grid-template-columns: minmax(150px, 0.34fr) minmax(280px, 1fr);
   gap: 10px;
+  align-items: center;
   min-width: 0;
 }
 
@@ -370,20 +368,26 @@ main {
 
 .quick-capture .capture-review {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(160px, 0.35fr);
+  grid-template-columns: 1fr;
   gap: 10px;
   align-items: stretch;
   min-width: 0;
   padding: 10px;
-  border: 1px solid var(--line);
+  border: 1px solid #efd17f;
   border-radius: 8px;
-  background: var(--blue-wash);
+  background: #fff2bf;
 }
 
 .capture-review > div {
   display: grid;
   gap: 4px;
   min-width: 0;
+}
+
+.capture-task-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .capture-review span,
@@ -1255,6 +1259,49 @@ main {
   gap: 14px;
 }
 
+.is-starting-soon {
+  border-color: #9dcc93 !important;
+  border-left-color: #5caa4d !important;
+  background: #eff9eb !important;
+}
+
+.is-final-countdown {
+  border-color: #efb7a8 !important;
+  border-left-color: #d93a2f !important;
+  background: #fff0ee !important;
+}
+
+.is-starting-now {
+  border-color: #d93a2f !important;
+  border-left-color: #d93a2f !important;
+  background: #fff0ee !important;
+  animation: urgentPulse 1.15s ease-in-out infinite;
+}
+
+.is-final-countdown .eyebrow,
+.is-final-countdown .command-section-link,
+.is-starting-now .eyebrow,
+.is-starting-now .command-section-link {
+  color: #9f2019;
+}
+
+@keyframes urgentPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(217, 58, 47, 0.14), var(--shadow);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(217, 58, 47, 0.24), var(--shadow);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-starting-now {
+    animation: none;
+    box-shadow: 0 0 0 4px rgba(217, 58, 47, 0.16), var(--shadow);
+  }
+}
+
 .decision-card p {
   margin: 0;
   color: var(--muted);
@@ -1797,6 +1844,7 @@ main {
 }
 
 .goal-setting-grid,
+.project-tracking-grid,
 .habit-tracking-grid,
 .recurring-task-grid {
   display: grid;
@@ -1805,6 +1853,7 @@ main {
 }
 
 .goal-list,
+.project-list,
 .habit-list,
 .recurring-task-list {
   display: grid;
@@ -1815,6 +1864,7 @@ main {
 }
 
 .goal-list li,
+.project-list li,
 .habit-list li,
 .recurring-task-list li {
   display: grid;
@@ -1826,6 +1876,7 @@ main {
 }
 
 .goal-list-panel,
+.project-list-panel,
 .habit-list-panel,
 .recurring-task-list-panel,
 .routine-list-panel {
@@ -1834,6 +1885,8 @@ main {
 
 .goal-list strong,
 .goal-list span,
+.project-list strong,
+.project-list span,
 .habit-list strong,
 .habit-list span,
 .recurring-task-list strong,
@@ -1842,9 +1895,31 @@ main {
 }
 
 .goal-list span,
+.project-list span,
 .habit-list span,
 .recurring-task-list span {
   color: var(--muted);
+}
+
+.project-task-list {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--ink);
+  font-size: 0.88rem;
+}
+
+.project-task-list li {
+  display: list-item;
+  padding: 0;
+  border: 0;
+}
+
+.project-task-list span {
+  display: inline;
+  margin-left: 4px;
+  font-size: 0.78rem;
 }
 
 .habit-streak {
@@ -2334,9 +2409,27 @@ main {
 
 .add-task-form {
   display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) repeat(5, minmax(120px, 0.65fr)) auto;
+  grid-template-columns: minmax(220px, 1.25fr) repeat(4, minmax(120px, 0.65fr)) auto;
   gap: 12px;
   align-items: end;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.add-task-form.add-task-priority-high {
+  border-color: #efb7a8;
+  background: #fff0ec;
+}
+
+.add-task-form.add-task-priority-medium {
+  border-color: #efd17f;
+  background: #fff8df;
+}
+
+.add-task-form.add-task-priority-low {
+  border-color: #b7d4f5;
+  background: #eef6ff;
 }
 
 .add-task-form label {
@@ -2352,6 +2445,19 @@ main {
   min-width: 82px;
   background: var(--ink);
   color: var(--surface);
+}
+
+.today-schedule-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.today-schedule-list {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.scheduled-time-field[hidden] {
+  display: none;
 }
 
 .onboarding-grid {
@@ -2755,6 +2861,20 @@ input[type="checkbox"] {
   padding: 0 18px 16px;
 }
 
+.hourly-add-form {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.35fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.hourly-add-form button {
+  min-width: 72px;
+}
+
 .transition-event {
   background: #eef6ff;
 }
@@ -2817,6 +2937,7 @@ dd {
   .goal-progress-list,
   .life-area-grid,
   .goal-setting-grid,
+  .project-tracking-grid,
   .habit-tracking-grid,
   .recurring-task-grid,
   .routine-builder-grid,
@@ -2912,6 +3033,7 @@ dd {
 
   .compact-list li,
   .goal-list li,
+  .project-list li,
   .habit-list li,
   .recurring-task-list li,
   .tip-card,
@@ -2930,6 +3052,17 @@ dd {
     gap: 6px;
   }
 
+  .project-task-list li {
+    display: list-item;
+    padding: 0;
+    border: 0;
+  }
+
+  .hourly-add-form {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+
   .panel-title {
     align-items: flex-start;
     flex-direction: column;
@@ -2938,6 +3071,10 @@ dd {
   .quick-capture {
     grid-template-columns: 1fr;
     gap: 9px;
+  }
+
+  .capture-workspace {
+    grid-template-columns: 1fr;
   }
 
   .quick-capture form[data-action="review-quick-capture"] {
@@ -2950,6 +3087,10 @@ dd {
   }
 
   .capture-review {
+    grid-template-columns: 1fr;
+  }
+
+  .capture-task-details {
     grid-template-columns: 1fr;
   }
 

@@ -72,6 +72,18 @@ import {
   saveWeeklyReviewSnapshot,
 } from "./progress-review.js";
 import {
+  clearProjectDraft,
+  completeProject,
+  createProject,
+  deleteProject as removeProject,
+  ensureProjectState,
+  getProjectById,
+  getProjectTrackingData as buildProjectTrackingData,
+  reactivateProject,
+  setProjectDraft,
+  updateProject,
+} from "./project-tracking.js";
+import {
   ensurePositiveReinforcementState,
   recordPositiveReinforcementShown,
   selectPositiveReinforcement,
@@ -128,6 +140,7 @@ state.interventionState = ensureInterventionState(state.interventionState);
 ensureEnergyMoodState(state);
 ensureRoutineBuilderState(state);
 ensureGoalState(state);
+ensureProjectState(state);
 ensureHabitState(state);
 ensureRecurringTaskState(state);
 ensureSmartReschedulingState(state);
@@ -452,6 +465,8 @@ export function saveProgressiveHelpArea(formData) {
 export function completeProgressiveSetup(formData) {
   const firstThing = String(formData.get("firstThing") ?? "").trim();
   const moreThings = String(formData.get("moreThings") ?? "").trim();
+  const starterType = String(formData.get("starterType") ?? "").trim();
+  const confirmed = String(formData.get("confirmProgressiveSetup") ?? "") === "true";
   const progressive = ensureProgressiveSetup();
   if (!firstThing) {
     return false;
@@ -459,12 +474,25 @@ export function completeProgressiveSetup(formData) {
 
   progressive.firstThing = firstThing;
   progressive.moreThings = moreThings;
+  progressive.starterItem = previewProgressiveStarterItem(progressive.helpArea, firstThing, starterType);
+
+  if (!confirmed) {
+    progressive.step = "review";
+    saveState(state);
+    return true;
+  }
+
   progressive.completed = true;
   progressive.step = "complete";
-  progressive.starterItem = createProgressiveStarterItem(progressive.helpArea, firstThing);
-  state.ui.activeView = "command-center";
+  progressive.starterItem = createProgressiveStarterItem(progressive.helpArea, firstThing, starterType || progressive.starterItem?.type);
   saveState(state);
   return true;
+}
+
+export function editProgressiveStarterAnswer() {
+  const progressive = ensureProgressiveSetup();
+  progressive.step = "detail";
+  saveState(state);
 }
 
 export function startSetupStep(stepId) {
@@ -1112,6 +1140,7 @@ export function addTask(formData) {
   const when = String(formData.get("when") ?? "Today");
   const category = String(formData.get("category") ?? "Personal");
   const workType = normalizeWorkType(String(formData.get("workType") ?? "none"));
+  const projectId = String(formData.get("projectId") ?? "").trim();
   const task = {
     id: `action-${Date.now()}`,
     areaId,
@@ -1121,9 +1150,12 @@ export function addTask(formData) {
     timingType,
     status: "todo",
     priority: String(formData.get("priority") ?? "Medium"),
-    estimatedEffortMinutes: 15,
+    estimatedEffortMinutes: getDefaultEstimatedMinutes(title),
     createdAt: new Date().toISOString(),
   };
+  if (projectId && getProjectById(state, projectId)) {
+    task.projectId = projectId;
+  }
 
   if (timingType === "scheduled") {
     task.startTime = when;
@@ -1138,6 +1170,149 @@ export function addTask(formData) {
 
   state.actions.unshift(task);
   saveState(state);
+}
+
+export function addHourlyItem(formData) {
+  const type = String(formData.get("hourlyType") ?? "task");
+  const title = String(formData.get("hourlyTitle") ?? "").trim();
+  const hour = String(formData.get("hourlyTime") ?? "9:00 AM");
+  if (!title) {
+    return;
+  }
+
+  if (type === "task") {
+    addTask(makeStateFormData({
+      title,
+      timingType: "scheduled",
+      when: hour,
+      priority: "Medium",
+      category: "Personal",
+      workType: "None",
+      areaId: "projects",
+    }));
+    return;
+  }
+
+  if (type === "habit") {
+    createHabit(state, makeStateFormData({
+      habitName: title,
+      habitCategory: "Personal",
+      habitFrequencyType: "daily",
+      habitTargetDays: "",
+      habitDailyTargetCount: "1",
+      habitWeeklyTargetCount: "1",
+      habitActive: "active",
+    }));
+    saveState(state);
+    return;
+  }
+
+  if (type === "routine") {
+    const routine = createRoutinePlan(state, makeStateFormData({
+      routineName: title,
+      routineType: getDayPart(),
+      routineActive: "active",
+      routineSteps: `${title} - ${getDefaultEstimatedMinutes(title)}`,
+    }));
+    state.timeline.unshift({
+      id: `timeline-${Date.now()}`,
+      title,
+      time: hour,
+      startTime: hour,
+      type: "Routine",
+      areaId: "projects",
+      status: "Upcoming",
+      priority: "Medium",
+      timingType: "scheduled",
+      estimatedEffortMinutes: getDefaultEstimatedMinutes(title),
+      routinePlanId: routine.id,
+      createdAt: new Date().toISOString(),
+    });
+    saveState(state);
+    return;
+  }
+
+  if (type === "project") {
+    createProject(state, makeStateFormData({
+      projectTitle: title,
+      projectCategory: "Personal",
+      projectNextStep: "",
+    }));
+    saveState(state);
+    return;
+  }
+
+  const item = {
+    id: `${type}-${Date.now()}`,
+    title,
+    time: hour,
+    startTime: hour,
+    type: type === "meal" ? "Meal" : "Note",
+    areaId: type === "meal" ? "health" : "projects",
+    status: "Upcoming",
+    priority: "Medium",
+    timingType: "scheduled",
+    estimatedEffortMinutes: type === "meal" ? 30 : 5,
+    createdAt: new Date().toISOString(),
+  };
+  if (type === "meal") {
+    state.meals = Array.isArray(state.meals) ? state.meals : [];
+    state.meals.unshift(item);
+  } else {
+    state.notes = Array.isArray(state.notes) ? state.notes : [];
+    state.notes.unshift(item);
+  }
+  state.timeline.unshift(item);
+  saveState(state);
+}
+
+export function createProjectNextTask(id) {
+  const project = getProjectById(state, id);
+  if (!project?.nextStep) {
+    return null;
+  }
+
+  const task = {
+    id: `action-${Date.now()}`,
+    areaId: "projects",
+    title: project.nextStep,
+    category: project.category === "Work" ? "Work" : "Personal",
+    workType: "none",
+    timingType: "flexible",
+    status: "todo",
+    priority: "Medium",
+    estimatedEffortMinutes: getDefaultEstimatedMinutes(project.nextStep),
+    preferredWindow: "Today",
+    dueDate: "Today",
+    projectId: project.id,
+    createdAt: new Date().toISOString(),
+  };
+
+  state.actions.unshift(task);
+  saveState(state);
+  return task;
+}
+
+function makeStateFormData(values) {
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(values)) {
+    formData.append(key, value ?? "");
+  }
+  return formData;
+}
+
+function getDefaultEstimatedMinutes(title) {
+  const value = String(title ?? "").toLowerCase();
+  if (/\b(medication|medications|medicine|meds|pill|pills|take my|take supplement|supplement|drink water|water)\b/.test(value)) {
+    return 1;
+  }
+  if (/\b(stretch|stretching)\b/.test(value)) {
+    return 15;
+  }
+  if (/\b(email review|review email|review emails|inbox|email)\b/.test(value)) {
+    return 25;
+  }
+  return 15;
 }
 
 export function getRoutineBuilderData() {
@@ -1328,6 +1503,45 @@ export function markGoalComplete(id) {
 
 export function reactivateCompletedGoal(id) {
   reactivateGoal(state, id);
+  saveState(state);
+}
+
+export function getProjectTrackingData() {
+  return buildProjectTrackingData(state);
+}
+
+export function saveProject(formData) {
+  const id = String(formData.get("projectId") ?? "").trim();
+  if (id) {
+    updateProject(state, id, formData);
+  } else {
+    createProject(state, formData);
+  }
+  saveState(state);
+}
+
+export function editProject(id) {
+  setProjectDraft(state, id);
+  saveState(state);
+}
+
+export function cancelProjectEdit() {
+  clearProjectDraft(state);
+  saveState(state);
+}
+
+export function deleteProject(id) {
+  removeProject(state, id);
+  saveState(state);
+}
+
+export function markProjectComplete(id) {
+  completeProject(state, id);
+  saveState(state);
+}
+
+export function reactivateCompletedProject(id) {
+  reactivateProject(state, id);
   saveState(state);
 }
 
@@ -2337,7 +2551,7 @@ function getProgressivePromptExamples() {
   ];
 }
 
-function createProgressiveStarterItem(helpAreaId, firstThing) {
+function createProgressiveStarterItem(helpAreaId, firstThing, starterTypeOverride = "") {
   const helpArea = getProgressiveHelpArea(helpAreaId) ?? getProgressiveHelpArea("organized");
   const now = new Date().toISOString();
   const baseId = `starter-${Date.now()}`;
@@ -2345,26 +2559,9 @@ function createProgressiveStarterItem(helpAreaId, firstThing) {
   ensureHabitState(state);
   ensureGoalState(state);
   ensureRecurringTaskState(state);
+  const starterType = normalizeStarterType(starterTypeOverride || previewProgressiveStarterItem(helpAreaId, firstThing).type);
 
-  if (helpArea.id === "health") {
-    const habit = {
-      id: `habit-${baseId}`,
-      name: firstThing,
-      category: "Health",
-      frequencyType: "daily",
-      targetDays: [],
-      dailyTargetCount: 1,
-      weeklyTargetCount: 1,
-      active: true,
-      createdAt: now,
-      updatedAt: now,
-      source: "progressive-setup",
-    };
-    state.habits.unshift(habit);
-    return { type: "Habit", title: habit.name, message: "I added this as a starter habit so it can stay visible." };
-  }
-
-  if (helpArea.id === "money" || helpArea.id === "hobbies") {
+  if (starterType === "Goal") {
     const goal = {
       id: `goal-${baseId}`,
       title: firstThing,
@@ -2380,23 +2577,22 @@ function createProgressiveStarterItem(helpAreaId, firstThing) {
     return { type: "Goal", title: goal.title, message: "I added this as a starter goal so daily actions can connect back to it." };
   }
 
-  if (helpArea.id === "relationships") {
-    const task = {
-      id: `recurring-${baseId}`,
-      name: `Stay connected: ${firstThing}`,
-      recurrenceType: "weekly",
-      nextOccurrence: getTodayKey(),
-      customSchedule: "",
-      category: "Relationships",
-      priority: "Medium",
+  if (starterType === "Habit") {
+    const habit = {
+      id: `habit-${baseId}`,
+      name: firstThing,
+      category: helpArea.category,
+      frequencyType: "daily",
+      targetDays: [],
+      dailyTargetCount: 1,
+      weeklyTargetCount: 1,
       active: true,
-      completionHistory: [],
       createdAt: now,
       updatedAt: now,
       source: "progressive-setup",
     };
-    state.recurringTasks.unshift(task);
-    return { type: "Recurring task", title: task.name, message: "I set this up as a gentle recurring responsibility so it can come back automatically." };
+    state.habits.unshift(habit);
+    return { type: "Habit", title: habit.name, message: "I added this as a starter habit so it can stay visible." };
   }
 
   const action = {
@@ -2416,6 +2612,42 @@ function createProgressiveStarterItem(helpAreaId, firstThing) {
   };
   state.actions.unshift(action);
   return { type: "Task", title: action.title, message: "I added this as a starter task so there is one useful next step waiting." };
+}
+
+function previewProgressiveStarterItem(helpAreaId, firstThing, starterType = "") {
+  const helpArea = getProgressiveHelpArea(helpAreaId) ?? getProgressiveHelpArea("organized");
+  const type = normalizeStarterType(starterType || suggestProgressiveStarterType(helpArea, firstThing));
+  const messages = {
+    Goal: "I think this is a goal because it sounds like a direction you want life to move toward.",
+    Habit: "I think this is a habit because it sounds like something to keep visible and repeat.",
+    Task: "I think this is a task because it sounds like one concrete next step.",
+  };
+
+  return { type, title: firstThing, message: messages[type] ?? messages.Task };
+}
+
+function suggestProgressiveStarterType(helpArea, firstThing) {
+  const firstThingText = firstThing.toLowerCase();
+  const soundsLikeGoal = /\b(i want to|want to|trying to|i'm trying to|im trying to|i need help|need help|improve|more time|make more room|find more time|spend more time|lose weight|gain muscle|save money|get healthier)\b/.test(firstThingText);
+  const soundsLikeHabit = /\b(every day|daily|each morning|each night|each evening|every morning|every night|take my|take meds|drink water|walk after|stretch)\b/.test(firstThingText);
+
+  if (soundsLikeGoal) {
+    return "Goal";
+  }
+
+  if (soundsLikeHabit || helpArea.id === "health") {
+    return "Habit";
+  }
+
+  if (helpArea.id === "money" || helpArea.id === "hobbies" || helpArea.id === "relationships") {
+    return "Goal";
+  }
+
+  return "Task";
+}
+
+function normalizeStarterType(type) {
+  return ["Goal", "Habit", "Task"].includes(type) ? type : "Task";
 }
 
 function getSetupStepDefinitions() {

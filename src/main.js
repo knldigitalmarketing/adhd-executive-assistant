@@ -4,21 +4,25 @@ import {
   activateHabit,
   activateRecurringTask,
   addTask,
+  addHourlyItem,
   answerInterviewQuestion,
   cancelGoalEdit,
   cancelHabitEdit,
+  cancelProjectEdit,
   cancelRecurringTaskEdit,
   cancelRoutineEdit,
   clearProfilePhoto,
   completeEndOfDayReview,
   completeSmartIntervention,
   completeWeeklyReview,
+  createProjectNextTask,
   deactivateRoutine,
   deactivateHabit,
   deactivateRecurringTask,
   deleteRoutine,
   deleteGoal,
   deleteHabit,
+  deleteProject,
   deleteRecurringTask,
   dismissRecommendation,
   dismissGuidance,
@@ -34,6 +38,7 @@ import {
   editInterviewAnswer,
   editGoal,
   editHabit,
+  editProject,
   clearAppearanceImage,
   disablePrivacyLock,
   getDecisionRecommendation,
@@ -50,6 +55,7 @@ import {
   getMorningBriefingData,
   getOpenTodayActions,
   getPositiveReinforcement,
+  getProjectTrackingData,
   getRecurringTaskData,
   getRoutineBuilderData,
   getScoredActionableItems,
@@ -74,13 +80,16 @@ import {
   pauseFocus,
   completeProgressiveSetup,
   markGoalComplete,
+  markProjectComplete,
   reactivateCompletedGoal,
+  reactivateCompletedProject,
   resumeFocus,
   saveAccountProfile,
   saveAppearanceImage,
   saveAppearanceSettings,
   saveGoal,
   saveHabit,
+  saveProject,
   saveEnergyMoodCheckIn,
   saveRecurringTask,
   saveRoutine,
@@ -136,6 +145,7 @@ const navGroups = [
     items: [
       ["setup", "Guided Setup"],
       ["goals", "Goals"],
+      ["projects", "Projects"],
       ["habits", "Habits"],
       ["routines", "Routines"],
       ["recurring-tasks", "Recurring Tasks"],
@@ -246,6 +256,10 @@ function classifyQuickCapture(text) {
     return "habit";
   }
 
+  if (isSafetyCaptureText(value)) {
+    return "task";
+  }
+
   if (/\b(food|pantry|foods i have|in the house|fridge|freezer|meal)\b/.test(value)) {
     return "food";
   }
@@ -263,6 +277,10 @@ function classifyQuickCapture(text) {
   }
 
   return "task";
+}
+
+function isSafetyCaptureText(text) {
+  return /\b(child|children|kid|kids|baby|toddler|school drop-off|school pickup|drop off.*(kid|kids|child|children|school|daycare)|pick up.*(kid|kids|child|children|school|daycare)|car seat|in car|daycare)\b/.test(String(text).toLowerCase());
 }
 
 function detectAssistanceIntent(text) {
@@ -291,6 +309,10 @@ function getQuickCaptureReason(type, text, assistanceIntent = false) {
 
   if (/\btomorrow\b/i.test(text) && type === "task") {
     return "This sounds like a one-off task, probably for tomorrow.";
+  }
+
+  if (type === "task" && isSafetyCaptureText(text)) {
+    return "This sounds time-sensitive, so I will keep it visible as a high-priority action until you mark it done.";
   }
 
   return reasons[type] ?? reasons.task;
@@ -419,6 +441,7 @@ function saveQuickCaptureDraft(formData) {
   const category = inferCaptureCategory(rawText);
   const workType = inferCaptureWorkType(rawText);
   const assistanceIntent = detectAssistanceIntent(rawText);
+  const safetyTask = type === "task" && isSafetyCaptureText(rawText);
   const result = {
     title,
     type,
@@ -486,13 +509,18 @@ function saveQuickCaptureDraft(formData) {
     makeFormData({
       title,
       timingType: "flexible",
-      when: /\btomorrow\b/i.test(rawText) ? "Tomorrow" : "Today",
-      priority: "Medium",
+      when: String(formData.get("captureTaskWhen") ?? (/\btomorrow\b/i.test(rawText) ? "Tomorrow" : "Today")),
+      priority: String(formData.get("captureTaskPriority") ?? (safetyTask ? "High" : "Medium")),
       category,
       workType,
       areaId: "projects",
     }),
   );
+  if (safetyTask) {
+    result.nextStep = "I added this as a high-priority Today task so it can stay visible in Now until you mark it done.";
+  } else if (type === "task") {
+    result.nextStep = `I added this to ${String(formData.get("captureTaskWhen") ?? "Today")}. Open Today or Command Center to manage it.`;
+  }
   return result;
 }
 
@@ -555,15 +583,13 @@ function renderQuickCapture() {
     <section class="quick-capture ${collapsed ? "is-collapsed" : ""}" aria-label="Quick Capture">
       <div class="capture-heading">
         <button type="button" class="capture-toggle" data-action="toggle-quick-capture" aria-expanded="${collapsed ? "false" : "true"}" aria-label="${collapsed ? "Open Capture" : "Collapse Capture"}"></button>
-        <div>
-          <strong>Capture</strong>
-          ${collapsed ? "" : `<p>Speak or type one thing. Review it before it saves.</p>`}
-        </div>
+        <strong>Capture</strong>
       </div>
       <div class="capture-workspace" ${collapsed ? "hidden" : ""}>
+        <p>Speak or type one thing. Review it before it saves.</p>
         <form data-action="review-quick-capture">
           <label class="sr-only" for="quick-capture-text">What do you want to capture?</label>
-          <input id="quick-capture-text" name="captureText" type="text" value="${escapeHtml(quickCaptureText)}" placeholder="Say or type one thing..." required />
+          <input id="quick-capture-text" name="captureText" type="text" value="${escapeHtml(quickCaptureText)}" placeholder="Example: pay a bill, pick up kid, child is in car for school drop-off" required />
           <div class="capture-actions">
             <button type="button" class="voice-capture-button" data-action="start-quick-capture-voice">Voice</button>
             <button type="submit">Start Adding</button>
@@ -596,6 +622,7 @@ function renderQuickCaptureDraft() {
         <label for="capture-title">Save as</label>
         <input id="capture-title" name="captureTitle" type="text" value="${escapeHtml(quickCaptureDraft.title)}" required />
       </div>
+      ${renderQuickCaptureTaskDetails(quickCaptureDraft)}
       <p>${escapeHtml(quickCaptureDraft.reason)}</p>
       ${quickCaptureDraft.nextStep ? `<p class="capture-next-step">${escapeHtml(quickCaptureDraft.nextStep)}</p>` : ""}
       <div class="button-row">
@@ -603,6 +630,33 @@ function renderQuickCaptureDraft() {
         <button type="button" class="secondary-button" data-action="clear-quick-capture">Cancel</button>
       </div>
     </form>
+  `;
+}
+
+function renderQuickCaptureTaskDetails(draft) {
+  if (draft.type !== "task") {
+    return "";
+  }
+
+  const safetyTask = isSafetyCaptureText(draft.rawText);
+  const selectedWhen = /\btomorrow\b/i.test(draft.rawText) ? "Tomorrow" : "Today";
+  const selectedPriority = safetyTask ? "High" : "Medium";
+
+  return `
+    <div class="capture-task-details">
+      <div>
+        <label for="capture-task-when">When?</label>
+        <select id="capture-task-when" name="captureTaskWhen">
+          ${["Today", "Tomorrow", "This week"].map((value) => `<option value="${value}" ${value === selectedWhen ? "selected" : ""}>${value === "Today" && safetyTask ? "Now / today" : value}</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <label for="capture-task-priority">Importance?</label>
+        <select id="capture-task-priority" name="captureTaskPriority">
+          ${["High", "Medium", "Low"].map((value) => `<option value="${value}" ${value === selectedPriority ? "selected" : ""}>${value}</option>`).join("")}
+        </select>
+      </div>
+    </div>
   `;
 }
 
@@ -835,7 +889,10 @@ function renderToday() {
           <button type="button" class="secondary-button" data-action="reset-local-data">Reset local data</button>
         </div>
       </div>
+      ${renderTodaySchedule()}
+      ${renderQuickCapture()}
       ${renderPositiveReinforcementBanner(reinforcement)}
+      ${renderAddTaskForm()}
       <div class="today-grid">
         ${renderDecisionCard(recommendation)}
         <article class="stat-card">
@@ -851,9 +908,56 @@ function renderToday() {
           <span>Snoozed</span>
         </article>
       </div>
-      ${renderAddTaskForm()}
     </section>
   `;
+}
+
+function renderTodaySchedule() {
+  const scheduledItems = getTodayScheduledItems();
+
+  return `
+    <article class="panel today-schedule-panel" data-window-title="Today's Schedule">
+      <div class="panel-title">
+        <h3>Today's Schedule</h3>
+        ${pill(`${scheduledItems.length} scheduled`, scheduledItems.length ? "strong" : "neutral")}
+      </div>
+      ${
+        scheduledItems.length === 0
+          ? `<p class="empty-copy">Nothing scheduled yet. Add something below or use Capture.</p>`
+          : `<ul class="briefing-list today-schedule-list">${scheduledItems
+              .map(
+                (item) => `
+                  <li class="${isDone(item) ? "is-complete" : ""}">
+                    <strong>${escapeHtml(item.title)}</strong>
+                    <span>${escapeHtml(item.displayTime)} - ${escapeHtml(item.type ?? "Task")}</span>
+                  </li>
+                `,
+              )
+              .join("")}</ul>`
+      }
+    </article>
+  `;
+}
+
+function getTodayScheduledItems() {
+  const state = getState();
+  const timelineItems = (state.timeline ?? []).map((item) => ({
+    ...item,
+    collection: "timeline",
+    displayTime: item.time ?? item.startTime ?? "Today",
+  }));
+  const actionItems = (state.actions ?? [])
+    .filter((item) => (item.timingType ?? "") === "scheduled" || item.startTime || item.time)
+    .map((item) => ({
+      ...item,
+      collection: "actions",
+      type: "Task",
+      displayTime: item.startTime ?? item.time ?? "Today",
+    }));
+
+  return [...timelineItems, ...actionItems]
+    .filter((item) => !isDone(item))
+    .sort((a, b) => getHourFromTime(a.displayTime) - getHourFromTime(b.displayTime));
 }
 
 function renderMorningBriefing() {
@@ -1241,6 +1345,106 @@ function renderGoalItem(goal, completed) {
         <button type="button" data-action="delete-goal" data-id="${escapeHtml(goal.id)}">Delete</button>
       </div>
     </li>
+  `;
+}
+
+function renderProjectTracking(data = getProjectTrackingData()) {
+  const draft = data.draftProject;
+
+  return `
+    <section id="project-tracking" class="section project-tracking-section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Projects</p>
+          <h2>Keep big things separated</h2>
+          <p class="empty-copy">Projects are containers for work that takes more than one action. Use them for repairs, creative builds, research ideas, home projects, or anything you want to keep from blending into the rest of life.</p>
+        </div>
+        ${pill(`${data.activeProjects.length} active`, "strong")}
+      </div>
+      <div class="project-tracking-grid">
+        <form class="panel project-form" data-action="save-project">
+          <input type="hidden" name="projectId" value="${escapeHtml(draft?.id ?? "")}" />
+          <div class="panel-title">
+            <h3>${draft ? "Update This Project" : "Create Project"}</h3>
+            <p class="empty-copy">Use this for a bigger thing that needs its own list. Example: Motorcycle repair, fairing dragon, wildfire quilt, or the Life Enablement app.</p>
+          </div>
+          <div>
+            <label for="project-title">Project name</label>
+            <input id="project-title" name="projectTitle" type="text" value="${escapeHtml(draft?.title ?? "")}" placeholder="What are you working on?" required />
+          </div>
+          <div>
+            <label for="project-category">Project type</label>
+            <p class="field-help">What kind of list is this?</p>
+            <select id="project-category" name="projectCategory">
+              ${data.categories.map((category) => `<option ${category === (draft?.category ?? "Personal") ? "selected" : ""}>${escapeHtml(category)}</option>`).join("")}
+            </select>
+          </div>
+          <div>
+            <label for="project-next-step">Next known step</label>
+            <input id="project-next-step" name="projectNextStep" type="text" value="${escapeHtml(draft?.nextStep ?? "")}" placeholder="Optional" />
+          </div>
+          <div class="button-row">
+            <button type="submit">${draft ? "Save Project" : "Create Project"}</button>
+            ${draft ? `<button type="button" class="secondary-button" data-action="cancel-project-edit">Cancel</button>` : ""}
+          </div>
+        </form>
+        <article class="panel project-list-panel">
+          <div class="panel-title">
+            <h3>Active projects</h3>
+            ${pill(`${data.activeProjects.length}`, "strong")}
+          </div>
+          ${renderProjectList(data.activeProjects, false)}
+          ${data.completedProjects.length > 0 ? `<h3 class="subsection-title">Completed</h3>${renderProjectList(data.completedProjects.slice(0, 4), true)}` : ""}
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function renderProjectList(projects, completed) {
+  if (projects.length === 0) {
+    return `<p class="empty-copy">${completed ? "No completed projects yet." : "No projects yet."}</p>`;
+  }
+
+  return `
+    <ul class="project-list">
+      ${projects.map((project) => renderProjectItem(project, completed)).join("")}
+    </ul>
+  `;
+}
+
+function renderProjectItem(project, completed) {
+  const projectTasks = getState().actions.filter((task) => task.projectId === project.id);
+  return `
+    <li>
+      <div>
+        <strong>${escapeHtml(project.title)}</strong>
+        <span>${escapeHtml(project.category)}${project.nextStep ? ` - next: ${escapeHtml(project.nextStep)}` : ""}</span>
+        ${renderProjectTaskList(projectTasks)}
+      </div>
+      <div class="item-actions">
+        ${pill(completed ? "Completed" : "Active", completed ? "neutral" : "strong")}
+        ${!completed && project.nextStep ? `<button type="button" data-action="start-project-next-step" data-id="${escapeHtml(project.id)}">Start Next Step</button>` : ""}
+        ${completed ? `<button type="button" data-action="reactivate-project" data-id="${escapeHtml(project.id)}">Reactivate</button>` : `<button type="button" data-action="complete-project" data-id="${escapeHtml(project.id)}">Complete</button>`}
+        <button type="button" data-action="edit-project" data-id="${escapeHtml(project.id)}">Edit</button>
+        <button type="button" data-action="delete-project" data-id="${escapeHtml(project.id)}">Delete</button>
+      </div>
+    </li>
+  `;
+}
+
+function renderProjectTaskList(tasks) {
+  if (tasks.length === 0) {
+    return "";
+  }
+
+  return `
+    <ul class="project-task-list">
+      ${tasks
+        .slice(0, 4)
+        .map((task) => `<li>${escapeHtml(task.title)} <span>${escapeHtml(statusText(task))}</span></li>`)
+        .join("")}
+    </ul>
   `;
 }
 
@@ -1708,6 +1912,14 @@ function renderHelpView() {
           <p>Use <strong>Teach Assistant</strong> for goals, habits, routines, and recurring tasks. These make recommendations smarter over time.</p>
         </article>
         <article class="panel">
+          <h3>Goals, projects, habits, routines, and repeats</h3>
+          <p><strong>Goals</strong> are outcomes you want help moving toward. <strong>Projects</strong> are bigger things with several actions inside them. <strong>Habits</strong> are repeatable actions. <strong>Routines</strong> are ordered steps. <strong>Recurring tasks</strong> are responsibilities that come back automatically.</p>
+        </article>
+        <article class="panel">
+          <h3>When you need an hourly plan</h3>
+          <p>Use <strong>View - Hourly View</strong> to add a task, habit, routine, project item, note, or meal directly into a time block. Scheduled tasks from there feed back into Today, Command Center, and Focus View.</p>
+        </article>
+        <article class="panel">
           <h3>When you are setting up your day</h3>
           <p>Use <strong>View - Day Glimpse</strong>. It shows big things, scheduled items, issues, and the best way to start.</p>
         </article>
@@ -1843,7 +2055,7 @@ function renderProgressiveDetailStep(progressive) {
       <p class="empty-copy">${escapeHtml(progressive.helperText)}</p>
       <form class="progressive-form" data-action="complete-progressive-setup">
         <label for="first-thing">One thing to start with</label>
-        <input id="first-thing" name="firstThing" type="text" value="${escapeHtml(progressive.firstThing)}" placeholder="Example: walk after breakfast, pay insurance, call Mom" required />
+        <input id="first-thing" name="firstThing" type="text" value="${escapeHtml(progressive.firstThing)}" placeholder="Example: pay a bill, pick up kid after school, child is in car for school drop-off" required />
         <label for="more-things">Optional: add more if you already know them</label>
         <textarea id="more-things" name="moreThings" rows="3" placeholder="One per line, or leave this blank">${escapeHtml(progressive.moreThings)}</textarea>
         <p class="field-help">${escapeHtml(progressive.optionalText)}</p>
@@ -2171,8 +2383,27 @@ function renderShopView() {
         ${renderVoiceListEntry(getVoiceListEntryData("foodMeals"))}
         ${renderVoiceListEntry(getVoiceListEntryData("shoppingList"))}
       </div>
+      ${renderSavedMealsPanel()}
       <p class="empty-copy">These are local prototype lists only. No shopping, delivery, account, payment, or integration flow is active.</p>
     </section>
+  `;
+}
+
+function renderSavedMealsPanel() {
+  const meals = getState().meals ?? [];
+
+  return `
+    <article class="panel saved-meals-panel" data-window-title="Meals">
+      <div class="panel-title">
+        <h3>Meals</h3>
+        ${pill(`${meals.length} saved`, meals.length ? "strong" : "neutral")}
+      </div>
+      ${
+        meals.length === 0
+          ? `<p class="empty-copy">Meals added from the Hourly View will appear here.</p>`
+          : `<ul class="briefing-list">${meals.map((meal) => `<li><strong>${escapeHtml(meal.title)}</strong><span>${escapeHtml(meal.time ?? "Today")}</span></li>`).join("")}</ul>`
+      }
+    </article>
   `;
 }
 
@@ -2306,16 +2537,17 @@ function renderCommandNow(recommendation) {
   if (!recommendation) {
     return `
       <article class="panel command-card command-now" data-window-title="Now">
-        ${renderCommandHeader("Now", "start-working", "Open Working Mode")}
+        ${renderCommandHeader("Now", "show-today", "Open Today controls")}
         <h3>Nothing urgent is waiting.</h3>
         <p class="empty-copy">The assistant has no open next action right now.</p>
       </article>
     `;
   }
 
+  const timingClass = getScheduledTimingClass(recommendation);
   return `
-    <article class="panel command-card command-now" data-window-title="Now">
-      ${renderCommandHeader("Now", "start-working", "Open Working Mode")}
+    <article class="panel command-card command-now${timingClass}" data-window-title="Now">
+      ${renderCommandHeader("Now", "show-today", "Open Today controls")}
       <h3>${escapeHtml(recommendation.title)}</h3>
       <p>${escapeHtml(getShortWhy(recommendation))}</p>
       <div class="command-meta">
@@ -2394,7 +2626,7 @@ function renderCommandMiddlePrompt({ tip, reinforcement }) {
   }
 
   return `
-    <article class="panel command-middle-prompt" data-window-title="Positive Message">
+    <article class="panel command-middle-prompt" data-window-title="Motivation">
       <strong>${escapeHtml(reinforcement.text)}</strong>
       <span>${escapeHtml(reinforcement.source)}</span>
     </article>
@@ -2457,25 +2689,25 @@ function renderCommandAlerts({ intervention, smartRescheduling }) {
     ...(smartRescheduling.conflicts ?? []).slice(0, 2).map((item) => ({ title: item.title, detail: `Conflict: try ${item.suggestedAlternative}` })),
   ];
 
+  if (notices.length === 0) {
+    return "";
+  }
+
   return `
     <article class="panel command-card command-alerts" data-window-title="Alerts">
       <div class="panel-title">
         ${renderCommandHeader("Alerts", "show-dashboard", "Open Today")}
-        ${pill(`${notices.length}`, notices.length ? "warn" : "strong")}
+        ${pill(`${notices.length}`, "warn")}
       </div>
-      ${
-        notices.length === 0
-          ? `<p class="empty-copy">No alerts right now.</p>`
-          : `<ul class="command-list">${notices.map((item) => `<li><div><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></div></li>`).join("")}</ul>`
-      }
+      <ul class="command-list">${notices.map((item) => `<li><div><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></div></li>`).join("")}</ul>
     </article>
   `;
 }
 
 function renderCommandPositiveMessage(message) {
   return `
-    <article class="panel command-card command-positive" data-window-title="Positive Message">
-      ${renderCommandHeader("Positive Message", "show-progress", "Open Progress")}
+    <article class="panel command-card command-positive" data-window-title="Motivation">
+      ${renderCommandHeader("Motivation", "show-progress", "Open Progress")}
       <h3>${escapeHtml(message.text)}</h3>
       <span>${escapeHtml(message.source)}</span>
     </article>
@@ -2490,7 +2722,7 @@ function renderPositiveReinforcementBanner(message) {
   return `
     <aside class="positive-reinforcement-banner" aria-label="Positive reinforcement">
       <div>
-        <p class="eyebrow">Positive Message</p>
+        <p class="eyebrow">Motivation</p>
         <strong>${escapeHtml(message.text)}</strong>
       </div>
       <span>${escapeHtml(message.source)}</span>
@@ -2651,8 +2883,9 @@ function renderNowCard(working) {
     `;
   }
 
+  const timingClass = getScheduledTimingClass(recommendation);
   return `
-    <article class="working-card now-card">
+    <article class="working-card now-card${timingClass}">
       <p class="eyebrow">Now</p>
       <h3>${escapeHtml(recommendation.title)}</h3>
       ${renderRecommendationExplanation(recommendation)}
@@ -2761,8 +2994,9 @@ function renderDecisionCard(recommendation) {
     `;
   }
 
+  const timingClass = getScheduledTimingClass(recommendation);
   return `
-    <article class="next-card decision-card">
+    <article class="next-card decision-card${timingClass}">
       <p class="eyebrow">Do This Next</p>
       <h3>${escapeHtml(recommendation.title)}</h3>
       ${renderRecommendationExplanation(recommendation)}
@@ -2785,6 +3019,55 @@ function renderDecisionCard(recommendation) {
 
 function getPrimaryCompletionLabel(collection) {
   return collection === "habitItems" ? "Add One" : "Done";
+}
+
+function getScheduledTimingClass(recommendation) {
+  const item = recommendation?.item ?? recommendation;
+  if (!item || item.priority !== "High") {
+    return "";
+  }
+
+  const timingType = item.timingType ?? (item.startTime || item.time ? "scheduled" : "flexible");
+  if (timingType !== "scheduled") {
+    return "";
+  }
+
+  const minutesUntil = getMinutesUntilDisplayTime(item.startTime ?? item.time);
+  if (minutesUntil === null) {
+    return "";
+  }
+
+  if (minutesUntil <= 0) {
+    return " is-starting-now";
+  }
+  if (minutesUntil <= 0.5) {
+    return " is-final-countdown";
+  }
+  if (minutesUntil <= 5) {
+    return " is-starting-soon";
+  }
+  return "";
+}
+
+function getMinutesUntilDisplayTime(timeText) {
+  const match = String(timeText ?? "").trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) {
+    return null;
+  }
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const period = match[3].toUpperCase();
+  if (period === "PM" && hours !== 12) {
+    hours += 12;
+  }
+  if (period === "AM" && hours === 12) {
+    hours = 0;
+  }
+
+  const target = new Date();
+  target.setHours(hours, minutes, 0, 0);
+  return (target.getTime() - Date.now()) / 60000;
 }
 
 function renderRecommendationExplanation(recommendation) {
@@ -2860,8 +3143,9 @@ function renderWhyList(why) {
 }
 
 function renderAddTaskForm() {
+  const projects = getProjectTrackingData().activeProjects;
   return `
-    <form class="panel add-task-form" data-action="add-task">
+    <form class="panel add-task-form add-task-priority-medium" data-action="add-task">
       <div>
         <label for="task-title">What?</label>
         <input id="task-title" name="title" type="text" placeholder="What needs action?" required />
@@ -2872,10 +3156,6 @@ function renderAddTaskForm() {
           <option selected>Today</option>
           <option>Tomorrow</option>
           <option>This week</option>
-          <option>9:00 AM</option>
-          <option>10:30 AM</option>
-          <option>1:00 PM</option>
-          <option>3:00 PM</option>
         </select>
       </div>
       <div>
@@ -2887,40 +3167,68 @@ function renderAddTaskForm() {
         </select>
       </div>
       <div>
-        <label for="task-timing">Timing type</label>
+        <label for="task-timing">Timing?</label>
         <select id="task-timing" name="timingType">
           <option value="flexible" selected>Flexible</option>
           <option value="scheduled">Scheduled</option>
           <option value="deadline">Deadline</option>
         </select>
       </div>
-      <div>
-        <label for="task-category">Category</label>
-        <select id="task-category" name="category">
-          <option selected>Personal</option>
-          <option>Health</option>
-          <option>Fitness</option>
-          <option>Work</option>
-          <option>Money</option>
-          <option>Relationship</option>
-          <option>Errand</option>
-        </select>
+      <div class="scheduled-time-field" hidden>
+        <label for="task-scheduled-time">Time?</label>
+        <input id="task-scheduled-time" name="scheduledTime" type="time" />
       </div>
-      <div>
-        <label for="task-work-type">Work Type</label>
-        <select id="task-work-type" name="workType">
-          <option selected>None</option>
-          <option>Revenue</option>
-          <option>Admin</option>
-          <option>Follow-up</option>
-          <option>Creative</option>
-          <option>Maintenance</option>
-        </select>
-      </div>
+      ${
+        projects.length
+          ? `<div>
+              <label for="task-project">Project?</label>
+              <select id="task-project" name="projectId">
+                <option value="">No project</option>
+                ${projects.map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.title)}</option>`).join("")}
+              </select>
+            </div>`
+          : `<input type="hidden" name="projectId" value="" />`
+      }
+      <input type="hidden" name="category" value="Personal" />
+      <input type="hidden" name="workType" value="None" />
       <input type="hidden" name="areaId" value="projects" />
       <button type="submit">Add</button>
     </form>
   `;
+}
+
+function updateAddTaskFormUi(form) {
+  if (!form) {
+    return;
+  }
+
+  const priority = String(form.querySelector("#task-priority")?.value ?? "Medium").toLowerCase();
+  form.classList.toggle("add-task-priority-high", priority === "high");
+  form.classList.toggle("add-task-priority-medium", priority === "medium");
+  form.classList.toggle("add-task-priority-low", priority === "low");
+
+  const isScheduled = form.querySelector("#task-timing")?.value === "scheduled";
+  const timeField = form.querySelector(".scheduled-time-field");
+  const timeInput = form.querySelector("#task-scheduled-time");
+  if (timeField) {
+    timeField.hidden = !isScheduled;
+  }
+  if (timeInput) {
+    timeInput.required = isScheduled;
+  }
+}
+
+function formatTimeInputForTask(value) {
+  const match = String(value ?? "").match(/^(\d{2}):(\d{2})$/);
+  if (!match) {
+    return "";
+  }
+
+  const hours24 = Number(match[1]);
+  const minutes = match[2];
+  const period = hours24 >= 12 ? "PM" : "AM";
+  const hours12 = hours24 % 12 || 12;
+  return `${hours12}:${minutes} ${period}`;
 }
 
 function renderOnboarding() {
@@ -3360,11 +3668,22 @@ function renderHourlyView() {
 
 function buildHourlyViewItems() {
   const state = getState();
-  const events = state.timeline.map((event) => ({
+  const timelineEvents = state.timeline.map((event) => ({
     ...event,
+    collection: "timeline",
     displayTime: event.time ?? event.startTime ?? "Today",
     hour: getHourFromTime(event.time ?? event.startTime),
   }));
+  const scheduledTasks = state.actions
+    .filter((event) => (event.timingType ?? "") === "scheduled" || event.startTime || event.time)
+    .map((event) => ({
+      ...event,
+      collection: "actions",
+      type: "Task",
+      displayTime: event.startTime ?? event.time ?? "Today",
+      hour: getHourFromTime(event.startTime ?? event.time),
+    }));
+  const events = [...timelineEvents, ...scheduledTasks];
 
   return Array.from({ length: 16 }, (_, index) => {
     const hour = index + 6;
@@ -3389,7 +3708,26 @@ function renderHourBlock(hour) {
           ? `<p class="empty-copy">Nothing scheduled for this hour.</p>`
           : `<ul>${hour.events.map((event) => renderHourlyEvent(event)).join("")}</ul>`
       }
+      ${renderHourlyAddForm(hour)}
     </details>
+  `;
+}
+
+function renderHourlyAddForm(hour) {
+  return `
+    <form class="hourly-add-form" data-action="add-hourly-item">
+      <input type="hidden" name="hourlyTime" value="${escapeHtml(hour.label)}" />
+      <select name="hourlyType" aria-label="Item type">
+        <option value="task">Task</option>
+        <option value="habit">Habit</option>
+        <option value="routine">Routine</option>
+        <option value="project">Project</option>
+        <option value="note">Note</option>
+        <option value="meal">Meal</option>
+      </select>
+      <input name="hourlyTitle" type="text" placeholder="Add to ${escapeHtml(hour.label)}" required />
+      <button type="submit">Add</button>
+    </form>
   `;
 }
 
@@ -3402,7 +3740,7 @@ function renderHourlyEvent(event) {
         <span>${escapeHtml(event.type)} - ${escapeHtml(areaName(event.areaId))} - ${escapeHtml(statusText(event))}</span>
       </div>
       <div class="item-actions">
-        ${renderActionButtons("timeline", event)}
+        ${renderActionButtons(event.collection ?? "timeline", event)}
       </div>
     </li>
   `;
@@ -3527,6 +3865,7 @@ function renderApp() {
     ${renderOnboarding()}
     ${renderRoutineBuilder()}
     ${renderGoalSetting()}
+    ${renderProjectTracking()}
     ${renderHabitTracking()}
     ${renderRecurringTasks()}
     ${renderLifeAreaDashboard()}
@@ -3549,7 +3888,7 @@ function renderApp() {
 }
 
 function shouldShowQuickCapture(activeView) {
-  return new Set(["command-center", "today", "working", "hourly", "briefing", "dashboard"]).has(activeView);
+  return new Set(["command-center", "working", "hourly", "briefing", "dashboard"]).has(activeView);
 }
 
 function enhanceCollapsibleWindows() {
@@ -3620,6 +3959,7 @@ function renderActiveView(activeView, fullDashboard) {
     working: renderWorkingMode,
     hourly: renderHourlyView,
     goals: renderGoalSetting,
+    projects: renderProjectTracking,
     habits: renderHabitTracking,
     routines: renderRoutineBuilder,
     "recurring-tasks": renderRecurringTasks,
@@ -3648,14 +3988,11 @@ function scheduleWorkingModeRefresh(activeView) {
     return;
   }
 
-  const focus = getFocusModeData();
-  const refreshMs = focus.status === "running" ? 1000 : 60000;
-
   workingModeTimer = setInterval(() => {
     if (["working", "command-center", "today"].includes(getActiveView())) {
       renderApp();
     }
-  }, refreshMs);
+  }, 1000);
 }
 
 app.addEventListener("click", (event) => {
@@ -3808,6 +4145,10 @@ app.addEventListener("click", (event) => {
     setActiveView("command-center");
     renderApp();
   }
+  if (action === "show-today") {
+    setActiveView("today");
+    renderApp();
+  }
   if (action === "show-dashboard") {
     setActiveView("dashboard");
     renderApp();
@@ -3881,6 +4222,31 @@ app.addEventListener("click", (event) => {
   }
   if (action === "reactivate-goal") {
     reactivateCompletedGoal(id);
+    renderApp();
+  }
+  if (action === "edit-project") {
+    editProject(id);
+    renderApp();
+  }
+  if (action === "cancel-project-edit") {
+    cancelProjectEdit();
+    renderApp();
+  }
+  if (action === "delete-project") {
+    deleteProject(id);
+    renderApp();
+  }
+  if (action === "complete-project") {
+    markProjectComplete(id);
+    renderApp();
+  }
+  if (action === "reactivate-project") {
+    reactivateCompletedProject(id);
+    renderApp();
+  }
+  if (action === "start-project-next-step") {
+    createProjectNextTask(id);
+    setActiveView("today");
     renderApp();
   }
   if (action === "edit-habit") {
@@ -4085,11 +4451,29 @@ app.addEventListener("submit", async (event) => {
     return;
   }
 
+  const projectForm = event.target.closest("form[data-action='save-project']");
+  if (projectForm) {
+    event.preventDefault();
+    saveProject(new FormData(projectForm));
+    projectForm.reset();
+    renderApp();
+    return;
+  }
+
   const routineForm = event.target.closest("form[data-action='save-routine']");
   if (routineForm) {
     event.preventDefault();
     saveRoutine(new FormData(routineForm));
     routineForm.reset();
+    renderApp();
+    return;
+  }
+
+  const hourlyForm = event.target.closest("form[data-action='add-hourly-item']");
+  if (hourlyForm) {
+    event.preventDefault();
+    addHourlyItem(new FormData(hourlyForm));
+    hourlyForm.reset();
     renderApp();
     return;
   }
@@ -4108,12 +4492,22 @@ app.addEventListener("submit", async (event) => {
   }
 
   event.preventDefault();
-  addTask(new FormData(form));
+  const formData = new FormData(form);
+  if (formData.get("timingType") === "scheduled") {
+    formData.set("when", formatTimeInputForTask(formData.get("scheduledTime")) || "Today");
+  }
+  addTask(formData);
   form.reset();
+  updateAddTaskFormUi(form);
   renderApp();
 });
 
 app.addEventListener("change", (event) => {
+  const addTaskInput = event.target.closest(".add-task-form select, .add-task-form input");
+  if (addTaskInput) {
+    updateAddTaskFormUi(addTaskInput.closest(".add-task-form"));
+  }
+
   const profileInput = event.target.closest("input[data-action='upload-profile-photo']");
   if (profileInput && profileInput.files?.[0]) {
     const file = profileInput.files[0];
