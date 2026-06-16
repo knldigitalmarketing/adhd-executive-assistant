@@ -126,6 +126,7 @@ let quickCaptureDraft = null;
 let quickCaptureResult = null;
 let quickCaptureText = "";
 let quickCaptureCollapsed = false;
+let dismissedAssistantNudgeId = "";
 const collapsedWindows = new Set();
 
 const navGroups = [
@@ -723,6 +724,64 @@ function renderQuickCapture() {
       </div>
     </section>
   `;
+}
+
+function renderAssistantNudge(activeView) {
+  const nudge = getAssistantNudge(activeView);
+  if (!nudge) {
+    return "";
+  }
+
+  return `
+    <aside class="assistant-nudge" aria-live="polite">
+      <div>
+        <p class="eyebrow">Helpful next step</p>
+        <strong>${escapeHtml(nudge.title)}</strong>
+        <span>${escapeHtml(nudge.message)}</span>
+      </div>
+      <div class="button-row">
+        ${nudge.actions.map((action) => `<button type="button" class="${action.secondary ? "secondary-button" : ""}" data-action="${escapeHtml(action.action)}">${escapeHtml(action.label)}</button>`).join("")}
+        <button type="button" class="secondary-button" data-action="dismiss-assistant-nudge" data-id="${escapeHtml(nudge.id)}">Not Now</button>
+      </div>
+    </aside>
+  `;
+}
+
+function getAssistantNudge(activeView) {
+  if (!new Set(["command-center", "today", "working", "briefing", "dashboard"]).has(activeView)) {
+    return null;
+  }
+
+  const state = getState();
+  const activeHabits = (state.habits ?? []).filter((habit) => habit.active !== false);
+  const activeRoutines = (state.routinePlans ?? []).filter((routine) => routine.active !== false);
+  const hasMorningRoutine = activeRoutines.some((routine) => String(routine.type ?? "").toLowerCase() === "morning");
+
+  if (activeHabits.length === 0 && dismissedAssistantNudgeId !== "daily-habits") {
+    return {
+      id: "daily-habits",
+      title: "Do you have regular habits you do every day?",
+      message: "Things like morning pills, water, stretching, or a short walk can be taught once so your assistant can keep them visible.",
+      actions: [
+        { label: "Add Daily Habit", action: "show-habits" },
+        { label: "Set Up Morning Routine", action: "show-routines", secondary: true },
+      ],
+    };
+  }
+
+  if (activeHabits.length > 0 && !hasMorningRoutine && dismissedAssistantNudgeId !== "morning-routine") {
+    return {
+      id: "morning-routine",
+      title: "Would you like to set up your morning routine?",
+      message: "A routine can group habits like medication, movement, water, and planning so the morning has a path instead of a pile of choices.",
+      actions: [
+        { label: "Set Up Morning Routine", action: "show-routines" },
+        { label: "Add Another Habit", action: "show-habits", secondary: true },
+      ],
+    };
+  }
+
+  return null;
 }
 
 function renderQuickCaptureDraft() {
@@ -2796,8 +2855,9 @@ function renderCommandNow(recommendation) {
     return `
       <article class="panel command-card command-now" data-window-title="Now">
         ${renderCommandHeader("Now", "show-today", "Open Today controls")}
-        <h3>Nothing urgent is waiting.</h3>
-        <p class="empty-copy">The assistant has no open next action right now.</p>
+        <h3>Your current thing goes here.</h3>
+        <p class="command-helper-copy">This is the one thing your assistant thinks you should be doing now. To enter one, click the <strong>Now</strong> link and add a task in Today.</p>
+        <p class="empty-copy">If nothing is truly due right now, this space can stay open.</p>
       </article>
     `;
   }
@@ -2827,8 +2887,9 @@ function renderCommandNext(item) {
     return `
       <article class="panel command-card command-next" data-window-title="Next">
         ${renderCommandHeader("Next", "show-dashboard", "Open Day Glimpse")}
-        <h3>No upcoming item.</h3>
-        <p class="empty-copy">The next slot is open.</p>
+        <h3>Your next thing goes here.</h3>
+        <p class="command-helper-copy">This is what is coming up after Now. Try it by adding a scheduled task for the next hour in Today or Hourly View.</p>
+        <p class="empty-copy">Scheduled items appear here when they have a time.</p>
       </article>
     `;
   }
@@ -2851,7 +2912,10 @@ function renderCommandToday(items) {
       </div>
       ${
         items.length === 0
-          ? `<p class="empty-copy">No remaining important items are waiting.</p>`
+          ? `<div class="command-empty-guide">
+              <h3>Important items will show here.</h3>
+              <p>This area is for the rest of today: tasks, list follow-up, habits, or routines that matter but are not the one thing in Now.</p>
+            </div>`
           : `<ul class="command-list">${items.map((candidate) => renderCommandTodayItem(candidate)).join("")}</ul>`
       }
     </article>
@@ -2899,6 +2963,7 @@ function renderCommandStatus({ stats, energyMood, briefing, smartRescheduling })
   return `
     <article class="panel command-card command-status-card" data-window-title="Status">
       ${renderCommandHeader("Status", "focus-status-update", "Update Status")}
+      ${!latest ? `<p class="command-helper-copy">This shows how you are doing: mood, energy, progress, streaks, and workload. Use the quick status fields below to teach the assistant what kind of support fits right now.</p>` : ""}
       <dl class="command-status">
         <div><dt>Mood</dt><dd>${escapeHtml(latest?.mood ? titleCase(latest.mood) : "Not checked")}</dd></div>
         <div><dt>Energy</dt><dd>${escapeHtml(latest?.energy ? titleCase(latest.energy) : "Not checked")}</dd></div>
@@ -4138,6 +4203,7 @@ function renderApp() {
     ${renderHeader()}
     <main>
       ${shouldShowQuickCapture(activeView) ? renderQuickCapture() : ""}
+      ${shouldShowQuickCapture(activeView) ? renderAssistantNudge(activeView) : ""}
       ${renderActiveView(activeView, fullDashboard)}
     </main>
   `;
@@ -4440,6 +4506,18 @@ app.addEventListener("click", (event) => {
   }
   if (action === "show-progress") {
     setActiveView("progress");
+    renderApp();
+  }
+  if (action === "show-habits") {
+    setActiveView("habits");
+    renderApp();
+  }
+  if (action === "show-routines") {
+    setActiveView("routines");
+    renderApp();
+  }
+  if (action === "dismiss-assistant-nudge") {
+    dismissedAssistantNudgeId = id;
     renderApp();
   }
   if (action === "focus-status-update") {
