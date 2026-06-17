@@ -131,7 +131,66 @@ let quickCaptureResult = null;
 let quickCaptureText = "";
 let quickCaptureCollapsed = false;
 let dismissedAssistantNudgeId = "";
+let dismissedCommandSetupPromptId = "";
+let walkthroughActive = false;
+let walkthroughStepIndex = 0;
 const collapsedWindows = new Set();
+const WALKTHROUGH_STORAGE_KEY = "life-enablement-assistant:walkthrough-v1";
+
+const walkthroughSteps = [
+  {
+    id: "command-center",
+    view: "command-center",
+    target: "[data-walkthrough='command-center']",
+    title: "Command Center",
+    message: "This is the main daily view. It shows what to focus on now, what is coming next, today's overview, current status, helpful tips, alerts, and encouragement.",
+  },
+  {
+    id: "now",
+    view: "command-center",
+    target: "[data-walkthrough='now']",
+    title: "Now",
+    message: "Now is the single best thing to focus on at the moment. It helps reduce decision overload and keeps you from managing too many things at once.",
+  },
+  {
+    id: "next",
+    view: "command-center",
+    target: "[data-walkthrough='next']",
+    title: "Next",
+    message: "Next shows what is coming up after the current item, so you can feel oriented without planning the whole day manually.",
+  },
+  {
+    id: "today",
+    view: "command-center",
+    target: "[data-walkthrough='today']",
+    title: "Today",
+    message: "Today gives a broader look at the day's tasks, schedule, routines, habits, and important items.",
+  },
+  {
+    id: "status",
+    view: "command-center",
+    target: "[data-walkthrough='status']",
+    title: "Status",
+    message: "Status lets you quickly update mood, energy, or current state so recommendations can become more realistic.",
+  },
+  {
+    id: "capture",
+    view: "command-center",
+    target: "[data-walkthrough='capture']",
+    title: "Start Adding",
+    message: "Use Capture to quickly add anything: task, goal, habit, routine, recurring task, shopping item, or note. The app helps classify it before saving.",
+  },
+  { id: "goals", view: "goals", target: "[data-walkthrough='goals']", title: "Goals", message: "Goals are larger outcomes you are working toward over time." },
+  { id: "habits", view: "habits", target: "[data-walkthrough='habits']", title: "Habits", message: "Habits are repeated behaviors you want to build or maintain." },
+  { id: "routines", view: "routines", target: "[data-walkthrough='routines']", title: "Routines", message: "Routines are step-by-step flows like morning, evening, work startup, or shutdown routines." },
+  { id: "recurring", view: "recurring-tasks", target: "[data-walkthrough='recurring-tasks']", title: "Recurring Tasks", message: "Recurring Tasks are things that come back on a schedule, like trash day, bills, medication refills, cleaning, or admin work." },
+  { id: "working", view: "working", target: "[data-walkthrough='working']", title: "Working Mode", message: "Working Mode is a stripped-down focus view for when you want less clutter and only need what to do now and what is next." },
+  { id: "briefing", view: "briefing", target: "[data-walkthrough='briefing']", title: "Morning Briefing", message: "Morning Briefing helps you start the day by showing big things, scheduled items, possible issues, and suggested focus." },
+  { id: "progress", view: "progress", target: "[data-walkthrough='progress']", title: "Progress / Life Areas", message: "Progress helps you see patterns, streaks, completed items, and how different life areas are doing." },
+  { id: "learn", view: "learn", target: "[data-walkthrough='learn']", title: "Learn", message: "Learn contains helpful tips, guidance, and strategies for daily follow-through." },
+  { id: "shop", view: "shop", target: "[data-walkthrough='shop']", title: "Shop", message: "Shop can eventually help manage useful items, shopping reminders, or recommended tools. For now, it is a simple prototype area." },
+  { id: "help", view: "help", target: "[data-walkthrough='help']", title: "Help", message: "Help explains how to use the app in normal daily life. You can restart this walkthrough from here later." },
+];
 
 const navGroups = [
   {
@@ -223,6 +282,83 @@ function escapeHtml(value) {
 
 function pill(text, tone = "neutral") {
   return `<span class="pill pill-${tone}">${escapeHtml(text)}</span>`;
+}
+
+function getWalkthroughStatus() {
+  try {
+    return JSON.parse(window.localStorage.getItem(WALKTHROUGH_STORAGE_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveWalkthroughStatus(values) {
+  window.localStorage.setItem(WALKTHROUGH_STORAGE_KEY, JSON.stringify({
+    ...getWalkthroughStatus(),
+    ...values,
+    updatedAt: new Date().toISOString(),
+  }));
+}
+
+function startWalkthrough(index = 0) {
+  walkthroughActive = true;
+  walkthroughStepIndex = Math.max(0, Math.min(index, walkthroughSteps.length - 1));
+  setActiveView(walkthroughSteps[walkthroughStepIndex].view);
+  renderApp();
+}
+
+function finishWalkthrough(status = "completed") {
+  walkthroughActive = false;
+  saveWalkthroughStatus({
+    completed: status === "completed",
+    skipped: status === "skipped",
+    lastStepId: walkthroughSteps[walkthroughStepIndex]?.id ?? "",
+  });
+  renderApp();
+}
+
+function moveWalkthrough(delta) {
+  walkthroughStepIndex = Math.max(0, Math.min(walkthroughStepIndex + delta, walkthroughSteps.length - 1));
+  setActiveView(walkthroughSteps[walkthroughStepIndex].view);
+  renderApp();
+}
+
+function renderWalkthroughOverlay() {
+  if (!walkthroughActive) {
+    return "";
+  }
+
+  const step = walkthroughSteps[walkthroughStepIndex];
+  const isFirst = walkthroughStepIndex === 0;
+  const isLast = walkthroughStepIndex === walkthroughSteps.length - 1;
+  return `
+    <div class="walkthrough-layer" role="dialog" aria-modal="true" aria-label="App walkthrough">
+      <article class="walkthrough-bubble">
+        <p class="eyebrow">Walkthrough ${walkthroughStepIndex + 1} of ${walkthroughSteps.length}</p>
+        <h3>${escapeHtml(step.title)}</h3>
+        <p>${escapeHtml(step.message)}</p>
+        <div class="walkthrough-controls">
+          <button type="button" class="secondary-button" data-action="walkthrough-back" ${isFirst ? "disabled" : ""}>Back</button>
+          <button type="button" class="secondary-button" data-action="walkthrough-skip">Skip</button>
+          <button type="button" data-action="${isLast ? "walkthrough-finish" : "walkthrough-next"}">${isLast ? "Finish" : "Next"}</button>
+        </div>
+      </article>
+    </div>
+  `;
+}
+
+function syncWalkthroughTarget() {
+  document.querySelectorAll(".walkthrough-target").forEach((element) => element.classList.remove("walkthrough-target"));
+  if (!walkthroughActive) {
+    return;
+  }
+
+  const step = walkthroughSteps[walkthroughStepIndex];
+  const target = document.querySelector(step.target);
+  if (target) {
+    target.classList.add("walkthrough-target");
+    target.scrollIntoView({ block: "center" });
+  }
 }
 
 function makeFormData(values) {
@@ -708,7 +844,7 @@ function renderNavButton(view, label, activeView) {
 function renderQuickCapture() {
   const collapsed = quickCaptureCollapsed && !quickCaptureDraft;
   return `
-    <section class="quick-capture ${collapsed ? "is-collapsed" : ""}" aria-label="Quick Capture">
+    <section class="quick-capture ${collapsed ? "is-collapsed" : ""}" aria-label="Quick Capture" data-walkthrough="capture">
       <div class="capture-heading">
         <button type="button" class="capture-toggle" data-action="toggle-quick-capture" aria-expanded="${collapsed ? "false" : "true"}" aria-label="${collapsed ? "Open Capture" : "Collapse Capture"}"></button>
         <strong>Capture</strong>
@@ -731,6 +867,10 @@ function renderQuickCapture() {
 }
 
 function renderAssistantNudge(activeView) {
+  if (activeView === "command-center") {
+    return "";
+  }
+
   const nudge = getAssistantNudge(activeView);
   if (!nudge) {
     return "";
@@ -752,7 +892,7 @@ function renderAssistantNudge(activeView) {
 }
 
 function getAssistantNudge(activeView) {
-  if (!new Set(["command-center", "today", "working", "briefing", "dashboard"]).has(activeView)) {
+  if (!new Set(["command-center", "today", "working", "briefing", "dashboard", "hourly"]).has(activeView)) {
     return null;
   }
 
@@ -760,27 +900,58 @@ function getAssistantNudge(activeView) {
   const activeHabits = (state.habits ?? []).filter((habit) => habit.active !== false);
   const activeRoutines = (state.routinePlans ?? []).filter((routine) => routine.active !== false);
   const hasMorningRoutine = activeRoutines.some((routine) => String(routine.type ?? "").toLowerCase() === "morning");
+  const hasTimedMorningRoutine = activeRoutines.some((routine) => String(routine.type ?? "").toLowerCase() === "morning" && routine.startTime);
+  const activeRecurringTasks = (state.recurringTasks ?? []).filter((task) => task.active !== false);
+  const hasTimedRecurringTask = activeRecurringTasks.some((task) => task.scheduledTime);
+  const hasHourlyItems = (state.timeline ?? []).some((item) => item.startTime || item.time)
+    || (state.actions ?? []).some((item) => item.startTime || item.time)
+    || activeRoutines.some((routine) => routine.startTime)
+    || hasTimedRecurringTask;
 
-  if (activeHabits.length === 0 && dismissedAssistantNudgeId !== "daily-habits") {
+  if (!hasMorningRoutine && dismissedAssistantNudgeId !== "first-morning-routine") {
     return {
-      id: "daily-habits",
-      title: "Do you have regular habits you do every day?",
-      message: "Things like morning pills, water, stretching, or a short walk can be taught once so your assistant can keep them visible.",
+      id: "first-morning-routine",
+      title: "Start by building one morning path.",
+      message: "Add the first few things you want guided: water, meds, coffee, movement, or a quick look at your day. Give it a start time so it lands in Hourly View.",
       actions: [
-        { label: "Add Daily Habit", action: "show-habits" },
-        { label: "Set Up Morning Routine", action: "show-routines", secondary: true },
+        { label: "Set Up Morning Routine", action: "show-routines" },
+        { label: "Add Daily Habit", action: "show-habits", secondary: true },
       ],
     };
   }
 
-  if (activeHabits.length > 0 && !hasMorningRoutine && dismissedAssistantNudgeId !== "morning-routine") {
+  if (hasMorningRoutine && !hasTimedMorningRoutine && dismissedAssistantNudgeId !== "time-morning-routine") {
     return {
-      id: "morning-routine",
-      title: "Would you like to set up your morning routine?",
-      message: "A routine can group habits like medication, movement, water, and planning so the morning has a path instead of a pile of choices.",
+      id: "time-morning-routine",
+      title: "Put your morning routine on the day.",
+      message: "A routine becomes much more useful when it has a start time. Then each step can show up in the hour it belongs.",
       actions: [
-        { label: "Set Up Morning Routine", action: "show-routines" },
-        { label: "Add Another Habit", action: "show-habits", secondary: true },
+        { label: "Add Start Time", action: "show-routines" },
+        { label: "See Hourly View", action: "show-hourly", secondary: true },
+      ],
+    };
+  }
+
+  if (activeRecurringTasks.length === 0 && dismissedAssistantNudgeId !== "first-recurring-task") {
+    return {
+      id: "first-recurring-task",
+      title: "Add one responsibility that comes back.",
+      message: "Use recurring tasks for things like trash night, bills, water breaks, refills, or weekly check-ins. If it has a time, it will land in Hourly View.",
+      actions: [
+        { label: "Add Recurring Task", action: "show-recurring-tasks" },
+        { label: "Try Water Breaks", action: "add-water-break-template", secondary: true },
+      ],
+    };
+  }
+
+  if (!hasHourlyItems && dismissedAssistantNudgeId !== "see-hourly-day") {
+    return {
+      id: "see-hourly-day",
+      title: "Want to see your day by the hour?",
+      message: "Timed routines, recurring tasks, and scheduled tasks stack here so you can spot busy hours before they run you over.",
+      actions: [
+        { label: "Open Hourly View", action: "show-hourly" },
+        { label: "Add Timed Repeat", action: "show-recurring-tasks", secondary: true },
       ],
     };
   }
@@ -1159,7 +1330,7 @@ function renderMorningBriefing() {
   const briefing = getMorningBriefingData();
 
   return `
-    <section id="briefing" class="section briefing-screen">
+    <section id="briefing" class="section briefing-screen" data-walkthrough="briefing">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Day Glimpse</p>
@@ -1276,7 +1447,7 @@ function renderRoutineBuilder(data = getRoutineBuilderData()) {
   const draft = data.draftRoutine;
 
   return `
-    <section id="routine-builder" class="section routine-builder-section">
+    <section id="routine-builder" class="section routine-builder-section" data-walkthrough="routines">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Routine Builder</p>
@@ -1613,7 +1784,7 @@ function renderGoalSetting(data = getGoalSettingData(), briefingGoals = null) {
   const visibleActiveGoals = briefingGoals ?? data.activeGoals.slice(0, 3);
 
   return `
-    <section id="goal-setting" class="section goal-setting-section">
+    <section id="goal-setting" class="section goal-setting-section" data-walkthrough="goals">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Goal Setting</p>
@@ -1805,7 +1976,7 @@ function renderHabitTracking(data = getHabitTrackingData()) {
   const draft = data.draftHabit;
 
   return `
-    <section id="habit-tracking" class="section habit-tracking-section">
+    <section id="habit-tracking" class="section habit-tracking-section" data-walkthrough="habits">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Habit Tracking</p>
@@ -1951,7 +2122,7 @@ function renderRecurringTasks(data = getRecurringTaskData()) {
   const draft = data.draftTask;
 
   return `
-    <section id="recurring-tasks" class="section recurring-task-section">
+    <section id="recurring-tasks" class="section recurring-task-section" data-walkthrough="recurring-tasks">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Recurring Tasks</p>
@@ -2178,7 +2349,7 @@ function renderWorkingMode() {
   const working = getWorkingModeData();
 
   return `
-    <section id="working" class="section working-mode">
+    <section id="working" class="section working-mode" data-walkthrough="working">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Working Mode</p>
@@ -2215,7 +2386,7 @@ function renderCommandCenter() {
   const reinforcement = getPositiveReinforcement("command-center");
 
   return `
-    <section id="command-center" class="section command-center-mode">
+    <section id="command-center" class="section command-center-mode" data-walkthrough="command-center">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Command Center</p>
@@ -2227,6 +2398,7 @@ function renderCommandCenter() {
         </div>
       </div>
       ${renderStarterAcknowledgement()}
+      ${renderCommandSetupPrompt()}
       <div class="command-center-grid">
         ${renderCommandNow(now)}
         ${renderCommandNext(next)}
@@ -2237,6 +2409,66 @@ function renderCommandCenter() {
       </div>
     </section>
   `;
+}
+
+function renderCommandSetupPrompt() {
+  const state = getState();
+  const activeRoutines = (state.routinePlans ?? []).filter((routine) => routine.active !== false);
+  const activeRecurringTasks = (state.recurringTasks ?? []).filter((task) => task.active !== false);
+  const hasTimedMorningRoutine = activeRoutines.some((routine) => routine.type === "morning" && routine.startTime);
+  const hasTimedRecurringTask = activeRecurringTasks.some((task) => task.scheduledTime);
+  const promptId = "command-first-use-guide";
+
+  if (dismissedCommandSetupPromptId === promptId) {
+    return "";
+  }
+
+  const guidance = getCommandSetupGuidance({ hasTimedMorningRoutine, hasTimedRecurringTask });
+
+  return `
+    <article class="command-setup-prompt">
+      <div>
+        <p class="eyebrow">${escapeHtml(guidance.eyebrow)}</p>
+        <strong>${escapeHtml(guidance.title)}</strong>
+        <span>${escapeHtml(guidance.message)}</span>
+      </div>
+      <div class="button-row">
+        <button type="button" data-action="${escapeHtml(guidance.primaryAction)}">${escapeHtml(guidance.primaryLabel)}</button>
+        <button type="button" class="secondary-button" data-action="show-hourly">See Hourly View</button>
+        <button type="button" class="secondary-button" data-action="dismiss-command-setup-prompt" data-id="${escapeHtml(promptId)}">Not Now</button>
+      </div>
+    </article>
+  `;
+}
+
+function getCommandSetupGuidance({ hasTimedMorningRoutine, hasTimedRecurringTask }) {
+  if (!hasTimedMorningRoutine) {
+    return {
+      eyebrow: "First useful setup",
+      title: "Teach your assistant one thing it can guide today.",
+      message: "Start with a timed morning routine so your day has a path. Add water, meds, coffee, movement, or a quick review of today.",
+      primaryLabel: "Set Morning Routine",
+      primaryAction: "show-routines",
+    };
+  }
+
+  if (!hasTimedRecurringTask) {
+    return {
+      eyebrow: "Next useful setup",
+      title: "Add one responsibility that comes back.",
+      message: "Use this for trash night, bills, water breaks, refills, or weekly check-ins. If it has a time, it lands in Hourly View.",
+      primaryLabel: "Add Timed Repeat",
+      primaryAction: "show-recurring-tasks",
+    };
+  }
+
+  return {
+    eyebrow: "Structure is started",
+    title: "Your assistant has something real to guide.",
+    message: "Open Hourly View to see timed routines, recurring tasks, and scheduled items together. Add more when you are ready.",
+    primaryLabel: "Open Hourly View",
+    primaryAction: "show-hourly",
+  };
 }
 
 function renderStarterAcknowledgement() {
@@ -2259,7 +2491,7 @@ function renderStarterAcknowledgement() {
 
 function renderProgressView() {
   return `
-    <section id="progress" class="section">
+    <section id="progress" class="section" data-walkthrough="progress">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Progress</p>
@@ -2273,50 +2505,40 @@ function renderProgressView() {
 }
 
 function renderHelpView() {
+  const walkthroughStatus = getWalkthroughStatus();
   return `
-    <section id="help" class="section help-view">
+    <section id="help" class="section help-view" data-walkthrough="help">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Help</p>
-          <h2>How to use this assistant</h2>
-          <p class="empty-copy">Start small. Add one useful thing, let the assistant help, then teach it more when you are ready.</p>
+          <h2>How to Use LifeTrack Each Day</h2>
+          <p class="empty-copy">LifeTrack is meant to be left open during the day as a simple guide. You do not have to perfectly organize your life before using it. Start small, check in, and let the app help you decide what matters next.</p>
         </div>
+        <button type="button" data-action="start-walkthrough">${walkthroughStatus.completed || walkthroughStatus.skipped ? "Restart Walkthrough" : "Start Walkthrough"}</button>
       </div>
-      <div class="help-grid">
-        <article class="panel">
-          <h3>When something pops into your head</h3>
-          <p>Use <strong>Quick Add - Capture</strong>. Speak or type one thing, then let the assistant guess where it belongs before saving it.</p>
-        </article>
-        <article class="panel">
-          <h3>When you want to know what to do now</h3>
-          <p>Use <strong>View - Command Center</strong> or <strong>View - Focus View</strong>. These are the places for the next action.</p>
-        </article>
-        <article class="panel">
-          <h3>When you want to teach the assistant more</h3>
-          <p>Use <strong>Teach Assistant</strong> for goals, habits, routines, and recurring tasks. These make recommendations smarter over time.</p>
-        </article>
-        <article class="panel">
-          <h3>Goals, projects, habits, routines, and repeats</h3>
-          <p><strong>Goals</strong> are outcomes you want help moving toward. <strong>Projects</strong> are bigger things with several actions inside them. <strong>Habits</strong> are repeatable actions. <strong>Routines</strong> are ordered steps. <strong>Recurring tasks</strong> are responsibilities that come back automatically.</p>
-        </article>
-        <article class="panel">
-          <h3>When you need an hourly plan</h3>
-          <p>Use <strong>View - Hourly View</strong> to add a task, habit, routine, project item, note, or meal directly into a time block. Scheduled tasks from there feed back into Today, Command Center, and Focus View.</p>
-        </article>
-        <article class="panel">
-          <h3>When you are setting up your day</h3>
-          <p>Use <strong>View - Day Glimpse</strong>. It shows big things, scheduled items, issues, and the best way to start.</p>
-        </article>
-        <article class="panel">
-          <h3>When food or shopping comes up</h3>
-          <p>Use <strong>Quick Add - Food + Pantry</strong>. You can type, paste, or speak items, then approve the cleaned list.</p>
-        </article>
-        <article class="panel">
-          <h3>What is not built yet</h3>
-          <p>Real wake-up alarms, phone notifications, calendar sync, email, accounts, and cloud backup are not active yet. This version is local-first.</p>
-        </article>
+      <div class="help-daily-guide">
+        ${renderHelpGuideCard("1", "Start with the Command Center", "Open the Command Center first. Look at Now. Do the one thing shown there if it makes sense. Check Next only when you need to know what is coming.")}
+        ${renderHelpGuideCard("2", "Add things quickly", "Use Start Adding whenever something pops into your head. Type naturally, like: Call insurance tomorrow, Take trash out every Monday, Drink water three times a day, Lose 20 pounds, or Add eggs to shopping.")}
+        ${renderHelpGuideCard("3", "Update your Status", "If your mood, energy, or focus changes, update Status. This helps the app make gentler or more realistic recommendations.")}
+        ${renderHelpGuideCard("4", "Use Working Mode when overwhelmed", "Working Mode removes extra clutter. Use it when you only want to know what to do now and what is next.")}
+        ${renderHelpGuideCard("5", "Check the Morning Briefing", "Use Morning Briefing near the start of the day. It helps you see big things, scheduled items, deadlines, and possible problems.")}
+        ${renderHelpGuideCard("6", "Build habits and routines slowly", "Do not try to build a perfect system all at once. Add one or two habits or routines first. Let the app help you repeat them.")}
+        ${renderHelpGuideCard("7", "End of day", "Review what got done. Move or reschedule anything unfinished. Let tomorrow start cleaner.")}
+        ${renderHelpGuideCard("8", "The main idea", "You are not supposed to remember everything or decide everything manually. LifeTrack is here to reduce decisions, keep important things visible, and help you keep moving.")}
       </div>
     </section>
+  `;
+}
+
+function renderHelpGuideCard(number, title, copy) {
+  return `
+    <article class="panel help-guide-card">
+      <span>${escapeHtml(number)}</span>
+      <div>
+        <h3>${escapeHtml(title)}</h3>
+        <p>${escapeHtml(copy)}</p>
+      </div>
+    </article>
   `;
 }
 
@@ -2576,7 +2798,7 @@ function renderSetupGuide(stepId) {
 
 function renderPlaceholderView(viewName, title, copy) {
   return `
-    <section id="${escapeHtml(viewName)}" class="section placeholder-view">
+    <section id="${escapeHtml(viewName)}" class="section placeholder-view" data-walkthrough="${escapeHtml(viewName)}">
       <article class="panel">
         <p class="eyebrow">${escapeHtml(title)}</p>
         <h2>${escapeHtml(title)}</h2>
@@ -2741,6 +2963,7 @@ function renderSettingsView() {
           </span>
         </summary>
         <div class="prototype-tool-grid">
+          <button type="button" class="secondary-button" data-action="start-walkthrough">Start Walkthrough</button>
           <button type="button" class="secondary-button" data-action="reset-progressive-onboarding">Reset Onboarding</button>
           <button type="button" class="secondary-button" data-action="reset-local-data">Reset App Data</button>
           <button type="button" class="secondary-button" data-action="load-demo" data-demo-id="adhd-weight-loss">Load Focus + Weight Loss Demo</button>
@@ -2754,7 +2977,7 @@ function renderSettingsView() {
 
 function renderShopView() {
   return `
-    <section id="shop" class="section shop-view">
+    <section id="shop" class="section shop-view" data-walkthrough="shop">
       <div class="section-heading">
         <div>
           <p class="eyebrow">Life Input</p>
@@ -3027,7 +3250,7 @@ function renderCommandHeader(label, action, ariaLabel) {
 function renderCommandNow(recommendation) {
   if (!recommendation) {
     return `
-      <article class="panel command-card command-now" data-window-title="Now">
+      <article class="panel command-card command-now" data-window-title="Now" data-walkthrough="now">
         ${renderCommandHeader("Now", "show-today", "Open Today controls")}
         <h3>Your current thing goes here.</h3>
         <p class="command-helper-copy">This is the one thing your assistant thinks you should be doing now. To enter one, click the <strong>Now</strong> link and add a task in Today.</p>
@@ -3038,7 +3261,7 @@ function renderCommandNow(recommendation) {
 
   const timingClass = getScheduledTimingClass(recommendation);
   return `
-    <article class="panel command-card command-now${timingClass}" data-window-title="Now">
+    <article class="panel command-card command-now${timingClass}" data-window-title="Now" data-walkthrough="now">
       ${renderCommandHeader("Now", "show-today", "Open Today controls")}
       <h3>${escapeHtml(recommendation.title)}</h3>
       <p>${escapeHtml(getShortWhy(recommendation))}</p>
@@ -3059,7 +3282,7 @@ function renderCommandNow(recommendation) {
 function renderCommandNext(item) {
   if (!item) {
     return `
-      <article class="panel command-card command-next" data-window-title="Next">
+      <article class="panel command-card command-next" data-window-title="Next" data-walkthrough="next">
         ${renderCommandHeader("Next", "show-dashboard", "Open Day Glimpse")}
         <h3>Your next thing goes here.</h3>
         <p class="command-helper-copy">This is what is coming up after Now. Try it by adding a scheduled task for the next hour in Today or Hourly View.</p>
@@ -3069,7 +3292,7 @@ function renderCommandNext(item) {
   }
 
   return `
-    <article class="panel command-card command-next" data-window-title="Next">
+    <article class="panel command-card command-next" data-window-title="Next" data-walkthrough="next">
       ${renderCommandHeader("Next", "show-dashboard", "Open Day Glimpse")}
       <h3>${escapeHtml(item.title ?? item.name)}</h3>
       <p>${escapeHtml(item.startTime ?? item.time ?? item.dueDate ?? item.deadline ?? item.type ?? "Up next")}</p>
@@ -3079,7 +3302,7 @@ function renderCommandNext(item) {
 
 function renderCommandToday(items) {
   return `
-    <article class="panel command-card command-today" data-window-title="Today">
+    <article class="panel command-card command-today" data-window-title="Today" data-walkthrough="today">
       <div class="panel-title">
         ${renderCommandHeader("Today", "show-dashboard", "Open Today")}
         ${pill(`${items.length} important`, "strong")}
@@ -3135,7 +3358,7 @@ function renderCommandStatus({ stats, energyMood, briefing, smartRescheduling })
   const workload = smartRescheduling.load?.today ?? { items: stats.open, minutes: 0 };
 
   return `
-    <article class="panel command-card command-status-card" data-window-title="Status">
+    <article class="panel command-card command-status-card" data-window-title="Status" data-walkthrough="status">
       ${renderCommandHeader("Status", "focus-status-update", "Update Status")}
       ${!latest ? `<p class="command-helper-copy">This shows how you are doing: mood, energy, progress, streaks, and workload. Use the quick status fields below to teach the assistant what kind of support fits right now.</p>` : ""}
       <dl class="command-status">
@@ -4401,8 +4624,10 @@ function renderApp() {
       ${shouldShowQuickCapture(activeView) ? renderAssistantNudge(activeView) : ""}
       ${renderActiveView(activeView, fullDashboard)}
     </main>
+    ${renderWalkthroughOverlay()}
   `;
   enhanceCollapsibleWindows();
+  syncWalkthroughTarget();
   scheduleWorkingModeRefresh(activeView);
   scheduleStarterAcknowledgementDismiss(activeView);
 }
@@ -4563,6 +4788,21 @@ app.addEventListener("click", (event) => {
     }
     renderApp();
   }
+  if (action === "start-walkthrough") {
+    startWalkthrough();
+  }
+  if (action === "walkthrough-next") {
+    moveWalkthrough(1);
+  }
+  if (action === "walkthrough-back") {
+    moveWalkthrough(-1);
+  }
+  if (action === "walkthrough-skip") {
+    finishWalkthrough("skipped");
+  }
+  if (action === "walkthrough-finish") {
+    finishWalkthrough("completed");
+  }
   if (action === "start-quick-capture-voice") {
     quickCaptureCollapsed = false;
     startQuickCaptureVoice(button);
@@ -4715,11 +4955,23 @@ app.addEventListener("click", (event) => {
     setActiveView("routines");
     renderApp();
   }
+  if (action === "show-recurring-tasks") {
+    setActiveView("recurring-tasks");
+    renderApp();
+  }
+  if (action === "show-hourly") {
+    setActiveView("hourly");
+    renderApp();
+  }
   if (action === "add-medication-group-to-routine") {
     addMedicationGroupToRoutine();
   }
   if (action === "dismiss-assistant-nudge") {
     dismissedAssistantNudgeId = id;
+    renderApp();
+  }
+  if (action === "dismiss-command-setup-prompt") {
+    dismissedCommandSetupPromptId = id;
     renderApp();
   }
   if (action === "focus-status-update") {
