@@ -16,6 +16,7 @@ import {
   completeEndOfDayReview,
   completeSmartIntervention,
   completeWeeklyReview,
+  createRoutineFromTemplate,
   createProjectNextTask,
   deactivateRoutine,
   deactivateHabit,
@@ -78,6 +79,7 @@ import {
   markSavedVoiceListItemDone,
   resetLocalData,
   resetProgressiveOnboarding,
+  removeRoutineAction,
   reopenGeneralList,
   reopenSavedVoiceListItem,
   setActiveView,
@@ -88,6 +90,8 @@ import {
   completeProgressiveSetup,
   markGoalComplete,
   markProjectComplete,
+  moveRoutineAction,
+  moveRoutineActionToIndex,
   reactivateCompletedGoal,
   reactivateCompletedProject,
   resumeFocus,
@@ -103,6 +107,8 @@ import {
   saveEnergyMoodCheckIn,
   saveRecurringTask,
   saveRoutine,
+  saveRoutineSchedule,
+  addRoutineActions,
   reviewVoiceListText,
   removeVoiceListItem,
   approveVoiceListItems,
@@ -134,6 +140,7 @@ let dismissedAssistantNudgeId = "";
 let dismissedCommandSetupPromptId = "";
 let walkthroughActive = false;
 let walkthroughStepIndex = 0;
+let draggedRoutineStepId = "";
 const collapsedWindows = new Set();
 const WALKTHROUGH_STORAGE_KEY = "life-enablement-assistant:walkthrough-v1";
 
@@ -736,15 +743,29 @@ function saveQuickCaptureDraft(formData) {
   }
 
   if (type === "routine") {
-    saveRoutine(
-      makeFormData({
-        routineName: title,
-        routineType: /evening|night|bed/i.test(rawText) ? "evening" : "custom",
-        routineActive: "active",
-        routineSteps: `${title} - 5`,
-      }),
-    );
-    return result;
+    const templateId = /morning/i.test(rawText)
+      ? "morning"
+      : /lunch/i.test(rawText)
+        ? "lunch"
+        : /dinner/i.test(rawText)
+          ? "dinner"
+          : /evening|night|bed/i.test(rawText)
+            ? "evening"
+            : /shutdown/i.test(rawText)
+              ? "work-shutdown"
+              : /work|startup|start work/i.test(rawText)
+                ? "work-start"
+                : "custom";
+    const routine = createRoutineFromTemplate(templateId, templateId === "custom" ? title : "");
+    setActiveView("routines");
+    return {
+      ...result,
+      message: "Created",
+      title: routine.name,
+      typeLabel: "Routine",
+      view: "routines",
+      nextStep: `Great. I've created your ${routine.name}. Now let's add the specific things you normally want to do as part of it.`,
+    };
   }
 
   if (type === "recurring") {
@@ -1451,108 +1472,165 @@ function renderRoutineBuilder(data = getRoutineBuilderData()) {
       <div class="section-heading">
         <div>
           <p class="eyebrow">Routine Builder</p>
-          <h2>Create steady rails</h2>
-          <p class="empty-copy">A routine is a small sequence you want the assistant to guide you through. Build the steps once, then the assistant can bring them forward at the right part of the day.</p>
+          <h2>Build a path through part of your day</h2>
+          <p class="empty-copy">Choose the routine first. Then tell the assistant what you normally do. Each action stays trackable, reusable, and easy to rearrange.</p>
         </div>
         ${pill(`${data.routines.length} saved`, "strong")}
       </div>
       ${renderSetupGuide("routines")}
-      <article class="routine-explainer">
-        <div>
-          <h3>How Routines Work</h3>
-          <p>A routine is the path. Habits can be steps inside it. A grouped step can also stand for a smaller routine, like <span>Take morning meds - 3</span>.</p>
-          <p><strong>Steps</strong> is the actual routine that gets saved. Put each action on its own line, like <span>Drink water - 2</span>.</p>
-          <p>The number after the dash is the estimated time in minutes. <span>Drink water - 2</span> means that step should take about 2 minutes. Make your best guess to start; you can refine it later.</p>
+      ${draft ? renderRoutineConversation(draft) : renderRoutineTemplates(data.templates)}
+      <article class="panel routine-list-panel">
+        <div class="panel-title">
+          <h3>Your routines</h3>
+          ${pill(`${data.activeSteps.length} active actions`, "strong")}
         </div>
-        <div>
-          <h3>What The Helper Does</h3>
-          <p><strong>Step Input Helper</strong> is optional. It lets you speak, type, or paste ideas first, review them, and then add them into Steps.</p>
-        </div>
+        ${renderRoutinePlanList(data.routines)}
+        ${renderMedicationTrackingList(getMedicationTrackingData())}
       </article>
-      <div class="routine-builder-grid">
-        <form class="panel routine-form" data-action="save-routine">
-          <input type="hidden" name="routineId" value="${escapeHtml(draft?.id ?? "")}" />
-          <section class="guided-step">
-            <div class="guided-step-heading">
-              <span>1</span>
-              <div>
-                <h3>Name This Routine</h3>
-                <p>Give it a simple label so the assistant knows what path this is.</p>
-              </div>
-            </div>
-            <label for="routine-name">Routine name</label>
-            <input id="routine-name" name="routineName" type="text" value="${escapeHtml(draft?.name ?? "")}" placeholder="Morning launch" required />
-          </section>
-          <section class="guided-step">
-            <div class="guided-step-heading">
-              <span>2</span>
-              <div>
-                <h3>Choose When It Helps</h3>
-                <p>Pick the part of the day, when it should start, and whether you want an in-app alarm-style prompt.</p>
-              </div>
-            </div>
-            <div class="guided-step-grid">
-              <div>
-                <label for="routine-type">Type</label>
-                <select id="routine-type" name="routineType">
-                  ${renderRoutineTypeOptions(draft?.type ?? "morning")}
-                </select>
-              </div>
-              <div>
-                <label for="routine-active">Status</label>
-                <select id="routine-active" name="routineActive">
-                  <option value="active" ${draft?.active === false ? "" : "selected"}>Active</option>
-                  <option value="inactive" ${draft?.active === false ? "selected" : ""}>Inactive</option>
-                </select>
-              </div>
-              <div>
-                <label for="routine-start-time">Start time</label>
-                <input id="routine-start-time" name="routineStartTime" type="time" value="${escapeHtml(getRoutineStartTimeInputValue(draft?.startTime))}" />
-                <p class="field-help">This places the routine into Hourly View and gives the steps real times.</p>
-              </div>
-              <div>
-                <label for="routine-alarm">Alarm-style prompt</label>
-                <select id="routine-alarm" name="routineAlarm">
-                  <option value="none" ${draft?.alarmPreference === "prompt" ? "" : "selected"}>No prompt</option>
-                  <option value="prompt" ${draft?.alarmPreference === "prompt" ? "selected" : ""}>Yes, prompt me in the app</option>
-                </select>
-                <p class="field-help">Prototype note: this is saved for in-app prompting. Phone wake-up alarms come later.</p>
-              </div>
-            </div>
-          </section>
-          <section class="guided-step routine-steps-field">
-            <div class="guided-step-heading">
-              <span>3</span>
-              <div>
-                <h3>Add The Steps</h3>
-                <p>Add only the next few actions. You can refine this later.</p>
-              </div>
-            </div>
-            <label for="routine-steps">Steps To Save</label>
-            ${renderMedicationRoutineHelper(getMedicationTrackingData())}
-            <textarea id="routine-steps" name="routineSteps" rows="5" placeholder="Drink water - 2&#10;Take meds - 3&#10;Review Today - 5" required>${escapeHtml(getRoutineStepLines(draft))}</textarea>
-            <p class="field-help">This is the routine that will be saved. Add one step per line. Use: step name - minutes.</p>
-            <div class="button-row routine-save-row">
-              <button type="submit">${draft ? "Save Routine Changes" : "Save Routine"}</button>
-              ${draft ? `<button type="button" class="secondary-button" data-action="cancel-routine-edit">Cancel</button>` : ""}
-            </div>
-            <details class="optional-helper">
-              <summary>Need help getting steps in?</summary>
-              ${renderVoiceListEntry(getVoiceListEntryData("routineSteps"), { compact: true })}
-            </details>
-          </section>
-        </form>
-        <article class="panel routine-list-panel">
-          <div class="panel-title">
-            <h3>Saved routines</h3>
-            ${pill(`${data.activeSteps.length} active steps`, "strong")}
-          </div>
-          ${renderRoutinePlanList(data.routines)}
-          ${renderMedicationTrackingList(getMedicationTrackingData())}
-        </article>
-      </div>
     </section>
   `;
+}
+
+function renderRoutineTemplates(templates) {
+  return `
+    <article class="panel routine-template-panel">
+      <div>
+        <p class="eyebrow">Choose a starting container</p>
+        <h3>Which routine do you want to build?</h3>
+        <p>Choosing one creates it immediately. You can add actions next and schedule it after the structure feels right.</p>
+      </div>
+      <div class="routine-template-grid">
+        ${templates.map((template) => `<button type="button" class="routine-template-button" data-action="create-routine-template" data-template-id="${escapeHtml(template.id)}">${escapeHtml(template.name)}</button>`).join("")}
+        <button type="button" class="routine-template-button secondary-button" data-action="create-custom-routine">Custom Routine</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderRoutineConversation(routine) {
+  return `
+    <div class="routine-conversation">
+      <article class="panel routine-created-message">
+        <p class="eyebrow">Routine created</p>
+        <h3>Great. I've created your ${escapeHtml(routine.name)}.</h3>
+        <p>Now add the specific things you normally want to do as part of it. Speak naturally, review the separated actions, then submit them.</p>
+      </article>
+      <article class="panel routine-action-capture">
+        <div class="panel-title">
+          <div>
+            <h3>What do you usually want to do?</h3>
+            <p class="empty-copy">Be specific when you can. Say “Take amlodipine” instead of “Take pills,” or “Walk 15 minutes” instead of “Exercise.”</p>
+          </div>
+          ${pill(`${routine.steps.length} added`, "strong")}
+        </div>
+        ${renderVoiceListEntry(getVoiceListEntryData("routineSteps"))}
+        <details class="optional-helper">
+          <summary>Add medications or supplements separately</summary>
+          ${renderMedicationRoutineHelper(getMedicationTrackingData())}
+        </details>
+        ${renderWorkRoutineSuggestions(routine)}
+      </article>
+      <article class="panel routine-order-panel">
+        <div class="panel-title">
+          <div>
+            <h3>Put the actions in order</h3>
+            <p class="empty-copy">Drag them on a computer, or use the arrow buttons on your phone.</p>
+          </div>
+        </div>
+        ${renderRoutineActionOrder(routine)}
+      </article>
+      ${routine.steps.length ? renderRoutineScheduleAfterStructure(routine) : ""}
+      <div class="button-row">
+        <button type="button" class="secondary-button" data-action="finish-routine-building">Done For Now</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderRoutineActionOrder(routine) {
+  if (routine.steps.length === 0) {
+    return `<p class="empty-copy">No actions yet. Speak, type, or paste the things you normally do, then review and submit them above.</p>`;
+  }
+
+  return `
+    <ol class="routine-action-order" data-routine-id="${escapeHtml(routine.id)}">
+      ${routine.steps.map((step, index) => `
+        <li draggable="true" data-routine-step-id="${escapeHtml(step.id)}" data-step-index="${index}">
+          <span class="drag-handle" aria-hidden="true">::</span>
+          <div>
+            <strong>${escapeHtml(step.title)}</strong>
+            <span>${step.estimatedMinutes} min${step.habitId ? " - tracked action" : ""}</span>
+          </div>
+          <div class="item-actions">
+            <button type="button" class="secondary-button" data-action="move-routine-action" data-direction="up" data-routine-id="${escapeHtml(routine.id)}" data-id="${escapeHtml(step.id)}" aria-label="Move ${escapeHtml(step.title)} up">↑</button>
+            <button type="button" class="secondary-button" data-action="move-routine-action" data-direction="down" data-routine-id="${escapeHtml(routine.id)}" data-id="${escapeHtml(step.id)}" aria-label="Move ${escapeHtml(step.title)} down">↓</button>
+            <button type="button" class="secondary-button" data-action="remove-routine-action" data-routine-id="${escapeHtml(routine.id)}" data-id="${escapeHtml(step.id)}">Remove</button>
+          </div>
+        </li>
+      `).join("")}
+    </ol>
+  `;
+}
+
+function renderRoutineScheduleAfterStructure(routine) {
+  return `
+    <form class="panel routine-schedule-form" data-action="save-routine-schedule">
+      <input type="hidden" name="routineId" value="${escapeHtml(routine.id)}" />
+      <div>
+        <p class="eyebrow">Structure first, schedule second</p>
+        <h3>When should ${escapeHtml(routine.name)} begin?</h3>
+        <p class="empty-copy">You can leave this blank for now. Add a time when you want the routine and its actions placed into Hourly View.</p>
+      </div>
+      <div class="guided-step-grid">
+        <div>
+          <label for="routine-start-time">Start time</label>
+          <input id="routine-start-time" name="routineStartTime" type="time" value="${escapeHtml(getRoutineStartTimeInputValue(routine.startTime))}" />
+        </div>
+        <div>
+          <label for="routine-alarm">Alarm-style prompt</label>
+          <select id="routine-alarm" name="routineAlarm">
+            <option value="none" ${routine.alarmPreference === "prompt" ? "" : "selected"}>No prompt</option>
+            <option value="prompt" ${routine.alarmPreference === "prompt" ? "selected" : ""}>Yes, prompt me in the app</option>
+          </select>
+        </div>
+        <div>
+          <label for="routine-active">Status</label>
+          <select id="routine-active" name="routineActive">
+            <option value="active" ${routine.active === false ? "" : "selected"}>Active</option>
+            <option value="inactive" ${routine.active === false ? "selected" : ""}>Inactive</option>
+          </select>
+        </div>
+      </div>
+      <button type="submit">Save Routine Timing</button>
+    </form>
+  `;
+}
+
+function renderWorkRoutineSuggestions(routine) {
+  if (!/work/i.test(routine.name)) {
+    return "";
+  }
+  return `
+    <details class="work-routine-suggestions">
+      <summary>Want suggestions based on your work?</summary>
+      <p>Choose the closest fit. You can remove anything that does not belong.</p>
+      <div class="button-row">
+        <button type="button" class="secondary-button" data-action="add-work-routine-suggestions" data-work-type="office" data-routine-id="${escapeHtml(routine.id)}">Office / Computer</button>
+        <button type="button" class="secondary-button" data-action="add-work-routine-suggestions" data-work-type="field" data-routine-id="${escapeHtml(routine.id)}">Physical / Field</button>
+        <button type="button" class="secondary-button" data-action="add-work-routine-suggestions" data-work-type="self-employed" data-routine-id="${escapeHtml(routine.id)}">Self-Employed</button>
+      </div>
+    </details>
+  `;
+}
+
+function getWorkRoutineSuggestions(workType) {
+  if (workType === "field") {
+    return ["Gather equipment", "Perform safety check", "Review first assignment", "Prepare workspace", "Start first task"];
+  }
+  if (workType === "self-employed") {
+    return ["Check revenue opportunities", "Review client work", "Review urgent communications", "Identify today's most important task", "Begin first work block"];
+  }
+  return ["Check calendar", "Review priorities", "Open work tools", "Review inbox", "Start first focus session"];
 }
 
 function renderRoutineTypeOptions(selectedType) {
@@ -2511,8 +2589,8 @@ function renderHelpView() {
       <div class="section-heading">
         <div>
           <p class="eyebrow">Help</p>
-          <h2>How to Use LifeTrack Each Day</h2>
-          <p class="empty-copy">LifeTrack is meant to be left open during the day as a simple guide. You do not have to perfectly organize your life before using it. Start small, check in, and let the app help you decide what matters next.</p>
+          <h2>How to Use Life Enablement Assistant Each Day</h2>
+          <p class="empty-copy">Life Enablement Assistant is meant to be left open during the day as a simple guide. You do not have to perfectly organize your life before using it. Start small, check in, and let the app help you decide what matters next.</p>
         </div>
         <button type="button" data-action="start-walkthrough">${walkthroughStatus.completed || walkthroughStatus.skipped ? "Restart Walkthrough" : "Start Walkthrough"}</button>
       </div>
@@ -2524,7 +2602,7 @@ function renderHelpView() {
         ${renderHelpGuideCard("5", "Check the Morning Briefing", "Use Morning Briefing near the start of the day. It helps you see big things, scheduled items, deadlines, and possible problems.")}
         ${renderHelpGuideCard("6", "Build habits and routines slowly", "Do not try to build a perfect system all at once. Add one or two habits or routines first. Let the app help you repeat them.")}
         ${renderHelpGuideCard("7", "End of day", "Review what got done. Move or reschedule anything unfinished. Let tomorrow start cleaner.")}
-        ${renderHelpGuideCard("8", "The main idea", "You are not supposed to remember everything or decide everything manually. LifeTrack is here to reduce decisions, keep important things visible, and help you keep moving.")}
+        ${renderHelpGuideCard("8", "The main idea", "You are not supposed to remember everything or decide everything manually. Life Enablement Assistant is here to reduce decisions, keep important things visible, and help you keep moving.")}
       </div>
     </section>
   `;
@@ -4752,10 +4830,23 @@ function scheduleWorkingModeRefresh(activeView) {
   }
 
   workingModeTimer = setInterval(() => {
-    if (["working", "command-center", "today"].includes(getActiveView())) {
+    if (["working", "command-center", "today"].includes(getActiveView()) && !shouldPauseAutomaticRefresh()) {
       renderApp();
     }
   }, 1000);
+}
+
+function shouldPauseAutomaticRefresh() {
+  if (walkthroughActive || document.querySelector(".app-menu[open]")) {
+    return true;
+  }
+
+  const activeElement = document.activeElement;
+  return Boolean(
+    activeElement
+    && activeElement !== document.body
+    && activeElement.matches("input, textarea, select, button, summary, [contenteditable='true']"),
+  );
 }
 
 app.addEventListener("click", (event) => {
@@ -4790,6 +4881,33 @@ app.addEventListener("click", (event) => {
   }
   if (action === "start-walkthrough") {
     startWalkthrough();
+  }
+  if (action === "create-routine-template") {
+    createRoutineFromTemplate(button.dataset.templateId);
+    renderApp();
+  }
+  if (action === "create-custom-routine") {
+    const name = window.prompt("What should this routine be called?", "Custom Routine");
+    if (name?.trim()) {
+      createRoutineFromTemplate("custom", name.trim());
+      renderApp();
+    }
+  }
+  if (action === "finish-routine-building") {
+    cancelRoutineEdit();
+    renderApp();
+  }
+  if (action === "move-routine-action") {
+    moveRoutineAction(button.dataset.routineId, id, button.dataset.direction);
+    renderApp();
+  }
+  if (action === "remove-routine-action") {
+    removeRoutineAction(button.dataset.routineId, id);
+    renderApp();
+  }
+  if (action === "add-work-routine-suggestions") {
+    addRoutineActions(button.dataset.routineId, getWorkRoutineSuggestions(button.dataset.workType));
+    renderApp();
   }
   if (action === "walkthrough-next") {
     moveWalkthrough(1);
@@ -5273,6 +5391,15 @@ app.addEventListener("submit", async (event) => {
     return;
   }
 
+  const routineScheduleForm = event.target.closest("form[data-action='save-routine-schedule']");
+  if (routineScheduleForm) {
+    event.preventDefault();
+    const formData = new FormData(routineScheduleForm);
+    saveRoutineSchedule(String(formData.get("routineId") ?? ""), formData);
+    renderApp();
+    return;
+  }
+
   const habitForm = event.target.closest("form[data-action='save-habit']");
   if (habitForm) {
     event.preventDefault();
@@ -5382,6 +5509,34 @@ app.addEventListener("change", (event) => {
   reader.readAsDataURL(file);
 });
 
+app.addEventListener("dragstart", (event) => {
+  const step = event.target.closest("[data-routine-step-id]");
+  if (!step) {
+    return;
+  }
+  draggedRoutineStepId = step.dataset.routineStepId;
+  event.dataTransfer?.setData("text/plain", draggedRoutineStepId);
+  event.dataTransfer?.setDragImage(step, 20, 20);
+});
+
+app.addEventListener("dragover", (event) => {
+  if (event.target.closest("[data-routine-step-id]")) {
+    event.preventDefault();
+  }
+});
+
+app.addEventListener("drop", (event) => {
+  const target = event.target.closest("[data-routine-step-id]");
+  const list = target?.closest("[data-routine-id]");
+  if (!target || !list || !draggedRoutineStepId) {
+    return;
+  }
+  event.preventDefault();
+  moveRoutineActionToIndex(list.dataset.routineId, draggedRoutineStepId, Number(target.dataset.stepIndex));
+  draggedRoutineStepId = "";
+  renderApp();
+});
+
 function startVoiceListCapture(targetId, button) {
   button.textContent = "Listening...";
   button.disabled = true;
@@ -5434,7 +5589,13 @@ function approveVoiceListFromDom(targetId, button) {
 
   const approvedItems = approveVoiceListItems(targetId);
   if (targetId === "routineSteps") {
-    appendApprovedRoutineSteps(approvedItems, component);
+    const routineId = getRoutineBuilderData().draftRoutine?.id;
+    if (routineId) {
+      addRoutineActions(routineId, approvedItems);
+      renderApp();
+    } else {
+      appendApprovedRoutineSteps(approvedItems, component);
+    }
     return;
   }
 
@@ -5464,11 +5625,17 @@ function addMedicationGroupToRoutine() {
     medicationNames: names,
   }));
 
-  appendRoutineStepLine(result.routineStepLine);
+  const routineId = getRoutineBuilderData().draftRoutine?.id;
+  if (routineId) {
+    addRoutineActions(routineId, result.createdMedications.map((item) => `Take ${item.name}`));
+  } else {
+    appendRoutineStepLine(result.routineStepLine);
+  }
   namesField.value = "";
   if (message) {
-    message.textContent = `Saved ${result.createdMedications.length} item${result.createdMedications.length === 1 ? "" : "s"} and added "${result.routineStepLine}" to Steps.`;
+    message.textContent = `Saved and added ${result.createdMedications.length} specific medication or supplement action${result.createdMedications.length === 1 ? "" : "s"}.`;
   }
+  renderApp();
 }
 
 function appendRoutineStepLine(line) {

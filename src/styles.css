@@ -1938,6 +1938,94 @@ main {
   gap: 16px;
 }
 
+.routine-template-panel,
+.routine-conversation {
+  display: grid;
+  gap: 16px;
+}
+
+.routine-template-panel h3,
+.routine-template-panel p,
+.routine-created-message h3,
+.routine-created-message p,
+.routine-schedule-form h3,
+.routine-schedule-form p {
+  margin: 0;
+}
+
+.routine-template-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.routine-template-button {
+  min-height: 52px;
+  white-space: normal;
+}
+
+.routine-created-message {
+  border-left: 5px solid var(--green);
+  background: #f3fbf8;
+}
+
+.routine-action-capture,
+.routine-order-panel,
+.routine-schedule-form {
+  display: grid;
+  gap: 14px;
+}
+
+.routine-action-order {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.routine-action-order > li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.routine-action-order > li:active {
+  border-color: var(--yellow);
+}
+
+.routine-action-order strong,
+.routine-action-order span {
+  display: block;
+}
+
+.routine-action-order span {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.drag-handle {
+  color: var(--blue-dark);
+  font-weight: 900;
+  cursor: grab;
+}
+
+.work-routine-suggestions {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.work-routine-suggestions summary {
+  cursor: pointer;
+  color: var(--blue-dark);
+  font-weight: 850;
+}
+
 .routine-form,
 .goal-form,
 .habit-form,
@@ -3316,6 +3404,7 @@ dd {
   .habit-tracking-grid,
   .recurring-task-grid,
   .routine-builder-grid,
+  .routine-template-grid,
   .routine-explainer,
   .habit-explainer,
   .guided-step-grid,
@@ -3495,6 +3584,14 @@ dd {
 
   .capture-task-details {
     grid-template-columns: 1fr;
+  }
+
+  .routine-action-order > li {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .routine-action-order .item-actions {
+    grid-column: 1 / -1;
   }
 
   .walkthrough-layer {

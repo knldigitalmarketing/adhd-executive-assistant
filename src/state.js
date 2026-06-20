@@ -116,15 +116,21 @@ import {
   updateRecurringTask,
 } from "./recurring-task-engine.js";
 import {
+  addActionsToRoutine,
   buildScheduledRoutineSteps,
   buildActiveRoutineSteps,
   clearRoutineBuilderDraft,
+  createRoutineContainer,
   createRoutinePlan,
   deleteRoutinePlan,
   ensureRoutineBuilderState,
   getRoutineBuilderData as buildRoutineBuilderData,
+  moveRoutineStep,
+  moveRoutineStepToIndex,
+  removeRoutineStep,
   setRoutineBuilderDraft,
   setRoutinePlanActive,
+  updateRoutineSchedule,
   updateRoutinePlan,
 } from "./routine-builder.js";
 import { clearState, loadState, saveState } from "./storage.js";
@@ -1487,6 +1493,39 @@ export function saveRoutine(formData) {
   } else {
     routine = createRoutinePlan(state, formData);
   }
+  syncRoutineTimelineItem(routine);
+  saveState(state);
+}
+
+export function createRoutineFromTemplate(templateId, customName = "") {
+  const routine = createRoutineContainer(state, templateId, customName);
+  saveState(state);
+  return routine;
+}
+
+export function addRoutineActions(routineId, actionNames) {
+  const routine = addActionsToRoutine(state, routineId, actionNames);
+  saveState(state);
+  return routine;
+}
+
+export function moveRoutineAction(routineId, stepId, direction) {
+  moveRoutineStep(state, routineId, stepId, direction);
+  saveState(state);
+}
+
+export function moveRoutineActionToIndex(routineId, stepId, targetIndex) {
+  moveRoutineStepToIndex(state, routineId, stepId, targetIndex);
+  saveState(state);
+}
+
+export function removeRoutineAction(routineId, stepId) {
+  removeRoutineStep(state, routineId, stepId);
+  saveState(state);
+}
+
+export function saveRoutineSchedule(routineId, formData) {
+  const routine = updateRoutineSchedule(state, routineId, formData);
   syncRoutineTimelineItem(routine);
   saveState(state);
 }

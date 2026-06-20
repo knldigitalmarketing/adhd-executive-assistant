@@ -80,7 +80,7 @@ export function setGeneralListType(state, listType) {
 
 export function reviewVoiceListText(state, targetId, text) {
   ensureVoiceListEntryState(state);
-  const items = parseVoiceListText(text).map((item, index) => ({
+  const items = parseVoiceListText(text, targetId).map((item, index) => ({
     id: `voice-item-${Date.now()}-${index}`,
     text: item,
   }));
@@ -175,14 +175,31 @@ export function setSavedVoiceListGroupDone(state, listName, done) {
   );
 }
 
-export function parseVoiceListText(value) {
-  return String(value)
+export function parseVoiceListText(value, targetId = "") {
+  let source = String(value);
+  if (targetId === "routineSteps") {
+    source = source
+      .replace(/^\s*(in the (morning|evening|afternoon)|for (my|the) \w+ routine)\s*,?\s*/i, "")
+      .replace(/\s+\band\b\s+(?=(take|drink|feed|check|start|review|open|walk|stretch|exercise|gather|perform|prepare|begin)\b)/gi, ", ");
+  }
+
+  return source
     .replace(/\b(add|also add|put|include)\b/gi, "\n")
     .replace(/\b(next item|new item|then)\b/gi, "\n")
     .split(/\n|,|;|\u2022/g)
-    .map(cleanListItem)
+    .map((item) => targetId === "routineSteps" ? cleanRoutineAction(item) : cleanListItem(item))
     .filter(Boolean)
     .filter(uniqueCaseInsensitive);
+}
+
+function cleanRoutineAction(value) {
+  return cleanListItem(value)
+    .replace(/^\s*i\s+/i, "")
+    .replace(/\bmy blood pressure medicine\b/i, "blood pressure medication")
+    .replace(/\bmy cholesterol medicine\b/i, "cholesterol medication")
+    .replace(/[.!?]+$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function isSpeechRecognitionAvailable() {

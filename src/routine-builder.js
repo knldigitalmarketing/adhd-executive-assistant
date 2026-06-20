@@ -1,3 +1,12 @@
+export const ROUTINE_TEMPLATES = [
+  { id: "morning", name: "Morning Routine", type: "morning" },
+  { id: "lunch", name: "Lunch Routine", type: "custom" },
+  { id: "dinner", name: "Dinner Routine", type: "custom" },
+  { id: "evening", name: "Evening Routine", type: "evening" },
+  { id: "work-start", name: "Work Start Routine", type: "custom" },
+  { id: "work-shutdown", name: "Work Shutdown Routine", type: "custom" },
+];
+
 export function ensureRoutineBuilderState(state) {
   state.routinePlans = Array.isArray(state.routinePlans) ? state.routinePlans : [];
   state.routineStepState = state.routineStepState ?? {};
@@ -13,8 +22,145 @@ export function getRoutineBuilderData(state, getDayPart) {
     draftRoutine: state.routinePlans.find((routine) => routine.id === state.routineBuilderDraftId) ?? null,
     activeSteps: buildActiveRoutineSteps({ state, getDayPart, isDone: (item) => item.completed === true || item.status === "done" || item.status === "dismissed" }),
     scheduledSteps: buildScheduledRoutineSteps({ state, isDone: (item) => item.completed === true || item.status === "done" || item.status === "dismissed" }),
+    templates: ROUTINE_TEMPLATES,
     dayPart,
   };
+}
+
+export function createRoutineContainer(state, templateId, customName = "") {
+  ensureRoutineBuilderState(state);
+  const template = ROUTINE_TEMPLATES.find((item) => item.id === templateId);
+  const name = customName.trim() || template?.name || "Custom Routine";
+  const existing = state.routinePlans.find((routine) => routine.name.toLowerCase() === name.toLowerCase());
+  if (existing) {
+    state.routineBuilderDraftId = existing.id;
+    return existing;
+  }
+
+  const now = new Date().toISOString();
+  const routine = {
+    id: `routine-plan-${Date.now()}`,
+    name,
+    type: template?.type ?? "custom",
+    active: true,
+    startTime: "",
+    alarmPreference: "none",
+    steps: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  state.routinePlans.unshift(routine);
+  state.routineBuilderDraftId = routine.id;
+  return routine;
+}
+
+export function addActionsToRoutine(state, routineId, actionNames) {
+  ensureRoutineBuilderState(state);
+  state.habits = Array.isArray(state.habits) ? state.habits : [];
+  const routine = state.routinePlans.find((item) => item.id === routineId);
+  if (!routine) {
+    return null;
+  }
+
+  const existingTitles = new Set(routine.steps.map((step) => step.title.toLowerCase()));
+  const cleanActions = actionNames.map(normalizeRoutineActionTitle).filter(Boolean);
+
+  for (const title of cleanActions) {
+    if (existingTitles.has(title.toLowerCase())) {
+      continue;
+    }
+
+    let habit = state.habits.find((item) => item.name.toLowerCase() === title.toLowerCase());
+    if (!habit) {
+      habit = {
+        id: `habit-routine-${Date.now()}-${state.habits.length}`,
+        name: title,
+        category: inferRoutineActionCategory(title),
+        frequencyType: "daily",
+        targetDays: [],
+        dailyTargetCount: 1,
+        weeklyTargetCount: 1,
+        active: true,
+        hideFromNow: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        source: "routine-builder",
+      };
+      state.habits.unshift(habit);
+    }
+
+    routine.steps.push({
+      id: `step-${Date.now()}-${routine.steps.length + 1}`,
+      title,
+      habitId: habit.id,
+      order: routine.steps.length + 1,
+      estimatedMinutes: getDefaultRoutineMinutes(title),
+    });
+    existingTitles.add(title.toLowerCase());
+  }
+
+  routine.updatedAt = new Date().toISOString();
+  normalizeStepOrder(routine);
+  return routine;
+}
+
+export function moveRoutineStep(state, routineId, stepId, direction) {
+  ensureRoutineBuilderState(state);
+  const routine = state.routinePlans.find((item) => item.id === routineId);
+  if (!routine) {
+    return null;
+  }
+
+  const index = routine.steps.findIndex((step) => step.id === stepId);
+  const nextIndex = direction === "up" ? index - 1 : index + 1;
+  if (index < 0 || nextIndex < 0 || nextIndex >= routine.steps.length) {
+    return routine;
+  }
+
+  [routine.steps[index], routine.steps[nextIndex]] = [routine.steps[nextIndex], routine.steps[index]];
+  normalizeStepOrder(routine);
+  routine.updatedAt = new Date().toISOString();
+  return routine;
+}
+
+export function moveRoutineStepToIndex(state, routineId, stepId, targetIndex) {
+  ensureRoutineBuilderState(state);
+  const routine = state.routinePlans.find((item) => item.id === routineId);
+  const currentIndex = routine?.steps.findIndex((step) => step.id === stepId) ?? -1;
+  if (!routine || currentIndex < 0 || targetIndex < 0 || targetIndex >= routine.steps.length) {
+    return routine ?? null;
+  }
+
+  const [step] = routine.steps.splice(currentIndex, 1);
+  routine.steps.splice(targetIndex, 0, step);
+  normalizeStepOrder(routine);
+  routine.updatedAt = new Date().toISOString();
+  return routine;
+}
+
+export function removeRoutineStep(state, routineId, stepId) {
+  ensureRoutineBuilderState(state);
+  const routine = state.routinePlans.find((item) => item.id === routineId);
+  if (!routine) {
+    return null;
+  }
+  routine.steps = routine.steps.filter((step) => step.id !== stepId);
+  normalizeStepOrder(routine);
+  routine.updatedAt = new Date().toISOString();
+  return routine;
+}
+
+export function updateRoutineSchedule(state, routineId, formData) {
+  ensureRoutineBuilderState(state);
+  const routine = state.routinePlans.find((item) => item.id === routineId);
+  if (!routine) {
+    return null;
+  }
+  routine.startTime = normalizeRoutineStartTime(String(formData.get("routineStartTime") ?? ""));
+  routine.alarmPreference = normalizeAlarmPreference(String(formData.get("routineAlarm") ?? "none"));
+  routine.active = formData.get("routineActive") !== "inactive";
+  routine.updatedAt = new Date().toISOString();
+  return routine;
 }
 
 export function createRoutinePlan(state, formData) {
@@ -286,4 +432,34 @@ function formatMinutesAsTime(totalMinutes) {
   const period = hours24 >= 12 ? "PM" : "AM";
   const hours12 = hours24 % 12 || 12;
   return `${hours12}:${minutes} ${period}`;
+}
+
+function normalizeStepOrder(routine) {
+  routine.steps = routine.steps.map((step, index) => ({ ...step, order: index + 1 }));
+}
+
+function normalizeRoutineActionTitle(value) {
+  const title = String(value ?? "")
+    .replace(/^\s*(then|and then|also|and)\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!title) {
+    return "";
+  }
+  return title.charAt(0).toUpperCase() + title.slice(1);
+}
+
+function inferRoutineActionCategory(title) {
+  if (/\b(med|pill|vitamin|supplement|water|blood pressure|health)\b/i.test(title)) return "Health";
+  if (/\b(walk|stretch|exercise|workout|training)\b/i.test(title)) return "Fitness";
+  if (/\b(work|client|calendar|inbox|focus|equipment|assignment)\b/i.test(title)) return "Work";
+  if (/\b(feed|dog|cat|laundry|coffee|home)\b/i.test(title)) return "Home";
+  return "Personal";
+}
+
+function getDefaultRoutineMinutes(title) {
+  if (/\b(med|pill|vitamin|supplement|water)\b/i.test(title)) return 2;
+  if (/\b(calendar|priorit|inbox|safety check)\b/i.test(title)) return 5;
+  if (/\b(walk|stretch|exercise|workout|training)\b/i.test(title)) return 15;
+  return 5;
 }
