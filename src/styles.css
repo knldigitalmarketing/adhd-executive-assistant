@@ -2583,6 +2583,23 @@ main {
   font-weight: 850;
 }
 
+.danger-button {
+  border-color: #a33a3a;
+  background: #ffffff;
+  color: #8a2e2e;
+}
+
+.danger-button:hover,
+.danger-button:focus-visible {
+  border-color: #8a2e2e;
+  background: #fff1f1;
+  color: #6f2020;
+}
+
+.routine-builder-footer {
+  justify-content: space-between;
+}
+
 .routine-plan-list {
   display: grid;
   gap: 14px;
@@ -2694,6 +2711,206 @@ main {
   margin: 0;
   color: var(--muted);
   line-height: 1.55;
+}
+
+.active-routine-card {
+  gap: 14px;
+  border-left: 5px solid var(--green);
+}
+
+.active-routine-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.active-routine-heading h3,
+.active-routine-heading p {
+  margin: 0;
+}
+
+.routine-progress-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-soft);
+}
+
+.routine-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  transition: width 180ms ease;
+}
+
+.routine-current-step {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid #b7d4f5;
+  border-radius: 8px;
+  background: var(--blue-wash);
+}
+
+.routine-current-step span,
+.routine-current-step small {
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.routine-current-step strong {
+  color: var(--blue-ink);
+  font-size: 1.18rem;
+}
+
+.routine-complete-message {
+  border-color: #a8d8c4;
+  background: #f3fbf8;
+}
+
+.active-routine-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.active-routine-list li {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  min-height: 42px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.active-routine-list li.is-current {
+  background: #fff8df;
+  font-weight: 850;
+}
+
+.active-routine-list li.is-complete,
+.active-routine-list li.is-skipped {
+  color: var(--muted);
+}
+
+.active-routine-list li.is-complete > span {
+  text-decoration: line-through;
+}
+
+.active-routine-list li.is-skipped > span {
+  text-decoration: line-through;
+  text-decoration-style: dashed;
+}
+
+.active-routine-list .routine-group {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.routine-group-title {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+}
+
+.routine-group-marker {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  color: var(--green);
+  font-weight: 900;
+}
+
+.active-routine-list .routine-group > ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 26px;
+  list-style: none;
+}
+
+.active-routine-list .routine-group > ul > li {
+  min-height: 38px;
+  padding-block: 4px;
+}
+
+.routine-builder-children {
+  display: grid;
+  gap: 3px;
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.routine-builder-children li {
+  display: list-item;
+  padding: 0;
+  border: 0;
+}
+
+.routine-check-button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--green);
+}
+
+.is-complete .routine-check-button {
+  border-color: var(--green);
+  background: #eef8f4;
+}
+
+.routine-voice-status {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.routine-guidance-settings,
+.routine-guidance-settings-form {
+  display: grid;
+  gap: 14px;
+}
+
+.setting-toggle {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.setting-toggle input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+}
+
+.setting-toggle strong,
+.setting-toggle small {
+  display: block;
+}
+
+.setting-toggle small {
+  margin-top: 2px;
+  color: var(--muted);
+  line-height: 1.4;
 }
 
 .tip-card {

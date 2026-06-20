@@ -34,6 +34,7 @@ export function saveMedicationGroup(state, formData) {
     if (existing) {
       existing.schedule = schedule;
       existing.refillDate = refillDate || existing.refillDate || "";
+      existing.active = true;
       existing.updatedAt = new Date().toISOString();
       createdMedications.push(existing);
       ensureMedicationHabit(state, existing);
@@ -79,6 +80,7 @@ export function updateMedicationDetails(state, formData) {
   medication.pharmacy = String(formData.get("medicationPharmacy") ?? "").trim();
   medication.refillDate = String(formData.get("medicationRefillDate") ?? "").trim();
   medication.notes = String(formData.get("medicationNotes") ?? "").trim();
+  medication.active = formData.get("medicationActive") !== "inactive";
   medication.updatedAt = new Date().toISOString();
   if (previousRefillDate !== medication.refillDate) {
     delete state.medicationState[getMedicationRefillId(id)];

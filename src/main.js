@@ -13,6 +13,7 @@ import {
   cancelRecurringTaskEdit,
   cancelRoutineEdit,
   clearProfilePhoto,
+  closeActiveRoutine,
   completeEndOfDayReview,
   completeSmartIntervention,
   completeWeeklyReview,
@@ -62,6 +63,8 @@ import {
   getProjectTrackingData,
   getRecurringTaskData,
   getRoutineBuilderData,
+  getActiveRoutineGuidance,
+  getRoutineGuidanceSettings,
   getScoredActionableItems,
   getSetupJourneyData,
   getState,
@@ -84,10 +87,13 @@ import {
   reopenSavedVoiceListItem,
   setActiveView,
   skipItem,
+  skipActiveRoutineStep,
   skipSetupStep,
   snoozeItem,
   pauseFocus,
+  pauseActiveRoutine,
   completeProgressiveSetup,
+  completeActiveRoutineStep,
   markGoalComplete,
   markProjectComplete,
   moveRoutineAction,
@@ -95,6 +101,7 @@ import {
   reactivateCompletedGoal,
   reactivateCompletedProject,
   resumeFocus,
+  resumeActiveRoutine,
   saveAccountProfile,
   saveAppearanceImage,
   saveAppearanceSettings,
@@ -108,7 +115,9 @@ import {
   saveRecurringTask,
   saveRoutine,
   saveRoutineSchedule,
+  saveRoutineGuidanceSettings,
   addRoutineActions,
+  addMedicationGroupToRoutine as linkMedicationGroupToRoutine,
   reviewVoiceListText,
   removeVoiceListItem,
   approveVoiceListItems,
@@ -116,11 +125,14 @@ import {
   deleteSavedVoiceListItem,
   updateVoiceListItem,
   startFocus,
+  startActiveRoutine,
   startSetupStep,
   startProgressiveSetup,
   startMyDay,
   statusText,
   statusTone,
+  markActiveRoutinePrompted,
+  shouldRemindActiveRoutine,
   savePrivacyLock,
   saveProfilePhoto,
   unlockApp,
@@ -131,6 +143,8 @@ import { formatRoutineStepLines, startVoiceRecognition } from "./voice-list-entr
 
 const app = document.querySelector("#app");
 let workingModeTimer = null;
+let routineGuidanceTimer = null;
+let routineVoiceRecognition = null;
 let starterAcknowledgementTimer = null;
 let quickCaptureDraft = null;
 let quickCaptureResult = null;
@@ -1540,8 +1554,9 @@ function renderRoutineConversation(routine) {
         ${renderRoutineActionOrder(routine)}
       </article>
       ${routine.steps.length ? renderRoutineScheduleAfterStructure(routine) : ""}
-      <div class="button-row">
+      <div class="button-row routine-builder-footer">
         <button type="button" class="secondary-button" data-action="finish-routine-building">Done For Now</button>
+        <button type="button" class="danger-button" data-action="delete-current-routine" data-id="${escapeHtml(routine.id)}">Delete This Routine</button>
       </div>
     </div>
   `;
@@ -1557,9 +1572,10 @@ function renderRoutineActionOrder(routine) {
       ${routine.steps.map((step, index) => `
         <li draggable="true" data-routine-step-id="${escapeHtml(step.id)}" data-step-index="${index}">
           <span class="drag-handle" aria-hidden="true">::</span>
-          <div>
+          <div class="routine-order-content">
             <strong>${escapeHtml(step.title)}</strong>
-            <span>${step.estimatedMinutes} min${step.habitId ? " - tracked action" : ""}</span>
+            <span>${step.estimatedMinutes} min${step.habitId ? " - tracked action" : step.groupType === "medications" ? " - medication group" : ""}</span>
+            ${renderRoutineStepChildren(step)}
           </div>
           <div class="item-actions">
             <button type="button" class="secondary-button" data-action="move-routine-action" data-direction="up" data-routine-id="${escapeHtml(routine.id)}" data-id="${escapeHtml(step.id)}" aria-label="Move ${escapeHtml(step.title)} up">↑</button>
@@ -1570,6 +1586,18 @@ function renderRoutineActionOrder(routine) {
       `).join("")}
     </ol>
   `;
+}
+
+function renderRoutineStepChildren(step) {
+  if (step.groupType !== "medications") {
+    return "";
+  }
+  const medications = getMedicationTrackingData().medications.filter(
+    (medication) => medication.schedule === (step.schedule ?? "morning"),
+  ).sort((left, right) => String(left.createdAt ?? "").localeCompare(String(right.createdAt ?? "")) || left.name.localeCompare(right.name));
+  return medications.length
+    ? `<ul class="routine-builder-children">${medications.map((medication) => `<li>${escapeHtml(medication.name)}${medication.dose ? ` - ${escapeHtml(medication.dose)}` : ""}</li>`).join("")}</ul>`
+    : `<p class="field-help">No active medications are assigned to this time yet.</p>`;
 }
 
 function renderRoutineScheduleAfterStructure(routine) {
@@ -1631,6 +1659,135 @@ function getWorkRoutineSuggestions(workType) {
     return ["Check revenue opportunities", "Review client work", "Review urgent communications", "Identify today's most important task", "Begin first work block"];
   }
   return ["Check calendar", "Review priorities", "Open work tools", "Review inbox", "Start first focus session"];
+}
+
+function handleRoutineStepCompletion(routineId, stepId) {
+  const before = getActiveRoutineGuidance(routineId);
+  const completedTitle = before?.steps.find((step) => step.id === stepId)?.title ?? "Step";
+  const after = completeActiveRoutineStep(routineId, stepId);
+  playRoutineChime();
+  if (after?.currentStep) {
+    announceRoutineMessage(`Done. Next: ${after.currentStep.title}.`, after.settings.autoReadNextStep || after.settings.voiceGuidance);
+  } else {
+    announceRoutineMessage(`${completedTitle} done. ${after?.routine.name ?? "Routine"} complete.`, after?.settings.voiceGuidance);
+  }
+  renderApp();
+}
+
+function handleRoutineStepSkip(routineId, stepId) {
+  const settings = getRoutineGuidanceSettings();
+  if (settings.confirmBeforeSkip && !window.confirm("Skip this step for today?")) {
+    return;
+  }
+  const after = skipActiveRoutineStep(routineId, stepId);
+  playRoutineChime();
+  if (after?.currentStep) {
+    announceRoutineMessage(`Okay. Next: ${after.currentStep.title}.`, after.settings.autoReadNextStep || after.settings.voiceGuidance);
+  }
+  renderApp();
+}
+
+function announceRoutineMessage(message, speak = true) {
+  if (!speak || !("speechSynthesis" in window)) {
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(message);
+  utterance.rate = 0.95;
+  utterance.pitch = 1;
+  window.speechSynthesis.speak(utterance);
+}
+
+function announceCurrentRoutineStep(prefix = "Next") {
+  const guidance = getActiveRoutineGuidance();
+  if (!guidance?.currentStep) {
+    return;
+  }
+  announceRoutineMessage(`${prefix}: ${guidance.currentStep.title}.`, true);
+  markActiveRoutinePrompted();
+}
+
+function playRoutineChime() {
+  if (!getRoutineGuidanceSettings().chimes) {
+    return;
+  }
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) {
+      return;
+    }
+    const context = new AudioContext();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(660, context.currentTime);
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.12, context.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.3);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.32);
+    oscillator.addEventListener("ended", () => context.close());
+  } catch {
+    // Browsers may block audio until the user has interacted with the page.
+  }
+}
+
+function listenForRoutineCommand() {
+  if (routineVoiceRecognition) {
+    return;
+  }
+  const status = document.querySelector("[data-routine-voice-status]");
+  if (status) {
+    status.textContent = "Listening for Done, Skip, Next, Repeat, Pause, or Resume...";
+  }
+  routineVoiceRecognition = startVoiceRecognition({
+    onResult: (transcript) => handleRoutineVoiceCommand(transcript),
+    onError: (message) => {
+      if (status) status.textContent = message;
+    },
+    onEnd: () => {
+      routineVoiceRecognition = null;
+    },
+  });
+}
+
+function handleRoutineVoiceCommand(transcript) {
+  const command = String(transcript ?? "").trim().toLowerCase();
+  const guidance = getActiveRoutineGuidance();
+  const status = document.querySelector("[data-routine-voice-status]");
+  if (!guidance) {
+    if (status) status.textContent = "No active routine found.";
+    return;
+  }
+  if (/^(done|mark done|finished|finish)$/.test(command) && guidance.currentStep) {
+    handleRoutineStepCompletion(guidance.routine.id, guidance.currentStep.id);
+    return;
+  }
+  if (/^(skip|next)$/.test(command) && guidance.currentStep) {
+    handleRoutineStepSkip(guidance.routine.id, guidance.currentStep.id);
+    return;
+  }
+  if (/^(repeat|say again|read again)$/.test(command)) {
+    announceCurrentRoutineStep("Current step");
+    if (status) status.textContent = `Heard "${transcript}".`;
+    return;
+  }
+  if (/^(pause|pause routine)$/.test(command)) {
+    pauseActiveRoutine();
+    renderApp();
+    return;
+  }
+  if (/^(resume|resume routine|continue)$/.test(command)) {
+    resumeActiveRoutine();
+    announceCurrentRoutineStep("Resuming");
+    renderApp();
+    return;
+  }
+  if (status) {
+    status.textContent = `I heard "${transcript}". Try Done, Skip, Next, Repeat, Pause routine, or Resume routine.`;
+  }
 }
 
 function renderRoutineTypeOptions(selectedType) {
@@ -1755,6 +1912,13 @@ function renderMedicationTrackingItem(item) {
               <label for="pharmacy-${escapeHtml(item.id)}">Pharmacy</label>
               <input id="pharmacy-${escapeHtml(item.id)}" name="medicationPharmacy" type="text" value="${escapeHtml(item.pharmacy ?? "")}" placeholder="Optional" />
             </div>
+            <div>
+              <label for="medication-active-${escapeHtml(item.id)}">Status</label>
+              <select id="medication-active-${escapeHtml(item.id)}" name="medicationActive">
+                <option value="active" ${item.active === false ? "" : "selected"}>Active</option>
+                <option value="inactive" ${item.active === false ? "selected" : ""}>No longer taking</option>
+              </select>
+            </div>
           </div>
           <label for="notes-${escapeHtml(item.id)}">Notes</label>
           <textarea id="notes-${escapeHtml(item.id)}" name="medicationNotes" rows="2" placeholder="Optional">${escapeHtml(item.notes ?? "")}</textarea>
@@ -1788,9 +1952,9 @@ function renderRoutinePlanItem(routine) {
       </div>
       <div class="item-actions">
         ${pill(routine.active ? "Active" : "Inactive", routine.active ? "strong" : "neutral")}
-        <button type="button" data-action="edit-routine" data-id="${escapeHtml(routine.id)}">Edit</button>
+        <button type="button" data-action="edit-routine" data-id="${escapeHtml(routine.id)}">Open Routine</button>
         <button type="button" data-action="${routine.active ? "deactivate-routine" : "activate-routine"}" data-id="${escapeHtml(routine.id)}">${routine.active ? "Deactivate" : "Activate"}</button>
-        <button type="button" data-action="delete-routine" data-id="${escapeHtml(routine.id)}">Delete</button>
+        <button type="button" class="danger-button" data-action="delete-routine" data-id="${escapeHtml(routine.id)}">Delete Routine</button>
       </div>
       <ol>
         ${routine.steps.map((step) => `<li>${escapeHtml(step.title)} <span>${step.estimatedMinutes} min</span></li>`).join("")}
@@ -2478,7 +2642,7 @@ function renderCommandCenter() {
       ${renderStarterAcknowledgement()}
       ${renderCommandSetupPrompt()}
       <div class="command-center-grid">
-        ${renderCommandNow(now)}
+        ${renderCommandNow(now, working.activeRoutine)}
         ${renderCommandNext(next)}
         ${renderCommandMiddlePrompt({ tip: briefing.tip, reinforcement })}
         ${renderCommandToday(important)}
@@ -2979,6 +3143,7 @@ function renderUnlockScreen() {
 
 function renderSettingsView() {
   const appearance = getAppearanceSettings();
+  const routineGuidance = getRoutineGuidanceSettings();
   const hasImage = Boolean(appearance.imageDataUrl);
 
   return `
@@ -3032,6 +3197,41 @@ function renderSettingsView() {
           <input id="appearance-image" type="file" accept="image/*" data-action="upload-appearance-image" />
           <p class="empty-copy">Choose a sunset, flower, or landscape image. Very large photos may need to be resized later for production, but this works for testing.</p>
         </div>
+      </article>
+      <article class="panel routine-guidance-settings">
+        <div class="panel-title">
+          <div>
+            <h3>Routine Guidance</h3>
+            <p class="empty-copy">Choose how actively the assistant should keep you moving through a routine.</p>
+          </div>
+          ${pill(routineGuidance.voiceGuidance ? "Voice on" : routineGuidance.chimes ? "Chime on" : "Silent", "neutral")}
+        </div>
+        <form class="routine-guidance-settings-form" data-action="save-routine-guidance-settings">
+          <label class="setting-toggle">
+            <input type="checkbox" name="routineVoiceGuidance" ${routineGuidance.voiceGuidance ? "checked" : ""} />
+            <span><strong>Voice guidance</strong><small>Speak the current or next routine step.</small></span>
+          </label>
+          <label class="setting-toggle">
+            <input type="checkbox" name="routineChimes" ${routineGuidance.chimes ? "checked" : ""} />
+            <span><strong>Chimes</strong><small>Play a gentle sound after progress and reminders.</small></span>
+          </label>
+          <label class="setting-toggle">
+            <input type="checkbox" name="routineAutoRead" ${routineGuidance.autoReadNextStep ? "checked" : ""} />
+            <span><strong>Auto-read next step</strong><small>Read the next action after Done or Skip.</small></span>
+          </label>
+          <label class="setting-toggle">
+            <input type="checkbox" name="routineConfirmSkip" ${routineGuidance.confirmBeforeSkip ? "checked" : ""} />
+            <span><strong>Confirm before skipping</strong><small>Ask before moving past a routine action.</small></span>
+          </label>
+          <div>
+            <label for="routine-reminder-interval">Reminder interval while active</label>
+            <select id="routine-reminder-interval" name="routineReminderInterval">
+              ${[1, 3, 5, 10, 15, 30].map((minutes) => `<option value="${minutes}" ${routineGuidance.reminderIntervalMinutes === minutes ? "selected" : ""}>${minutes} minute${minutes === 1 ? "" : "s"}</option>`).join("")}
+            </select>
+          </div>
+          <button type="submit">Save Routine Guidance</button>
+        </form>
+        <p class="empty-copy">Audio works while the app is open. Phone background alarms and notifications still require a later installed-app version.</p>
       </article>
       <details class="panel settings-testing-panel">
         <summary>
@@ -3325,7 +3525,11 @@ function renderCommandHeader(label, action, ariaLabel) {
   `;
 }
 
-function renderCommandNow(recommendation) {
+function renderCommandNow(recommendation, activeRoutine = null) {
+  if (activeRoutine) {
+    return renderActiveRoutineCard(activeRoutine, "command");
+  }
+
   if (!recommendation) {
     return `
       <article class="panel command-card command-now" data-window-title="Now" data-walkthrough="now">
@@ -3669,8 +3873,94 @@ function renderSmartReschedulingList(items, emptyText) {
   `;
 }
 
+function renderActiveRoutineCard(guidance, context = "working", timeRemaining = "") {
+  const current = guidance.currentStep;
+  const isPaused = guidance.status === "paused";
+  const isReady = guidance.status === "ready";
+  const isComplete = guidance.status === "complete";
+  const cardClass = context === "command"
+    ? "panel command-card command-now active-routine-card"
+    : "working-card now-card active-routine-card";
+
+  return `
+    <article class="${cardClass}" data-window-title="Now">
+      <div class="active-routine-heading">
+        <div>
+          <p class="eyebrow">Now - Active Routine</p>
+          <h3>${escapeHtml(guidance.routine.name)}</h3>
+        </div>
+        ${pill(isComplete ? "Complete" : isPaused ? "Paused" : `${guidance.handledCount}/${guidance.totalCount}`, isComplete ? "done" : "strong")}
+      </div>
+      <div class="routine-progress-track" aria-label="${guidance.progressPercent}% complete">
+        <span style="width: ${guidance.progressPercent}%"></span>
+      </div>
+      ${
+        isComplete
+          ? `<div class="routine-current-step routine-complete-message"><strong>Routine complete.</strong><span>You moved through the whole path.</span></div>`
+          : `<div class="routine-current-step">
+              <span>${isPaused ? "Paused on" : isReady ? "First step" : "Current step"}</span>
+              <strong>${escapeHtml(current?.title ?? "No remaining step")}</strong>
+              <small>${guidance.remainingCount} remaining</small>
+            </div>`
+      }
+      ${timeRemaining ? `<div class="time-remaining"><strong>${escapeHtml(timeRemaining)}</strong></div>` : ""}
+      <div class="button-row active-routine-controls">
+        ${
+          isComplete
+            ? `<button type="button" data-action="close-active-routine">Close Routine</button>`
+            : isReady
+              ? `<button type="button" data-action="start-active-routine" data-routine-id="${escapeHtml(guidance.routine.id)}">Start Routine</button>`
+              : isPaused
+                ? `<button type="button" data-action="resume-active-routine">Resume</button>`
+                : `<button type="button" data-action="complete-active-routine-step" data-routine-id="${escapeHtml(guidance.routine.id)}" data-step-id="${escapeHtml(current?.id ?? "")}">Done</button>
+                   <button type="button" class="secondary-button" data-action="skip-active-routine-step" data-routine-id="${escapeHtml(guidance.routine.id)}" data-step-id="${escapeHtml(current?.id ?? "")}">Skip</button>
+                   <button type="button" class="secondary-button" data-action="pause-active-routine">Pause</button>`
+        }
+        ${!isComplete && current ? `<button type="button" class="secondary-button" data-action="repeat-active-routine-step">Read Step</button>` : ""}
+        ${!isComplete ? `<button type="button" class="secondary-button" data-action="listen-active-routine">Voice Command</button>` : ""}
+      </div>
+      <ol class="active-routine-list">
+        ${guidance.steps.map((step) => renderActiveRoutineListStep(guidance.routine.id, step, current)).join("")}
+      </ol>
+      <p class="routine-voice-status" data-routine-voice-status>${isPaused ? "Routine paused." : "Say Done, Skip, Next, Repeat, Pause routine, or Resume routine."}</p>
+    </article>
+  `;
+}
+
+function renderActiveRoutineListStep(routineId, step, current) {
+  if (step.children?.length) {
+    return `
+      <li class="routine-group ${step.completed ? "is-complete" : ""}">
+        <div class="routine-group-title">
+          <span class="routine-group-marker" aria-hidden="true">${step.completed ? "&#10003;" : ""}</span>
+          <strong>${escapeHtml(step.title)}</strong>
+        </div>
+        <ul>
+          ${step.children.map((child) => renderActiveRoutineChild(routineId, child, current)).join("")}
+        </ul>
+      </li>
+    `;
+  }
+  return renderActiveRoutineChild(routineId, step, current, true);
+}
+
+function renderActiveRoutineChild(routineId, step, current, topLevel = false) {
+  return `
+    <li class="${topLevel ? "routine-top-level-action" : ""} ${step.completed ? "is-complete" : ""} ${step.skipped ? "is-skipped" : ""} ${current?.id === step.id ? "is-current" : ""}">
+      <button type="button" class="routine-check-button" data-action="toggle-active-routine-step" data-routine-id="${escapeHtml(routineId)}" data-step-id="${escapeHtml(step.id)}" aria-label="${step.completed ? "Completed" : "Mark done"}: ${escapeHtml(step.title)}" ${step.completed ? "disabled" : ""}>
+        <span aria-hidden="true">${step.completed ? "&#10003;" : step.skipped ? "&#8212;" : ""}</span>
+      </button>
+      <span>${escapeHtml(step.displayTitle ?? step.title)}</span>
+    </li>
+  `;
+}
+
 function renderNowCard(working) {
   const recommendation = working.now;
+  if (working.activeRoutine) {
+    return renderActiveRoutineCard(working.activeRoutine, "working", working.timeRemaining);
+  }
+
   if (!recommendation) {
     return `
       <article class="working-card now-card">
@@ -4707,6 +4997,7 @@ function renderApp() {
   enhanceCollapsibleWindows();
   syncWalkthroughTarget();
   scheduleWorkingModeRefresh(activeView);
+  scheduleRoutineGuidanceReminder();
   scheduleStarterAcknowledgementDismiss(activeView);
 }
 
@@ -4836,8 +5127,27 @@ function scheduleWorkingModeRefresh(activeView) {
   }, 1000);
 }
 
+function scheduleRoutineGuidanceReminder() {
+  if (routineGuidanceTimer) {
+    return;
+  }
+
+  routineGuidanceTimer = setInterval(() => {
+    if (!shouldRemindActiveRoutine()) {
+      return;
+    }
+    const guidance = getActiveRoutineGuidance();
+    if (!guidance?.currentStep) {
+      return;
+    }
+    playRoutineChime();
+    announceRoutineMessage(`Still on ${guidance.routine.name}. Next step: ${guidance.currentStep.title}.`, guidance.settings.voiceGuidance);
+    markActiveRoutinePrompted();
+  }, 15000);
+}
+
 function shouldPauseAutomaticRefresh() {
-  if (walkthroughActive || document.querySelector(".app-menu[open]")) {
+  if (walkthroughActive || routineVoiceRecognition || document.querySelector(".app-menu[open]")) {
     return true;
   }
 
@@ -4893,9 +5203,48 @@ app.addEventListener("click", (event) => {
       renderApp();
     }
   }
+  if (action === "start-active-routine") {
+    const guidance = startActiveRoutine(button.dataset.routineId);
+    playRoutineChime();
+    if (guidance?.currentStep) {
+      announceRoutineMessage(`${guidance.routine.name}. First: ${guidance.currentStep.title}.`, guidance.settings.voiceGuidance || guidance.settings.autoReadNextStep);
+    }
+    renderApp();
+  }
+  if (action === "close-active-routine") {
+    closeActiveRoutine();
+    renderApp();
+  }
+  if (action === "complete-active-routine-step" || action === "toggle-active-routine-step") {
+    handleRoutineStepCompletion(button.dataset.routineId, button.dataset.stepId);
+  }
+  if (action === "skip-active-routine-step") {
+    handleRoutineStepSkip(button.dataset.routineId, button.dataset.stepId);
+  }
+  if (action === "pause-active-routine") {
+    pauseActiveRoutine();
+    renderApp();
+  }
+  if (action === "resume-active-routine") {
+    resumeActiveRoutine();
+    announceCurrentRoutineStep("Resuming");
+    renderApp();
+  }
+  if (action === "repeat-active-routine-step") {
+    announceCurrentRoutineStep("Current step");
+  }
+  if (action === "listen-active-routine") {
+    listenForRoutineCommand();
+  }
   if (action === "finish-routine-building") {
     cancelRoutineEdit();
     renderApp();
+  }
+  if (action === "delete-current-routine") {
+    if (window.confirm("Delete this routine? Its linked habits and medication records will remain available.")) {
+      deleteRoutine(id);
+      renderApp();
+    }
   }
   if (action === "move-routine-action") {
     moveRoutineAction(button.dataset.routineId, id, button.dataset.direction);
@@ -5124,8 +5473,10 @@ app.addEventListener("click", (event) => {
     renderApp();
   }
   if (action === "delete-routine") {
-    deleteRoutine(id);
-    renderApp();
+    if (window.confirm("Delete this routine? Its linked habits and medication records will remain available.")) {
+      deleteRoutine(id);
+      renderApp();
+    }
   }
   if (action === "activate-routine") {
     activateRoutine(id);
@@ -5326,6 +5677,14 @@ app.addEventListener("submit", async (event) => {
   if (appearanceForm) {
     event.preventDefault();
     saveAppearanceSettings(new FormData(appearanceForm));
+    renderApp();
+    return;
+  }
+
+  const routineGuidanceSettingsForm = event.target.closest("form[data-action='save-routine-guidance-settings']");
+  if (routineGuidanceSettingsForm) {
+    event.preventDefault();
+    saveRoutineGuidanceSettings(new FormData(routineGuidanceSettingsForm));
     renderApp();
     return;
   }
@@ -5627,7 +5986,11 @@ function addMedicationGroupToRoutine() {
 
   const routineId = getRoutineBuilderData().draftRoutine?.id;
   if (routineId) {
-    addRoutineActions(routineId, result.createdMedications.map((item) => `Take ${item.name}`));
+    linkMedicationGroupToRoutine(
+      routineId,
+      groupNameField?.value || `Take ${scheduleField?.value || "morning"} medications`,
+      scheduleField?.value || "morning",
+    );
   } else {
     appendRoutineStepLine(result.routineStepLine);
   }

@@ -31,8 +31,13 @@ export function createRoutineContainer(state, templateId, customName = "") {
   ensureRoutineBuilderState(state);
   const template = ROUTINE_TEMPLATES.find((item) => item.id === templateId);
   const name = customName.trim() || template?.name || "Custom Routine";
-  const existing = state.routinePlans.find((routine) => routine.name.toLowerCase() === name.toLowerCase());
+  const existing = state.routinePlans.find((routine) => routineMatchesTemplate(routine, templateId, name));
   if (existing) {
+    if (template && isLegacyTemplateName(existing.name, templateId)) {
+      existing.name = template.name;
+      existing.type = template.type;
+      existing.updatedAt = new Date().toISOString();
+    }
     state.routineBuilderDraftId = existing.id;
     return existing;
   }
@@ -52,6 +57,38 @@ export function createRoutineContainer(state, templateId, customName = "") {
   state.routinePlans.unshift(routine);
   state.routineBuilderDraftId = routine.id;
   return routine;
+}
+
+function routineMatchesTemplate(routine, templateId, requestedName) {
+  const routineName = normalizeName(routine.name);
+  if (routineName === normalizeName(requestedName)) {
+    return true;
+  }
+  if (templateId === "morning") {
+    return routine.type === "morning" && ["morning routine", "morning launch"].includes(routineName);
+  }
+  if (templateId === "evening") {
+    return routine.type === "evening" && ["evening routine", "evening shutdown", "night routine"].includes(routineName);
+  }
+  const aliases = {
+    lunch: ["lunch routine"],
+    dinner: ["dinner routine"],
+    "work-start": ["work start routine", "work startup routine"],
+    "work-shutdown": ["work shutdown routine", "end work routine"],
+  };
+  return (aliases[templateId] ?? []).includes(routineName);
+}
+
+function isLegacyTemplateName(name, templateId) {
+  const normalized = normalizeName(name);
+  return (templateId === "morning" && normalized === "morning launch")
+    || (templateId === "evening" && ["evening shutdown", "night routine"].includes(normalized))
+    || (templateId === "work-start" && normalized === "work startup routine")
+    || (templateId === "work-shutdown" && normalized === "end work routine");
+}
+
+function normalizeName(value) {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 export function addActionsToRoutine(state, routineId, actionNames) {
@@ -101,6 +138,40 @@ export function addActionsToRoutine(state, routineId, actionNames) {
 
   routine.updatedAt = new Date().toISOString();
   normalizeStepOrder(routine);
+  return routine;
+}
+
+export function addMedicationGroupStep(state, routineId, groupName, schedule = "morning") {
+  ensureRoutineBuilderState(state);
+  const routine = state.routinePlans.find((item) => item.id === routineId);
+  if (!routine) {
+    return null;
+  }
+
+  const normalizedSchedule = ["morning", "afternoon", "evening", "custom"].includes(schedule) ? schedule : "morning";
+  const existingGroup = routine.steps.find((step) => step.groupType === "medications" && step.schedule === normalizedSchedule);
+  if (existingGroup) {
+    existingGroup.title = groupName.trim() || existingGroup.title;
+    routine.updatedAt = new Date().toISOString();
+    return routine;
+  }
+
+  const medicationHabitIds = new Set(
+    (state.medications ?? [])
+      .filter((medication) => medication.schedule === normalizedSchedule)
+      .map((medication) => `habit-medication-${medication.id}`),
+  );
+  routine.steps = routine.steps.filter((step) => !medicationHabitIds.has(step.habitId));
+  routine.steps.push({
+    id: `step-medication-group-${Date.now()}`,
+    title: groupName.trim() || `Take ${normalizedSchedule} medications`,
+    groupType: "medications",
+    schedule: normalizedSchedule,
+    order: routine.steps.length + 1,
+    estimatedMinutes: Math.max(2, medicationHabitIds.size),
+  });
+  normalizeStepOrder(routine);
+  routine.updatedAt = new Date().toISOString();
   return routine;
 }
 
@@ -223,6 +294,7 @@ export function clearRoutineBuilderDraft(state) {
 export function buildActiveRoutineSteps({ state, isDone, getDayPart }) {
   ensureRoutineBuilderState(state);
   const dayPart = getDayPart();
+  const todayKey = getDateKey(new Date());
   const steps = [];
 
   for (const routine of state.routinePlans) {
@@ -232,7 +304,7 @@ export function buildActiveRoutineSteps({ state, isDone, getDayPart }) {
 
     routine.steps.forEach((step, index) => {
       const id = getRoutineStepItemId(routine.id, step.id);
-      const savedState = state.routineStepState[id] ?? {};
+      const savedState = state.routineStepState[id]?.dateKey === todayKey ? state.routineStepState[id] : {};
       const stepStartTime = routine.startTime ? addMinutesToTime(routine.startTime, getMinutesBeforeStep(routine.steps, index)) : "";
       const item = {
         id,
@@ -269,6 +341,7 @@ export function buildActiveRoutineSteps({ state, isDone, getDayPart }) {
 
 export function buildScheduledRoutineSteps({ state, isDone }) {
   ensureRoutineBuilderState(state);
+  const todayKey = getDateKey(new Date());
   const steps = [];
 
   for (const routine of state.routinePlans) {
@@ -278,7 +351,7 @@ export function buildScheduledRoutineSteps({ state, isDone }) {
 
     routine.steps.forEach((step, index) => {
       const id = getRoutineStepItemId(routine.id, step.id);
-      const savedState = state.routineStepState[id] ?? {};
+      const savedState = state.routineStepState[id]?.dateKey === todayKey ? state.routineStepState[id] : {};
       const stepStartTime = addMinutesToTime(routine.startTime, getMinutesBeforeStep(routine.steps, index));
       const item = buildRoutineStepItem({ routine, step, index, savedState, stepStartTime });
 
@@ -432,6 +505,11 @@ function formatMinutesAsTime(totalMinutes) {
   const period = hours24 >= 12 ? "PM" : "AM";
   const hours12 = hours24 % 12 || 12;
   return `${hours12}:${minutes} ${period}`;
+}
+
+function getDateKey(date) {
+  const local = new Date(date);
+  return `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, "0")}-${String(local.getDate()).padStart(2, "0")}`;
 }
 
 function normalizeStepOrder(routine) {

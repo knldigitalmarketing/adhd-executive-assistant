@@ -173,6 +173,16 @@ export const appState = {
   routinePlans: [],
   routineStepState: {},
   routineBuilderDraftId: null,
+  routineGuidance: {
+    settings: {
+      voiceGuidance: false,
+      chimes: true,
+      reminderIntervalMinutes: 5,
+      autoReadNextStep: false,
+      confirmBeforeSkip: false,
+    },
+    activeSession: null,
+  },
   medications: [],
   medicationState: {},
   goals: [],

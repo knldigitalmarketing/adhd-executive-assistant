@@ -117,6 +117,7 @@ import {
 } from "./recurring-task-engine.js";
 import {
   addActionsToRoutine,
+  addMedicationGroupStep,
   buildScheduledRoutineSteps,
   buildActiveRoutineSteps,
   clearRoutineBuilderDraft,
@@ -133,6 +134,20 @@ import {
   updateRoutineSchedule,
   updateRoutinePlan,
 } from "./routine-builder.js";
+import {
+  closeRoutineSession,
+  completeRoutineSessionStep,
+  ensureRoutineGuidanceState,
+  getActiveRoutineGuidance as buildActiveRoutineGuidance,
+  getRoutineGuidanceSettings as buildRoutineGuidanceSettings,
+  isRoutineReminderDue,
+  markRoutinePrompted,
+  pauseRoutineSession,
+  resumeRoutineSession,
+  skipRoutineSessionStep,
+  startRoutineSession,
+  updateRoutineGuidanceSettings,
+} from "./routine-guidance.js";
 import { clearState, loadState, saveState } from "./storage.js";
 import { ensureTipState, getTipById, recordTipShown, selectHelpfulStrategy } from "./tips.js";
 import {
@@ -158,6 +173,7 @@ state.positiveReinforcementState = ensurePositiveReinforcementState(state.positi
 state.interventionState = ensureInterventionState(state.interventionState);
 ensureEnergyMoodState(state);
 ensureRoutineBuilderState(state);
+ensureRoutineGuidanceState(state);
 ensureMedicationState(state);
 ensureGoalState(state);
 ensureProjectState(state);
@@ -752,6 +768,7 @@ export function markDone(collectionName, id) {
     recordGoalProgress(collectionName, id, item);
     state.routineStepState[id] = {
       ...state.routineStepState[id],
+      dateKey: getTodayKey(),
       status: "done",
       completed: true,
       completedAt: new Date().toISOString(),
@@ -854,6 +871,7 @@ export function doItNow(collectionName, id) {
   if (collectionName === "routineSteps") {
     state.routineStepState[id] = {
       ...state.routineStepState[id],
+      dateKey: getTodayKey(),
       status: "doing",
       startedAt: new Date().toISOString(),
     };
@@ -945,6 +963,7 @@ export function snoozeItem(collectionName, id) {
     recordItemEvent(collectionName, id, "snoozed", item);
     state.routineStepState[id] = {
       ...state.routineStepState[id],
+      dateKey: getTodayKey(),
       status: "snoozed",
       completed: false,
       snoozedUntil: getSnoozeLabel(),
@@ -1057,6 +1076,7 @@ export function skipItem(collectionName, id) {
     recordItemEvent(collectionName, id, "skipped", item);
     state.routineStepState[id] = {
       ...state.routineStepState[id],
+      dateKey: getTodayKey(),
       status: "skipped",
       completed: false,
       skippedUntil: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
@@ -1196,6 +1216,7 @@ export function dismissItem(collectionName, id) {
     recordItemEvent(collectionName, id, "dismissed", item);
     state.routineStepState[id] = {
       ...state.routineStepState[id],
+      dateKey: getTodayKey(),
       status: "dismissed",
       dismissedAt: new Date().toISOString(),
     };
@@ -1509,6 +1530,12 @@ export function addRoutineActions(routineId, actionNames) {
   return routine;
 }
 
+export function addMedicationGroupToRoutine(routineId, groupName, schedule) {
+  const routine = addMedicationGroupStep(state, routineId, groupName, schedule);
+  saveState(state);
+  return routine;
+}
+
 export function moveRoutineAction(routineId, stepId, direction) {
   moveRoutineStep(state, routineId, stepId, direction);
   saveState(state);
@@ -1528,6 +1555,68 @@ export function saveRoutineSchedule(routineId, formData) {
   const routine = updateRoutineSchedule(state, routineId, formData);
   syncRoutineTimelineItem(routine);
   saveState(state);
+}
+
+export function getRoutineGuidanceSettings() {
+  return buildRoutineGuidanceSettings(state);
+}
+
+export function saveRoutineGuidanceSettings(formData) {
+  updateRoutineGuidanceSettings(state, formData);
+  saveState(state);
+}
+
+export function getActiveRoutineGuidance(routineId = "") {
+  return buildActiveRoutineGuidance(state, routineId);
+}
+
+export function startActiveRoutine(routineId) {
+  const guidance = startRoutineSession(state, routineId);
+  saveState(state);
+  return guidance;
+}
+
+export function completeActiveRoutineStep(routineId, stepId) {
+  const before = getActiveRoutineGuidance(routineId);
+  const item = before?.steps.flatMap((step) => step.children?.length ? step.children : [step]).find((step) => step.id === stepId);
+  const guidance = completeRoutineSessionStep(state, routineId, stepId);
+  recordItemEvent("routineSteps", item?.itemId ?? `routine-step-${routineId}-${stepId}`, "done", item);
+  recordGoalProgress("routineSteps", item?.itemId ?? `routine-step-${routineId}-${stepId}`, item);
+  saveState(state);
+  return guidance;
+}
+
+export function skipActiveRoutineStep(routineId, stepId) {
+  const before = getActiveRoutineGuidance(routineId);
+  const item = before?.steps.flatMap((step) => step.children?.length ? step.children : [step]).find((step) => step.id === stepId);
+  const guidance = skipRoutineSessionStep(state, routineId, stepId);
+  recordItemEvent("routineSteps", item?.itemId ?? `routine-step-${routineId}-${stepId}`, "skipped", item);
+  saveState(state);
+  return guidance;
+}
+
+export function pauseActiveRoutine() {
+  pauseRoutineSession(state);
+  saveState(state);
+}
+
+export function resumeActiveRoutine() {
+  resumeRoutineSession(state);
+  saveState(state);
+}
+
+export function closeActiveRoutine() {
+  closeRoutineSession(state);
+  saveState(state);
+}
+
+export function markActiveRoutinePrompted() {
+  markRoutinePrompted(state);
+  saveState(state);
+}
+
+export function shouldRemindActiveRoutine() {
+  return isRoutineReminderDue(getActiveRoutineGuidance());
 }
 
 export function editRoutine(id) {
@@ -1757,9 +1846,11 @@ export function getDecisionRecommendation() {
 export function getWorkingModeData() {
   const recommendation = getDecisionRecommendation();
   const comingUp = getNextUpcomingItem(recommendation?.item.id);
+  const recommendedRoutineId = recommendation?.collection === "routineSteps" ? recommendation.item.routineId : "";
 
   return {
     now: recommendation,
+    activeRoutine: getActiveRoutineGuidance(recommendedRoutineId),
     comingUp,
     timeRemaining: recommendation ? getTimeRemainingLabel(comingUp) : "Time Remaining: Due now",
     tip: getHelpfulStrategy("working"),
