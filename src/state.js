@@ -138,9 +138,11 @@ import {
   closeRoutineSession,
   completeRoutineSessionStep,
   ensureRoutineGuidanceState,
+  getDueRoutineAlarmPrompt,
   getActiveRoutineGuidance as buildActiveRoutineGuidance,
   getRoutineGuidanceSettings as buildRoutineGuidanceSettings,
   isRoutineReminderDue,
+  markRoutineAlarmPrompted as markRoutineAlarmPromptedInState,
   markRoutinePrompted,
   pauseRoutineSession,
   resumeRoutineSession,
@@ -1617,6 +1619,15 @@ export function markActiveRoutinePrompted() {
 
 export function shouldRemindActiveRoutine() {
   return isRoutineReminderDue(getActiveRoutineGuidance());
+}
+
+export function getDueRoutineAlarm() {
+  return getDueRoutineAlarmPrompt(state);
+}
+
+export function acknowledgeRoutineAlarm(routineId) {
+  markRoutineAlarmPromptedInState(state, routineId);
+  saveState(state);
 }
 
 export function editRoutine(id) {
@@ -3329,13 +3340,14 @@ function syncRoutineTimelineItem(routine) {
   }
 
   const totalMinutes = (routine.steps ?? []).reduce((sum, step) => sum + Number(step.estimatedMinutes ?? 0), 0);
+  const hasInAppAlarm = routine.alarmPreference === "in-app" || routine.alarmPreference === "both" || routine.alarmPreference === "prompt";
   state.timeline.unshift({
     id: getRoutineTimelineId(routine.id),
     routinePlanId: routine.id,
-    title: routine.alarmPreference === "prompt" ? `Start ${routine.name} - alarm prompt` : `Start ${routine.name}`,
+    title: hasInAppAlarm ? `Start ${routine.name} - in-app alarm` : `Start ${routine.name}`,
     time: routine.startTime,
     startTime: routine.startTime,
-    type: routine.alarmPreference === "prompt" ? "Routine Alarm Prompt" : "Routine Start",
+    type: hasInAppAlarm ? "Routine Alarm Prompt" : "Routine Start",
     areaId: "routineBuilder",
     status: "Upcoming",
     priority: routine.type === "morning" ? "High" : "Medium",

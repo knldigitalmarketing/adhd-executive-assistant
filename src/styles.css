@@ -3366,6 +3366,14 @@ input[type="checkbox"] {
   font-size: 0.82rem;
 }
 
+.compact-button {
+  width: auto;
+  min-height: 34px;
+  margin-top: 8px;
+  padding: 7px 12px;
+  font-size: 0.88rem;
+}
+
 .is-complete {
   opacity: 0.68;
 }

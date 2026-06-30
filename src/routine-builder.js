@@ -50,6 +50,7 @@ export function createRoutineContainer(state, templateId, customName = "") {
     active: true,
     startTime: "",
     alarmPreference: "none",
+    alarmSound: "gentle-chime",
     steps: [],
     createdAt: now,
     updatedAt: now,
@@ -229,6 +230,7 @@ export function updateRoutineSchedule(state, routineId, formData) {
   }
   routine.startTime = normalizeRoutineStartTime(String(formData.get("routineStartTime") ?? ""));
   routine.alarmPreference = normalizeAlarmPreference(String(formData.get("routineAlarm") ?? "none"));
+  routine.alarmSound = normalizeAlarmSound(String(formData.get("routineAlarmSound") ?? routine.alarmSound ?? "gentle-chime"));
   routine.active = formData.get("routineActive") !== "inactive";
   routine.updatedAt = new Date().toISOString();
   return routine;
@@ -401,6 +403,7 @@ function buildRoutineFromForm(formData, id) {
   const steps = parseStepLines(String(formData.get("routineSteps") ?? ""));
   const startTime = normalizeRoutineStartTime(String(formData.get("routineStartTime") ?? ""));
   const alarmPreference = normalizeAlarmPreference(String(formData.get("routineAlarm") ?? "none"));
+  const alarmSound = normalizeAlarmSound(String(formData.get("routineAlarmSound") ?? "gentle-chime"));
 
   return {
     id,
@@ -409,6 +412,7 @@ function buildRoutineFromForm(formData, id) {
     active,
     startTime,
     alarmPreference,
+    alarmSound,
     steps,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -477,7 +481,17 @@ function normalizeRoutineStartTime(value) {
 }
 
 function normalizeAlarmPreference(value) {
-  return value === "prompt" ? "prompt" : "none";
+  if (value === "prompt" || value === "in-app") {
+    return "in-app";
+  }
+  if (value === "phone" || value === "both") {
+    return value;
+  }
+  return "none";
+}
+
+function normalizeAlarmSound(value) {
+  return ["gentle-chime", "soft-bell", "focus-tone", "morning-tone", "urgent-tone"].includes(value) ? value : "gentle-chime";
 }
 
 function getMinutesFromTime(value) {

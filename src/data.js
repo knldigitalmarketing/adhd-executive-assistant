@@ -182,6 +182,7 @@ export const appState = {
       confirmBeforeSkip: false,
     },
     activeSession: null,
+    alarmState: {},
   },
   medications: [],
   medicationState: {},

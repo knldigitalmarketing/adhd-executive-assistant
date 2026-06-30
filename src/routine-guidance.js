@@ -8,6 +8,7 @@ export const DEFAULT_ROUTINE_GUIDANCE_SETTINGS = {
 
 export function ensureRoutineGuidanceState(state) {
   state.routineGuidance = state.routineGuidance ?? {};
+  state.routineGuidance.alarmState = state.routineGuidance.alarmState ?? {};
   state.routineGuidance.settings = {
     ...DEFAULT_ROUTINE_GUIDANCE_SETTINGS,
     ...(state.routineGuidance.settings ?? {}),
@@ -111,6 +112,34 @@ export function markRoutinePrompted(state, now = new Date()) {
     state.routineGuidance.activeSession.lastPromptAt = now.toISOString();
     state.routineGuidance.activeSession.updatedAt = now.toISOString();
   }
+}
+
+export function getDueRoutineAlarmPrompt(state, now = new Date()) {
+  ensureRoutineGuidanceState(state);
+  const todayKey = getDateKey(now);
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+  return (state.routinePlans ?? [])
+    .filter((routine) => routine.active !== false && routine.startTime && usesInAppAlarm(routine.alarmPreference))
+    .map((routine) => ({ routine, startMinutes: getMinutesFromTime(routine.startTime) }))
+    .filter(({ routine, startMinutes }) => {
+      if (startMinutes === null) {
+        return false;
+      }
+      const alarmKey = getRoutineAlarmKey(routine.id, todayKey);
+      const alreadyPrompted = state.routineGuidance.alarmState[alarmKey]?.prompted === true;
+      return !alreadyPrompted && nowMinutes >= startMinutes && nowMinutes <= startMinutes + 30;
+    })
+    .sort((left, right) => left.startMinutes - right.startMinutes)[0]?.routine ?? null;
+}
+
+export function markRoutineAlarmPrompted(state, routineId, now = new Date()) {
+  ensureRoutineGuidanceState(state);
+  const alarmKey = getRoutineAlarmKey(routineId, getDateKey(now));
+  state.routineGuidance.alarmState[alarmKey] = {
+    prompted: true,
+    promptedAt: now.toISOString(),
+  };
 }
 
 export function getActiveRoutineGuidance(state, preferredRoutineId = "", now = new Date()) {
@@ -231,6 +260,31 @@ function normalizeActiveSession(value) {
     updatedAt: value.updatedAt ?? null,
     lastPromptAt: value.lastPromptAt ?? null,
   };
+}
+
+function usesInAppAlarm(value) {
+  return value === "in-app" || value === "both" || value === "prompt";
+}
+
+function getRoutineAlarmKey(routineId, dateKey) {
+  return `${dateKey}:${routineId}`;
+}
+
+function getMinutesFromTime(value) {
+  const match = String(value ?? "").trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!match) {
+    return null;
+  }
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const period = match[3]?.toUpperCase();
+  if (period === "PM" && hours !== 12) {
+    hours += 12;
+  }
+  if (period === "AM" && hours === 12) {
+    hours = 0;
+  }
+  return hours * 60 + minutes;
 }
 
 function getRoutine(state, routineId) {

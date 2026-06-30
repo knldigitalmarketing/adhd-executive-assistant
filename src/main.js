@@ -58,6 +58,7 @@ import {
   getLifeAreaDashboardData,
   getMorningBriefingData,
   getMedicationTrackingData,
+  getDueRoutineAlarm,
   getOpenTodayActions,
   getPositiveReinforcement,
   getProjectTrackingData,
@@ -132,6 +133,7 @@ import {
   statusText,
   statusTone,
   markActiveRoutinePrompted,
+  acknowledgeRoutineAlarm,
   shouldRemindActiveRoutine,
   savePrivacyLock,
   saveProfilePhoto,
@@ -1615,11 +1617,29 @@ function renderRoutineScheduleAfterStructure(routine) {
           <input id="routine-start-time" name="routineStartTime" type="time" value="${escapeHtml(getRoutineStartTimeInputValue(routine.startTime))}" />
         </div>
         <div>
-          <label for="routine-alarm">Alarm-style prompt</label>
+          <label for="routine-alarm">Routine alarm</label>
           <select id="routine-alarm" name="routineAlarm">
-            <option value="none" ${routine.alarmPreference === "prompt" ? "" : "selected"}>No prompt</option>
-            <option value="prompt" ${routine.alarmPreference === "prompt" ? "selected" : ""}>Yes, prompt me in the app</option>
+            ${renderValueLabelOptions([
+              ["none", "No alarm"],
+              ["in-app", "In-app alarm"],
+              ["phone", "Phone alarm handoff"],
+              ["both", "Both in-app and phone"],
+            ], normalizeRoutineAlarmPreference(routine.alarmPreference))}
           </select>
+          <p class="field-help">In-app alarms work while this app is open. Phone alarms can be customized on the phone, but full phone alarm handoff needs the later installed-app version.</p>
+        </div>
+        <div>
+          <label for="routine-alarm-sound">In-app sound</label>
+          <select id="routine-alarm-sound" name="routineAlarmSound">
+            ${renderValueLabelOptions([
+              ["gentle-chime", "Gentle chime"],
+              ["soft-bell", "Soft bell"],
+              ["focus-tone", "Focus tone"],
+              ["morning-tone", "Morning tone"],
+              ["urgent-tone", "Urgent tone"],
+            ], routine.alarmSound ?? "gentle-chime")}
+          </select>
+          <button type="button" class="secondary-button compact-button" data-action="test-routine-alarm-sound">Test Sound</button>
         </div>
         <div>
           <label for="routine-active">Status</label>
@@ -1711,27 +1731,46 @@ function playRoutineChime() {
   if (!getRoutineGuidanceSettings().chimes) {
     return;
   }
+  playInAppAlarmSound("gentle-chime");
+}
+
+function playInAppAlarmSound(sound = "gentle-chime") {
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) {
       return;
     }
+    const soundConfig = getInAppSoundConfig(sound);
     const context = new AudioContext();
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    oscillator.type = "sine";
-    oscillator.frequency.setValueAtTime(660, context.currentTime);
-    gain.gain.setValueAtTime(0.0001, context.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.12, context.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.3);
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + 0.32);
-    oscillator.addEventListener("ended", () => context.close());
+    soundConfig.tones.forEach((tone, index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const startAt = context.currentTime + index * soundConfig.gap;
+      oscillator.type = soundConfig.type;
+      oscillator.frequency.setValueAtTime(tone, startAt);
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(soundConfig.volume, startAt + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + soundConfig.duration);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(startAt);
+      oscillator.stop(startAt + soundConfig.duration);
+    });
+    window.setTimeout(() => context.close(), (soundConfig.tones.length * soundConfig.gap + soundConfig.duration + 0.1) * 1000);
   } catch {
     // Browsers may block audio until the user has interacted with the page.
   }
+}
+
+function getInAppSoundConfig(sound) {
+  const configs = {
+    "soft-bell": { tones: [523, 659], type: "sine", duration: 0.42, gap: 0.22, volume: 0.1 },
+    "focus-tone": { tones: [440, 440, 660], type: "triangle", duration: 0.22, gap: 0.18, volume: 0.09 },
+    "morning-tone": { tones: [392, 523, 659], type: "sine", duration: 0.32, gap: 0.2, volume: 0.11 },
+    "urgent-tone": { tones: [880, 880, 880], type: "square", duration: 0.18, gap: 0.16, volume: 0.08 },
+    "gentle-chime": { tones: [660], type: "sine", duration: 0.32, gap: 0.2, volume: 0.12 },
+  };
+  return configs[sound] ?? configs["gentle-chime"];
 }
 
 function listenForRoutineCommand() {
@@ -1948,7 +1987,7 @@ function renderRoutinePlanItem(routine) {
     <li>
       <div>
         <strong>${escapeHtml(routine.name)}</strong>
-        <span>${escapeHtml(titleCase(routine.type))} - ${routine.steps.length} steps - ${totalMinutes} min${routine.startTime ? ` - starts ${escapeHtml(routine.startTime)}` : ""}${routine.alarmPreference === "prompt" ? " - in-app prompt" : ""}</span>
+            <span>${escapeHtml(titleCase(routine.type))} - ${routine.steps.length} steps - ${totalMinutes} min${routine.startTime ? ` - starts ${escapeHtml(routine.startTime)}` : ""}${getRoutineAlarmLabel(routine.alarmPreference) ? ` - ${escapeHtml(getRoutineAlarmLabel(routine.alarmPreference))}` : ""}</span>
       </div>
       <div class="item-actions">
         ${pill(routine.active ? "Active" : "Inactive", routine.active ? "strong" : "neutral")}
@@ -3231,7 +3270,7 @@ function renderSettingsView() {
           </div>
           <button type="submit">Save Routine Guidance</button>
         </form>
-        <p class="empty-copy">Audio works while the app is open. Phone background alarms and notifications still require a later installed-app version.</p>
+        <p class="empty-copy">In-app audio works while this app is open. Phone alarm sounds are customized on the phone; reliable background phone alarms still require the later installed-app version.</p>
       </article>
       <details class="panel settings-testing-panel">
         <summary>
@@ -3815,6 +3854,22 @@ function renderEnergyMoodCheckIn(data = getEnergyMoodData()) {
 
 function renderOptionList(options, selectedValue, labelFormatter = (value) => value) {
   return options.map((option) => `<option value="${escapeHtml(option)}" ${option === selectedValue ? "selected" : ""}>${escapeHtml(labelFormatter(option))}</option>`).join("");
+}
+
+function renderValueLabelOptions(options, selectedValue) {
+  return options.map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === selectedValue ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+}
+
+function normalizeRoutineAlarmPreference(value) {
+  return value === "prompt" ? "in-app" : (value || "none");
+}
+
+function getRoutineAlarmLabel(value) {
+  const normalized = normalizeRoutineAlarmPreference(value);
+  if (normalized === "in-app") return "in-app alarm";
+  if (normalized === "phone") return "phone alarm handoff";
+  if (normalized === "both") return "both alarms";
+  return "";
 }
 
 function renderSmartRescheduling(summary) {
@@ -5133,6 +5188,16 @@ function scheduleRoutineGuidanceReminder() {
   }
 
   routineGuidanceTimer = setInterval(() => {
+    const dueRoutine = getDueRoutineAlarm();
+    if (dueRoutine && !shouldPauseAutomaticRefresh()) {
+      acknowledgeRoutineAlarm(dueRoutine.id);
+      const guidance = startActiveRoutine(dueRoutine.id);
+      playInAppAlarmSound(dueRoutine.alarmSound ?? "gentle-chime");
+      announceRoutineMessage(`${dueRoutine.name}. First: ${guidance?.currentStep?.title ?? "open your routine"}.`, guidance?.settings.voiceGuidance);
+      renderApp();
+      return;
+    }
+
     if (!shouldRemindActiveRoutine()) {
       return;
     }
@@ -5188,6 +5253,11 @@ app.addEventListener("click", (event) => {
       collapsedWindows.add(collapseId);
     }
     renderApp();
+  }
+  if (action === "test-routine-alarm-sound") {
+    const form = button.closest("form");
+    const sound = form?.querySelector("[name='routineAlarmSound']")?.value ?? "gentle-chime";
+    playInAppAlarmSound(sound);
   }
   if (action === "start-walkthrough") {
     startWalkthrough();

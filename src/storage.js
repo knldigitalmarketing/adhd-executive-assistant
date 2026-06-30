@@ -121,6 +121,7 @@ function mergeState(base, stored) {
       ...stored.routineGuidance,
       settings: { ...base.routineGuidance?.settings, ...stored.routineGuidance?.settings },
       activeSession: stored.routineGuidance?.activeSession ?? base.routineGuidance?.activeSession,
+      alarmState: { ...base.routineGuidance?.alarmState, ...stored.routineGuidance?.alarmState },
     },
     medications: arrayOrDefault(stored.medications, base.medications),
     medicationState: { ...base.medicationState, ...stored.medicationState },
