@@ -1,8 +1,15 @@
 import { modelDefinitions } from "./models.js";
 import {
+  buildRoutineCalendarEvent,
+  downloadCalendarEvent,
+  getGoogleCalendarUrl,
+  getOutlookCalendarUrl,
+} from "./calendar-handoff.js";
+import {
   activateRoutine,
   activateHabit,
   activateRecurringTask,
+  addVoiceListItem,
   addTask,
   addHourlyItem,
   addWaterBreakTemplate,
@@ -142,6 +149,7 @@ import {
   saveProgressiveName,
 } from "./state.js";
 import { formatRoutineStepLines, startVoiceRecognition } from "./voice-list-entry.js";
+import { getRoutineDurationOptions } from "./voice-list-entry.js";
 
 const app = document.querySelector("#app");
 let workingModeTimer = null;
@@ -1576,7 +1584,7 @@ function renderRoutineActionOrder(routine) {
           <span class="drag-handle" aria-hidden="true">::</span>
           <div class="routine-order-content">
             <strong>${escapeHtml(step.title)}</strong>
-            <span>${step.estimatedMinutes} min${step.habitId ? " - tracked action" : step.groupType === "medications" ? " - medication group" : ""}</span>
+            <span>${formatMinutesLabel(step.estimatedMinutes)}${step.habitId ? " - tracked action" : step.groupType === "medications" ? " - medication group" : ""}</span>
             ${renderRoutineStepChildren(step)}
           </div>
           <div class="item-actions">
@@ -1987,7 +1995,7 @@ function renderRoutinePlanItem(routine) {
     <li>
       <div>
         <strong>${escapeHtml(routine.name)}</strong>
-            <span>${escapeHtml(titleCase(routine.type))} - ${routine.steps.length} steps - ${totalMinutes} min${routine.startTime ? ` - starts ${escapeHtml(routine.startTime)}` : ""}${getRoutineAlarmLabel(routine.alarmPreference) ? ` - ${escapeHtml(getRoutineAlarmLabel(routine.alarmPreference))}` : ""}</span>
+            <span>${escapeHtml(titleCase(routine.type))} - ${routine.steps.length} steps - ${formatMinutesLabel(totalMinutes)}${routine.startTime ? ` - starts ${escapeHtml(routine.startTime)}` : ""}${getRoutineAlarmLabel(routine.alarmPreference) ? ` - ${escapeHtml(getRoutineAlarmLabel(routine.alarmPreference))}` : ""}</span>
       </div>
       <div class="item-actions">
         ${pill(routine.active ? "Active" : "Inactive", routine.active ? "strong" : "neutral")}
@@ -1995,10 +2003,29 @@ function renderRoutinePlanItem(routine) {
         <button type="button" data-action="${routine.active ? "deactivate-routine" : "activate-routine"}" data-id="${escapeHtml(routine.id)}">${routine.active ? "Deactivate" : "Activate"}</button>
         <button type="button" class="danger-button" data-action="delete-routine" data-id="${escapeHtml(routine.id)}">Delete Routine</button>
       </div>
+      ${renderRoutineCalendarHandoff(routine)}
       <ol>
-        ${routine.steps.map((step) => `<li>${escapeHtml(step.title)} <span>${step.estimatedMinutes} min</span></li>`).join("")}
+        ${routine.steps.map((step) => `<li>${escapeHtml(step.title)} <span>${formatMinutesLabel(step.estimatedMinutes)}</span></li>`).join("")}
       </ol>
     </li>
+  `;
+}
+
+function renderRoutineCalendarHandoff(routine) {
+  const event = buildRoutineCalendarEvent(routine);
+  if (!event) {
+    return "";
+  }
+
+  return `
+    <div class="calendar-handoff">
+      <p>Add this routine to the calendar your phone already uses. Calendar alerts, sounds, and vibration are controlled there.</p>
+      <div class="button-row">
+        <button type="button" class="secondary-button" data-action="download-routine-calendar" data-id="${escapeHtml(routine.id)}">Download Calendar File</button>
+        <a class="button-link secondary-link" href="${escapeHtml(getGoogleCalendarUrl(event))}" target="_blank" rel="noopener">Google Calendar</a>
+        <a class="button-link secondary-link" href="${escapeHtml(getOutlookCalendarUrl(event))}" target="_blank" rel="noopener">Outlook</a>
+      </div>
+    </div>
   `;
 }
 
@@ -3434,6 +3461,10 @@ function renderVoiceListReview(data) {
     `;
   }
 
+  if (data.targetId === "routineSteps") {
+    return renderRoutineStepReview(data);
+  }
+
   return `
     <div class="voice-list-review">
       <h4>Items for Approval</h4>
@@ -3455,6 +3486,90 @@ function renderVoiceListReview(data) {
       </div>
     </div>
   `;
+}
+
+function renderRoutineStepReview(data) {
+  return `
+    <div class="voice-list-review routine-step-review" data-routine-step-review>
+      <div class="panel-title">
+        <div>
+          <h4>Here&apos;s what I understood</h4>
+          <p class="empty-copy">Adjust anything before I save it. Short actions can be seconds, not fake five-minute blocks.</p>
+        </div>
+        <strong data-routine-step-total>${formatDurationLabel(getRoutineReviewTotalSeconds(data.draft.items))}</strong>
+      </div>
+      <ul>
+        ${data.draft.items.map((item) => renderRoutineStepReviewRow(data.targetId, item)).join("")}
+      </ul>
+      <div class="button-row">
+        <button type="button" class="secondary-button" data-action="add-routine-review-step" data-target-id="${escapeHtml(data.targetId)}">Add Step</button>
+        <button type="button" data-action="approve-voice-list" data-target-id="${escapeHtml(data.targetId)}">Save These Steps</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderRoutineStepReviewRow(targetId, item) {
+  const seconds = String(item.durationSeconds ?? 300);
+  const durationOptions = getRoutineDurationOptions();
+  const isKnownDuration = durationOptions.some((option) => option.value === seconds);
+  return `
+    <li data-voice-list-item="${escapeHtml(item.id)}" data-routine-review-row>
+      <input type="text" value="${escapeHtml(item.text)}" aria-label="Edit routine step name" />
+      <div class="routine-duration-control">
+        <select data-routine-duration-select aria-label="Duration for ${escapeHtml(item.text)}">
+          ${durationOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === seconds || (option.value === "custom" && !isKnownDuration) ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+        </select>
+        <input type="number" min="1" step="1" value="${escapeHtml(String(Math.round(Number(item.durationSeconds ?? 300))))}" data-routine-custom-duration ${isKnownDuration ? "hidden" : ""} aria-label="Custom duration in seconds" />
+      </div>
+      <button type="button" class="secondary-button" data-action="remove-voice-list-item" data-target-id="${escapeHtml(targetId)}" data-id="${escapeHtml(item.id)}">Delete</button>
+    </li>
+  `;
+}
+
+function getRoutineReviewTotalSeconds(items) {
+  return items.reduce((sum, item) => sum + Number(item.durationSeconds ?? 300), 0);
+}
+
+function formatDurationLabel(totalSeconds) {
+  const seconds = Math.max(0, Math.round(Number(totalSeconds) || 0));
+  if (seconds < 60) {
+    return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (!remainingSeconds) {
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  return `${minutes} minute${minutes === 1 ? "" : "s"} ${remainingSeconds} seconds`;
+}
+
+function formatMinutesLabel(minutesValue) {
+  const seconds = Math.round(Number(minutesValue ?? 0) * 60);
+  return formatDurationLabel(seconds);
+}
+
+function updateRoutineStepReviewTotal(review) {
+  if (!review) {
+    return;
+  }
+  const rows = Array.from(review.querySelectorAll("[data-routine-review-row]"));
+  const totalSeconds = rows.reduce((sum, row) => sum + getRoutineReviewRowDurationSeconds(row), 0);
+  const total = review.querySelector("[data-routine-step-total]");
+  if (total) {
+    total.textContent = formatDurationLabel(totalSeconds);
+  }
+}
+
+function getRoutineReviewRowDurationSeconds(row) {
+  const select = row.querySelector("[data-routine-duration-select]");
+  const customInput = row.querySelector("[data-routine-custom-duration]");
+  const isCustom = select?.value === "custom";
+  if (customInput) {
+    customInput.hidden = !isCustom;
+  }
+  const seconds = isCustom ? Number(customInput?.value ?? 300) : Number(select?.value ?? 300);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds) : 300;
 }
 
 function renderSavedVoiceList(data) {
@@ -5259,6 +5374,10 @@ app.addEventListener("click", (event) => {
     const sound = form?.querySelector("[name='routineAlarmSound']")?.value ?? "gentle-chime";
     playInAppAlarmSound(sound);
   }
+  if (action === "add-routine-review-step") {
+    addVoiceListItem(button.dataset.targetId, "New step", 300);
+    renderApp();
+  }
   if (action === "start-walkthrough") {
     startWalkthrough();
   }
@@ -5546,6 +5665,13 @@ app.addEventListener("click", (event) => {
     if (window.confirm("Delete this routine? Its linked habits and medication records will remain available.")) {
       deleteRoutine(id);
       renderApp();
+    }
+  }
+  if (action === "download-routine-calendar") {
+    const routine = getRoutineBuilderData().routines.find((item) => item.id === id);
+    const eventData = buildRoutineCalendarEvent(routine);
+    if (eventData) {
+      downloadCalendarEvent(eventData);
     }
   }
   if (action === "activate-routine") {
@@ -5907,6 +6033,11 @@ app.addEventListener("submit", async (event) => {
 });
 
 app.addEventListener("change", (event) => {
+  const routineDurationInput = event.target.closest("[data-routine-duration-select], [data-routine-custom-duration]");
+  if (routineDurationInput) {
+    updateRoutineStepReviewTotal(routineDurationInput.closest("[data-routine-step-review]"));
+  }
+
   const addTaskInput = event.target.closest(".add-task-form select, .add-task-form input");
   if (addTaskInput) {
     updateAddTaskFormUi(addTaskInput.closest(".add-task-form"));
@@ -5936,6 +6067,13 @@ app.addEventListener("change", (event) => {
     renderApp();
   });
   reader.readAsDataURL(file);
+});
+
+app.addEventListener("input", (event) => {
+  const routineDurationInput = event.target.closest("[data-routine-custom-duration]");
+  if (routineDurationInput) {
+    updateRoutineStepReviewTotal(routineDurationInput.closest("[data-routine-step-review]"));
+  }
 });
 
 app.addEventListener("dragstart", (event) => {
@@ -6013,7 +6151,12 @@ function approveVoiceListFromDom(targetId, button) {
   const component = button.closest("[data-voice-list-target]");
   const itemRows = Array.from(component?.querySelectorAll("[data-voice-list-item]") ?? []);
   for (const row of itemRows) {
-    updateVoiceListItem(targetId, row.dataset.voiceListItem, row.querySelector("input")?.value ?? "");
+    updateVoiceListItem(
+      targetId,
+      row.dataset.voiceListItem,
+      row.querySelector("input[type='text']")?.value ?? "",
+      targetId === "routineSteps" ? getRoutineReviewRowDurationSeconds(row) : null,
+    );
   }
 
   const approvedItems = approveVoiceListItems(targetId);

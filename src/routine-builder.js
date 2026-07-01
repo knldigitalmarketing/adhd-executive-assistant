@@ -101,9 +101,10 @@ export function addActionsToRoutine(state, routineId, actionNames) {
   }
 
   const existingTitles = new Set(routine.steps.map((step) => step.title.toLowerCase()));
-  const cleanActions = actionNames.map(normalizeRoutineActionTitle).filter(Boolean);
+  const cleanActions = actionNames.map(normalizeRoutineAction).filter((action) => action.title);
 
-  for (const title of cleanActions) {
+  for (const action of cleanActions) {
+    const { title, estimatedMinutes } = action;
     if (existingTitles.has(title.toLowerCase())) {
       continue;
     }
@@ -132,7 +133,7 @@ export function addActionsToRoutine(state, routineId, actionNames) {
       title,
       habitId: habit.id,
       order: routine.steps.length + 1,
-      estimatedMinutes: getDefaultRoutineMinutes(title),
+      estimatedMinutes,
     });
     existingTitles.add(title.toLowerCase());
   }
@@ -425,7 +426,7 @@ function parseStepLines(value) {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line, index) => {
-      const match = line.match(/^(.*?)\s+-\s+(\d+)$/);
+      const match = line.match(/^(.*?)\s+-\s+(\d+(?:\.\d+)?)$/);
       const title = (match?.[1] ?? line).trim();
       const estimatedMinutes = Number(match?.[2] ?? 5);
 
@@ -513,7 +514,8 @@ function getMinutesFromTime(value) {
 }
 
 function formatMinutesAsTime(totalMinutes) {
-  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+  const roundedTotal = Math.round(totalMinutes);
+  const normalized = ((roundedTotal % 1440) + 1440) % 1440;
   const hours24 = Math.floor(normalized / 60);
   const minutes = String(normalized % 60).padStart(2, "0");
   const period = hours24 >= 12 ? "PM" : "AM";
@@ -541,6 +543,31 @@ function normalizeRoutineActionTitle(value) {
   return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
+function normalizeRoutineAction(value) {
+  if (typeof value === "object" && value !== null) {
+    const title = normalizeRoutineActionTitle(value.text ?? value.title ?? "");
+    return {
+      title,
+      estimatedMinutes: normalizeEstimatedMinutes(value.estimatedMinutes ?? durationSecondsToMinutes(value.durationSeconds) ?? getDefaultRoutineMinutes(title)),
+    };
+  }
+  const title = normalizeRoutineActionTitle(value);
+  return {
+    title,
+    estimatedMinutes: getDefaultRoutineMinutes(title),
+  };
+}
+
+function durationSecondsToMinutes(value) {
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds / 60 : null;
+}
+
+function normalizeEstimatedMinutes(value) {
+  const minutes = Number(value);
+  return Number.isFinite(minutes) && minutes > 0 ? Number(minutes.toFixed(2)) : 5;
+}
+
 function inferRoutineActionCategory(title) {
   if (/\b(med|pill|vitamin|supplement|water|blood pressure|health)\b/i.test(title)) return "Health";
   if (/\b(walk|stretch|exercise|workout|training)\b/i.test(title)) return "Fitness";
@@ -550,7 +577,14 @@ function inferRoutineActionCategory(title) {
 }
 
 function getDefaultRoutineMinutes(title) {
-  if (/\b(med|pill|vitamin|supplement|water)\b/i.test(title)) return 2;
+  if (/\b(take|swallow)\b.*\b(pill|med|medicine|medication|vitamin|supplement)\b/i.test(title)
+    || /\b(pill|medication|vitamin|supplement)\b/i.test(title)) return 0.5;
+  if (/^\s*take\s+\w+/i.test(title) && !/\b(shower|walk|break|time|photo|picture|note)\b/i.test(title)) return 0.5;
+  if (/\bdrink\b.*\bwater\b|\bwater\b/i.test(title)) return 0.5;
+  if (/\bbrush\b.*\bteeth\b/i.test(title)) return 2;
+  if (/\bshower\b/i.test(title)) return 10;
+  if (/\b(make|brew|start)\b.*\bcoffee\b|\bcoffee\b/i.test(title)) return 5;
+  if (/\bstretch\b/i.test(title)) return 5;
   if (/\b(calendar|priorit|inbox|safety check)\b/i.test(title)) return 5;
   if (/\b(walk|stretch|exercise|workout|training)\b/i.test(title)) return 15;
   return 5;

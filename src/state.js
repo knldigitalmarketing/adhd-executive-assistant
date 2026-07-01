@@ -154,6 +154,7 @@ import { clearState, loadState, saveState } from "./storage.js";
 import { ensureTipState, getTipById, recordTipShown, selectHelpfulStrategy } from "./tips.js";
 import {
   approveVoiceListItems as approveVoiceListDraftItems,
+  addVoiceListDraftItem,
   clearVoiceListDraft as clearVoiceListEntryDraft,
   deleteSavedVoiceListItem as deleteSavedVoiceListEntryItem,
   ensureVoiceListEntryState,
@@ -1411,12 +1412,14 @@ function makeStateFormData(values) {
 
 function getDefaultEstimatedMinutes(title) {
   const value = String(title ?? "").toLowerCase();
-  if (/\b(medication|medications|medicine|meds|pill|pills|take my|take supplement|supplement|drink water|water)\b/.test(value)) {
-    return 1;
-  }
-  if (/\b(stretch|stretching)\b/.test(value)) {
-    return 15;
-  }
+  if (/\b(take|swallow)\b.*\b(pill|medication|medicine|meds|vitamin|supplement)\b/.test(value)
+    || /\b(pill|medication|vitamin|supplement)\b/.test(value)) return 0.5;
+  if (/^\s*take\s+\w+/i.test(value) && !/\b(shower|walk|break|time|photo|picture|note)\b/i.test(value)) return 0.5;
+  if (/\bdrink\b.*\bwater\b|\bwater\b/.test(value)) return 0.5;
+  if (/\bbrush\b.*\bteeth\b/.test(value)) return 2;
+  if (/\bshower\b/.test(value)) return 10;
+  if (/\b(make|brew|start)\b.*\bcoffee\b|\bcoffee\b/.test(value)) return 5;
+  if (/\b(stretch|stretching)\b/.test(value)) return 5;
   if (/\b(email review|review email|review emails|inbox|email)\b/.test(value)) {
     return 25;
   }
@@ -1451,8 +1454,13 @@ export function reviewVoiceListText(targetId, text) {
   saveState(state);
 }
 
-export function updateVoiceListItem(targetId, itemId, text) {
-  updateVoiceListEntryItem(state, targetId, itemId, text);
+export function updateVoiceListItem(targetId, itemId, text, durationSeconds = null) {
+  updateVoiceListEntryItem(state, targetId, itemId, text, durationSeconds);
+  saveState(state);
+}
+
+export function addVoiceListItem(targetId, text = "", durationSeconds = null) {
+  addVoiceListDraftItem(state, targetId, text, durationSeconds);
   saveState(state);
 }
 

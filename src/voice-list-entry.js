@@ -83,6 +83,7 @@ export function reviewVoiceListText(state, targetId, text) {
   const items = parseVoiceListText(text, targetId).map((item, index) => ({
     id: `voice-item-${Date.now()}-${index}`,
     text: item,
+    durationSeconds: targetId === "routineSteps" ? inferRoutineStepDurationSeconds(item) : undefined,
   }));
   state.voiceListEntry.drafts[targetId] = {
     rawText: text,
@@ -92,13 +93,33 @@ export function reviewVoiceListText(state, targetId, text) {
   return state.voiceListEntry.drafts[targetId];
 }
 
-export function updateVoiceListItem(state, targetId, itemId, text) {
+export function updateVoiceListItem(state, targetId, itemId, text, durationSeconds = null) {
   ensureVoiceListEntryState(state);
   const cleanText = cleanListItem(text);
   const draft = state.voiceListEntry.drafts[targetId];
   draft.items = draft.items
-    .map((item) => (item.id === itemId ? { ...item, text: cleanText } : item))
+    .map((item) => {
+      if (item.id !== itemId) {
+        return item;
+      }
+      return targetId === "routineSteps"
+        ? { ...item, text: cleanText, durationSeconds: normalizeRoutineStepDurationSeconds(durationSeconds ?? item.durationSeconds) }
+        : { ...item, text: cleanText };
+    })
     .filter((item) => item.text);
+  draft.updatedAt = new Date().toISOString();
+  return draft;
+}
+
+export function addVoiceListDraftItem(state, targetId, text = "", durationSeconds = null) {
+  ensureVoiceListEntryState(state);
+  const cleanText = cleanListItem(text) || "New step";
+  const draft = state.voiceListEntry.drafts[targetId];
+  draft.items.push({
+    id: `voice-item-${Date.now()}-${draft.items.length}`,
+    text: cleanText,
+    durationSeconds: targetId === "routineSteps" ? normalizeRoutineStepDurationSeconds(durationSeconds ?? inferRoutineStepDurationSeconds(cleanText)) : undefined,
+  });
   draft.updatedAt = new Date().toISOString();
   return draft;
 }
@@ -119,7 +140,14 @@ export function clearVoiceListDraft(state, targetId) {
 export function approveVoiceListItems(state, targetId) {
   ensureVoiceListEntryState(state);
   const draft = state.voiceListEntry.drafts[targetId];
-  const approvedItems = draft.items.map((item) => cleanListItem(item.text)).filter(Boolean);
+  const approvedItems = targetId === "routineSteps"
+    ? draft.items
+        .map((item) => ({
+          text: cleanListItem(item.text),
+          durationSeconds: normalizeRoutineStepDurationSeconds(item.durationSeconds ?? inferRoutineStepDurationSeconds(item.text)),
+        }))
+        .filter((item) => item.text)
+    : draft.items.map((item) => cleanListItem(item.text)).filter(Boolean);
 
   if (targetId !== "routineSteps") {
     const existing = state.voiceListEntry.savedLists[targetId] ?? [];
@@ -231,17 +259,60 @@ export function startVoiceRecognition({ onResult, onError, onEnd } = {}) {
 }
 
 export function formatRoutineStepLines(items) {
-  return items.map((item) => `${item} - 5`).join("\n");
+  return items.map((item) => {
+    const text = typeof item === "string" ? item : item.text;
+    const durationSeconds = typeof item === "string" ? inferRoutineStepDurationSeconds(item) : item.durationSeconds;
+    return `${text} - ${formatDurationAsMinutes(durationSeconds)}`;
+  }).join("\n");
 }
 
 function normalizeDraft(value = {}) {
   return {
     rawText: typeof value.rawText === "string" ? value.rawText : "",
     items: Array.isArray(value.items)
-      ? value.items.map((item, index) => ({ id: item.id ?? `voice-item-existing-${index}`, text: cleanListItem(item.text) })).filter((item) => item.text)
+      ? value.items.map((item, index) => ({
+        id: item.id ?? `voice-item-existing-${index}`,
+        text: cleanListItem(item.text),
+        durationSeconds: normalizeRoutineStepDurationSeconds(item.durationSeconds ?? inferRoutineStepDurationSeconds(item.text)),
+      })).filter((item) => item.text)
       : [],
     updatedAt: value.updatedAt ?? null,
   };
+}
+
+export function getRoutineDurationOptions() {
+  return [
+    { value: "15", label: "15 seconds" },
+    { value: "30", label: "30 seconds" },
+    { value: "60", label: "1 minute" },
+    { value: "120", label: "2 minutes" },
+    { value: "180", label: "3 minutes" },
+    { value: "300", label: "5 minutes" },
+    { value: "600", label: "10 minutes" },
+    { value: "custom", label: "Custom" },
+  ];
+}
+
+function inferRoutineStepDurationSeconds(title) {
+  const value = String(title ?? "").toLowerCase();
+  if (/\b(take|swallow)\b.*\b(pill|med|medicine|medication|vitamin|supplement)\b/.test(value)
+    || /\b(pill|medication|vitamin|supplement)\b/.test(value)) return 30;
+  if (/^\s*take\s+\w+/i.test(value) && !/\b(shower|walk|break|time|photo|picture|note)\b/i.test(value)) return 30;
+  if (/\bdrink\b.*\bwater\b|\bwater\b/.test(value)) return 30;
+  if (/\bbrush\b.*\bteeth\b/.test(value)) return 120;
+  if (/\bshower\b/.test(value)) return 600;
+  if (/\b(make|brew|start)\b.*\bcoffee\b|\bcoffee\b/.test(value)) return 300;
+  if (/\bstretch\b/.test(value)) return 300;
+  return 300;
+}
+
+function normalizeRoutineStepDurationSeconds(value) {
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : 300;
+}
+
+function formatDurationAsMinutes(seconds) {
+  return Number((normalizeRoutineStepDurationSeconds(seconds) / 60).toFixed(2));
 }
 
 function cleanListItem(value) {
