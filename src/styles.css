@@ -2558,6 +2558,35 @@ main {
   margin-top: 0;
 }
 
+.medication-reuse-offer {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #bfd9c8;
+  border-radius: 8px;
+  background: #f3fbf8;
+}
+
+.medication-reuse-offer strong,
+.medication-reuse-offer p {
+  margin: 0;
+}
+
+.medication-reuse-offer strong {
+  color: var(--green);
+}
+
+.medication-reuse-offer p {
+  color: var(--ink);
+  font-size: 0.94rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.medication-reuse-offer .button-row {
+  margin-top: 2px;
+}
+
 .saved-voice-list span {
   padding: 9px 10px;
   border: 1px solid var(--line);

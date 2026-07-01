@@ -25,6 +25,7 @@ import {
   completeSmartIntervention,
   completeWeeklyReview,
   createRoutineFromTemplate,
+  createMedicationRoutineFromReviewedSteps,
   createProjectNextTask,
   deactivateRoutine,
   deactivateHabit,
@@ -1604,7 +1605,7 @@ function renderRoutineStepChildren(step) {
   }
   const medications = getMedicationTrackingData().medications.filter(
     (medication) => medication.schedule === (step.schedule ?? "morning"),
-  ).sort((left, right) => String(left.createdAt ?? "").localeCompare(String(right.createdAt ?? "")) || left.name.localeCompare(right.name));
+  ).sort(sortMedicationsForRoutine);
   return medications.length
     ? `<ul class="routine-builder-children">${medications.map((medication) => `<li>${escapeHtml(medication.name)}${medication.dose ? ` - ${escapeHtml(medication.dose)}` : ""}</li>`).join("")}</ul>`
     : `<p class="field-help">No active medications are assigned to this time yet.</p>`;
@@ -3501,9 +3502,28 @@ function renderRoutineStepReview(data) {
       <ul>
         ${data.draft.items.map((item) => renderRoutineStepReviewRow(data.targetId, item)).join("")}
       </ul>
+      ${renderMedicationReuseOffer(data.draft.items)}
       <div class="button-row">
         <button type="button" class="secondary-button" data-action="add-routine-review-step" data-target-id="${escapeHtml(data.targetId)}">Add Step</button>
         <button type="button" data-action="approve-voice-list" data-target-id="${escapeHtml(data.targetId)}">Save These Steps</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderMedicationReuseOffer(items) {
+  const medicationItems = items.filter((item) => isMedicationLikeReviewStep(item.text));
+  if (medicationItems.length === 0) {
+    return "";
+  }
+
+  return `
+    <div class="medication-reuse-offer">
+      <strong>It looks like ${medicationItems.length === 1 ? "this is a medication" : "some of these are medications"}.</strong>
+      <p>Would you also like me to create a Medication Routine using these same items? I will reuse what you already entered.</p>
+      <div class="button-row">
+        <button type="button" data-action="approve-routine-medication-reuse" data-target-id="routineSteps">Yes, create it</button>
+        <button type="button" class="secondary-button" data-action="approve-voice-list" data-target-id="routineSteps">No, keep only my Morning Routine</button>
       </div>
     </div>
   `;
@@ -3570,6 +3590,18 @@ function getRoutineReviewRowDurationSeconds(row) {
   }
   const seconds = isCustom ? Number(customInput?.value ?? 300) : Number(select?.value ?? 300);
   return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds) : 300;
+}
+
+function isMedicationLikeReviewStep(value) {
+  return /\b(take|swallow)\b.*\b(pill|medication|medicine|meds|vitamin|supplement)\b/i.test(value)
+    || /\b(pill|medication|medicine|meds|vitamin|supplement|amlodipine|atorvastatin)\b/i.test(value)
+    || (/^\s*take\s+\w+/i.test(value) && !/\b(shower|walk|break|time|photo|picture|note|coffee|water)\b/i.test(value));
+}
+
+function sortMedicationsForRoutine(left, right) {
+  const leftOrder = Number(left.routineOrder ?? 9999);
+  const rightOrder = Number(right.routineOrder ?? 9999);
+  return leftOrder - rightOrder || String(left.createdAt ?? "").localeCompare(String(right.createdAt ?? "")) || left.name.localeCompare(right.name);
 }
 
 function renderSavedVoiceList(data) {
@@ -5781,6 +5813,9 @@ app.addEventListener("click", (event) => {
   if (action === "approve-voice-list") {
     approveVoiceListFromDom(button.dataset.targetId, button);
   }
+  if (action === "approve-routine-medication-reuse") {
+    approveRoutineMedicationReuseFromDom(button);
+  }
   if (action === "mark-saved-voice-list-item-done") {
     markSavedVoiceListItemDone(button.dataset.targetId, id);
     renderApp();
@@ -6172,6 +6207,29 @@ function approveVoiceListFromDom(targetId, button) {
   }
 
   renderApp();
+}
+
+function approveRoutineMedicationReuseFromDom(button) {
+  const component = button.closest("[data-voice-list-target]");
+  const itemRows = Array.from(component?.querySelectorAll("[data-voice-list-item]") ?? []);
+  for (const row of itemRows) {
+    updateVoiceListItem(
+      "routineSteps",
+      row.dataset.voiceListItem,
+      row.querySelector("input[type='text']")?.value ?? "",
+      getRoutineReviewRowDurationSeconds(row),
+    );
+  }
+
+  const approvedItems = approveVoiceListItems("routineSteps");
+  const routineId = getRoutineBuilderData().draftRoutine?.id;
+  if (routineId) {
+    createMedicationRoutineFromReviewedSteps(routineId, approvedItems, "morning");
+    renderApp();
+    return;
+  }
+
+  appendApprovedRoutineSteps(approvedItems, component);
 }
 
 function addMedicationGroupToRoutine() {

@@ -158,11 +158,9 @@ export function addMedicationGroupStep(state, routineId, groupName, schedule = "
     return routine;
   }
 
-  const medicationHabitIds = new Set(
-    (state.medications ?? [])
-      .filter((medication) => medication.schedule === normalizedSchedule)
-      .map((medication) => `habit-medication-${medication.id}`),
-  );
+  const scheduledMedications = (state.medications ?? []).filter((medication) => medication.schedule === normalizedSchedule);
+  const medicationHabitIds = new Set(scheduledMedications.map((medication) => `habit-medication-${medication.id}`));
+  const totalMedicationMinutes = scheduledMedications.reduce((sum, medication) => sum + Number(medication.durationSeconds ?? 30) / 60, 0);
   routine.steps = routine.steps.filter((step) => !medicationHabitIds.has(step.habitId));
   routine.steps.push({
     id: `step-medication-group-${Date.now()}`,
@@ -170,7 +168,7 @@ export function addMedicationGroupStep(state, routineId, groupName, schedule = "
     groupType: "medications",
     schedule: normalizedSchedule,
     order: routine.steps.length + 1,
-    estimatedMinutes: Math.max(2, medicationHabitIds.size),
+    estimatedMinutes: Math.max(1, Number(totalMedicationMinutes.toFixed(2))),
   });
   normalizeStepOrder(routine);
   routine.updatedAt = new Date().toISOString();

@@ -1426,6 +1426,20 @@ function getDefaultEstimatedMinutes(title) {
   return 15;
 }
 
+function isMedicationLikeRoutineStep(value) {
+  return /\b(take|swallow)\b.*\b(pill|medication|medicine|meds|vitamin|supplement)\b/i.test(value)
+    || /\b(pill|medication|medicine|meds|vitamin|supplement|amlodipine|atorvastatin)\b/i.test(value)
+    || (/^\s*take\s+\w+/i.test(value) && !/\b(shower|walk|break|time|photo|picture|note|coffee|water)\b/i.test(value));
+}
+
+function cleanMedicationRoutineName(value) {
+  const cleaned = String(value ?? "")
+    .replace(/^\s*(take|swallow)\s+(my\s+|the\s+|a\s+|an\s+)?/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || String(value ?? "").trim();
+}
+
 export function getRoutineBuilderData() {
   return buildRoutineBuilderData(state, getDayPart);
 }
@@ -1544,6 +1558,36 @@ export function addMedicationGroupToRoutine(routineId, groupName, schedule) {
   const routine = addMedicationGroupStep(state, routineId, groupName, schedule);
   saveState(state);
   return routine;
+}
+
+export function createMedicationRoutineFromReviewedSteps(routineId, reviewedItems, schedule = "morning") {
+  const items = Array.isArray(reviewedItems) ? reviewedItems : [];
+  const medicationItems = items.filter((item) => isMedicationLikeRoutineStep(item.text ?? item.title));
+  const otherItems = items.filter((item) => !isMedicationLikeRoutineStep(item.text ?? item.title));
+
+  if (otherItems.length > 0) {
+    addActionsToRoutine(state, routineId, otherItems);
+  }
+
+  if (medicationItems.length > 0) {
+    const result = saveMedicationGroupItems(state, makeStateFormData({
+      medicationGroupName: "Take morning medications",
+      medicationSchedule: schedule,
+      medicationRefillDate: "",
+      medicationNames: medicationItems.map((item) => cleanMedicationRoutineName(item.text ?? item.title)).join("\n"),
+    }));
+
+    result.createdMedications.forEach((medication, index) => {
+      const sourceItem = medicationItems[index];
+      medication.durationSeconds = Number(sourceItem?.durationSeconds ?? 30);
+      medication.routineOrder = index + 1;
+      medication.updatedAt = new Date().toISOString();
+    });
+    addMedicationGroupStep(state, routineId, "Take morning medications", schedule);
+  }
+
+  saveState(state);
+  return state.routinePlans.find((routine) => routine.id === routineId) ?? null;
 }
 
 export function moveRoutineAction(routineId, stepId, direction) {

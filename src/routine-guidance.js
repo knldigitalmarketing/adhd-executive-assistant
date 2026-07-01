@@ -190,7 +190,7 @@ function buildGuidanceStep(state, routine, step, index, todayKey) {
   if (step.groupType === "medications") {
     const medications = (state.medications ?? []).filter(
       (medication) => medication.active !== false && medication.schedule === (step.schedule ?? "morning"),
-    ).sort((left, right) => String(left.createdAt ?? "").localeCompare(String(right.createdAt ?? "")) || left.name.localeCompare(right.name));
+    ).sort(sortMedicationsForRoutine);
     const children = medications.map((medication, childIndex) => {
       const childId = `medication-${medication.id}`;
       const itemId = getRoutineChildItemId(routine.id, step.id, childId);
@@ -204,6 +204,7 @@ function buildGuidanceStep(state, routine, step, index, todayKey) {
         displayTitle: medication.name,
         itemId,
         index: childIndex,
+        estimatedMinutes: Number(medication.durationSeconds ?? 30) / 60,
         status: saved.status ?? "todo",
         completed: saved.completed === true || saved.status === "done",
         skipped: saved.status === "skipped",
@@ -315,6 +316,12 @@ function resolveRoutineActionItemId(state, routineId, actionId) {
     return getRoutineChildItemId(routineId, medicationGroup.id, actionId);
   }
   return getRoutineStepItemId(routineId, actionId);
+}
+
+function sortMedicationsForRoutine(left, right) {
+  const leftOrder = Number(left.routineOrder ?? 9999);
+  const rightOrder = Number(right.routineOrder ?? 9999);
+  return leftOrder - rightOrder || String(left.createdAt ?? "").localeCompare(String(right.createdAt ?? "")) || left.name.localeCompare(right.name);
 }
 
 function getDateKey(date) {
