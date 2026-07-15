@@ -2020,11 +2020,12 @@ function renderRoutineCalendarHandoff(routine) {
 
   return `
     <div class="calendar-handoff">
-      <p>Add this routine to the calendar your phone already uses. Calendar alerts, sounds, and vibration are controlled there.</p>
+      <p>Add this routine as one calendar block. The steps stay inside this app; your phone calendar controls alerts, sounds, and vibration.</p>
       <div class="button-row">
         <button type="button" class="secondary-button" data-action="download-routine-calendar" data-id="${escapeHtml(routine.id)}">Download Calendar File</button>
-        <a class="button-link secondary-link" href="${escapeHtml(getGoogleCalendarUrl(event))}" target="_blank" rel="noopener">Google Calendar</a>
-        <a class="button-link secondary-link" href="${escapeHtml(getOutlookCalendarUrl(event))}" target="_blank" rel="noopener">Outlook</a>
+        <a class="button-link secondary-link" href="${escapeHtml(getGoogleCalendarUrl(event))}" target="_blank" rel="noopener" data-calendar-handoff-link>Google Calendar</a>
+        <a class="button-link secondary-link" href="${escapeHtml(getOutlookCalendarUrl(event))}" target="_blank" rel="noopener" data-calendar-handoff-link>Outlook</a>
+        <button type="button" data-action="start-working">Back To Working Dashboard</button>
       </div>
     </div>
   `;
@@ -2663,6 +2664,7 @@ function renderWorkingMode() {
         <div>
           <p class="eyebrow">Working Mode</p>
           <h2>Stay with the next step</h2>
+          ${renderNextUpLine(working.comingUp)}
         </div>
         <div class="button-row">
           <button type="button" class="secondary-button" data-action="show-command-center">Command Center</button>
@@ -2680,6 +2682,13 @@ function renderWorkingMode() {
       ${renderInterventionCard(working.intervention, "working")}
     </section>
   `;
+}
+
+function renderNextUpLine(item) {
+  if (!item) {
+    return `<p class="next-up-line">Next up: nothing scheduled yet.</p>`;
+  }
+  return `<p class="next-up-line">Next up: <strong>${escapeHtml(item.title ?? item.name)}</strong>${item.startTime || item.time ? ` at ${escapeHtml(item.startTime ?? item.time)}` : ""}</p>`;
 }
 
 function renderCommandCenter() {
@@ -3751,7 +3760,7 @@ function renderCommandNext(item) {
   if (!item) {
     return `
       <article class="panel command-card command-next" data-window-title="Next" data-walkthrough="next">
-        ${renderCommandHeader("Next", "show-dashboard", "Open Day Glimpse")}
+        ${renderCommandHeader("Next up", "show-dashboard", "Open Day Glimpse")}
         <h3>Your next thing goes here.</h3>
         <p class="command-helper-copy">This is what is coming up after Now. Try it by adding a scheduled task for the next hour in Today or Hourly View.</p>
         <p class="empty-copy">Scheduled items appear here when they have a time.</p>
@@ -3761,7 +3770,7 @@ function renderCommandNext(item) {
 
   return `
     <article class="panel command-card command-next" data-window-title="Next" data-walkthrough="next">
-      ${renderCommandHeader("Next", "show-dashboard", "Open Day Glimpse")}
+      ${renderCommandHeader("Next up", "show-dashboard", "Open Day Glimpse")}
       <h3>${escapeHtml(item.title ?? item.name)}</h3>
       <p>${escapeHtml(item.startTime ?? item.time ?? item.dueDate ?? item.deadline ?? item.type ?? "Up next")}</p>
     </article>
@@ -4257,7 +4266,7 @@ function renderComingUpCard(item) {
   if (!item) {
     return `
       <article class="working-card coming-card">
-        <p class="eyebrow">Coming Up</p>
+        <p class="eyebrow">Next up</p>
         <h3>No scheduled item is waiting.</h3>
         <p>The timeline has no open upcoming item.</p>
       </article>
@@ -4266,7 +4275,7 @@ function renderComingUpCard(item) {
 
   return `
     <article class="working-card coming-card">
-      <p class="eyebrow">Coming Up</p>
+      <p class="eyebrow">Next up</p>
       <h3>${escapeHtml(item.title ?? item.name)}</h3>
       <p>${escapeHtml(item.startTime ?? item.time ?? item.plannedEndTime ?? "Later today")} - ${escapeHtml(item.type ?? item.timingType ?? "Upcoming")}</p>
     </article>
@@ -4964,15 +4973,6 @@ function buildHourlyViewItems() {
     displayTime: event.time ?? event.startTime ?? "Today",
     hour: getHourFromTime(event.time ?? event.startTime),
   }));
-  const routineStepEvents = getRoutineBuilderData().scheduledSteps
-    .filter((event) => event.timingType === "scheduled" && event.startTime)
-    .map((event) => ({
-      ...event,
-      collection: "routineSteps",
-      type: "Routine Step",
-      displayTime: event.startTime,
-      hour: getHourFromTime(event.startTime),
-    }));
   const scheduledTasks = state.actions
     .filter((event) => (event.timingType ?? "") === "scheduled" || event.startTime || event.time)
     .map((event) => ({
@@ -4991,7 +4991,7 @@ function buildHourlyViewItems() {
       displayTime: event.startTime,
       hour: getHourFromTime(event.startTime),
     }));
-  const events = [...timelineEvents, ...routineStepEvents, ...recurringEvents, ...scheduledTasks];
+  const events = [...timelineEvents, ...recurringEvents, ...scheduledTasks];
 
   return Array.from({ length: 16 }, (_, index) => {
     const hour = index + 6;
@@ -5372,6 +5372,12 @@ function shouldPauseAutomaticRefresh() {
 }
 
 app.addEventListener("click", (event) => {
+  const calendarHandoffLink = event.target.closest("[data-calendar-handoff-link]");
+  if (calendarHandoffLink) {
+    startMyDay();
+    return;
+  }
+
   const button = event.target.closest("button");
   if (!button) {
     return;
@@ -5704,6 +5710,8 @@ app.addEventListener("click", (event) => {
     const eventData = buildRoutineCalendarEvent(routine);
     if (eventData) {
       downloadCalendarEvent(eventData);
+      startMyDay();
+      renderApp();
     }
   }
   if (action === "activate-routine") {

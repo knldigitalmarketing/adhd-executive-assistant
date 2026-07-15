@@ -299,14 +299,13 @@ export function buildActiveRoutineSteps({ state, isDone, getDayPart }) {
   const steps = [];
 
   for (const routine of state.routinePlans) {
-    if (!routine.active || !routineAppliesNow(routine, dayPart)) {
+    if (!routine.active || !routineAppliesNow(routine, dayPart) || !routineStartReached(routine)) {
       continue;
     }
 
     routine.steps.forEach((step, index) => {
       const id = getRoutineStepItemId(routine.id, step.id);
       const savedState = state.routineStepState[id]?.dateKey === todayKey ? state.routineStepState[id] : {};
-      const stepStartTime = routine.startTime ? addMinutesToTime(routine.startTime, getMinutesBeforeStep(routine.steps, index)) : "";
       const item = {
         id,
         routineId: routine.id,
@@ -322,12 +321,10 @@ export function buildActiveRoutineSteps({ state, isDone, getDayPart }) {
         stepOrder: index + 1,
         priority: routine.type === "morning" ? "High" : "Medium",
         estimatedEffortMinutes: step.estimatedMinutes,
-        timingType: stepStartTime ? "scheduled" : "flexible",
-        startTime: stepStartTime || undefined,
-        time: stepStartTime || undefined,
+        timingType: "flexible",
         preferredWindow: "Today",
         dueDate: "Today",
-        reason: stepStartTime ? `Step ${index + 1} of ${routine.name}, scheduled for ${stepStartTime}` : `Step ${index + 1} of ${routine.name}`,
+        reason: routine.startTime ? `Step ${index + 1} of ${routine.name}. The routine starts at ${routine.startTime}.` : `Step ${index + 1} of ${routine.name}`,
         ...savedState,
       };
 
@@ -447,6 +444,17 @@ function normalizeRoutineType(type) {
 
 function routineAppliesNow(routine, dayPart) {
   return routine.type === "custom" || routine.type === dayPart;
+}
+
+function routineStartReached(routine, now = new Date()) {
+  if (!routine.startTime) {
+    return true;
+  }
+  const startMinutes = getMinutesFromTime(routine.startTime);
+  if (startMinutes === null) {
+    return true;
+  }
+  return now.getHours() * 60 + now.getMinutes() >= startMinutes;
 }
 
 function getRoutineStepItemId(routineId, stepId) {

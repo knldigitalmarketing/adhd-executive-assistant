@@ -14,7 +14,7 @@ export function buildRoutineCalendarEvent(routine, date = new Date()) {
 
   return {
     id: routine.id,
-    title: routine.name,
+    title: getRoutineCalendarTitle(routine),
     start,
     end,
     description: [
@@ -25,6 +25,12 @@ export function buildRoutineCalendarEvent(routine, date = new Date()) {
       "Your phone or calendar controls notification sound, vibration, and alarm behavior.",
     ].filter(Boolean).join("\n"),
   };
+}
+
+function getRoutineCalendarTitle(routine) {
+  return String(routine.type ?? "").toLowerCase() === "morning"
+    ? `Wake up / Start ${routine.name}`
+    : routine.name;
 }
 
 export function downloadCalendarEvent(event) {

@@ -1209,6 +1209,17 @@ main {
   font-size: clamp(1.35rem, 2.3vw, 2.15rem);
 }
 
+.next-up-line {
+  margin: 8px 0 0;
+  color: var(--blue-dark);
+  font-size: 1rem;
+  font-weight: 850;
+}
+
+.next-up-line strong {
+  color: var(--ink);
+}
+
 .eyebrow {
   margin: 0 0 5px;
   color: var(--blue-dark);

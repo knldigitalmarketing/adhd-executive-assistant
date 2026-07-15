@@ -118,7 +118,6 @@ import {
 import {
   addActionsToRoutine,
   addMedicationGroupStep,
-  buildScheduledRoutineSteps,
   buildActiveRoutineSteps,
   clearRoutineBuilderDraft,
   createRoutineContainer,
@@ -2816,7 +2815,6 @@ function getScheduledCandidates() {
     ...state.actions,
     ...state.timeline,
     ...state.focusSessions,
-    ...buildScheduledRoutineSteps({ state, isDone }),
     ...getDueRecurringOccurrences(),
   ].filter((item) => (item.timingType ?? inferTimingType(item)) === "scheduled");
 }
@@ -3393,10 +3391,13 @@ function syncRoutineTimelineItem(routine) {
 
   const totalMinutes = (routine.steps ?? []).reduce((sum, step) => sum + Number(step.estimatedMinutes ?? 0), 0);
   const hasInAppAlarm = routine.alarmPreference === "in-app" || routine.alarmPreference === "both" || routine.alarmPreference === "prompt";
+  const routineTitle = String(routine.type ?? "").toLowerCase() === "morning"
+    ? `Wake up / Start ${routine.name}`
+    : `Start ${routine.name}`;
   state.timeline.unshift({
     id: getRoutineTimelineId(routine.id),
     routinePlanId: routine.id,
-    title: hasInAppAlarm ? `Start ${routine.name} - in-app alarm` : `Start ${routine.name}`,
+    title: hasInAppAlarm ? `${routineTitle} - in-app alarm` : routineTitle,
     time: routine.startTime,
     startTime: routine.startTime,
     type: hasInAppAlarm ? "Routine Alarm Prompt" : "Routine Start",
