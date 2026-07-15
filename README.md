@@ -112,3 +112,20 @@ These are important product directions to revisit after the current routine and 
 - Calendar Handoff V1 has started with scheduled routines; extend it next to scheduled tasks and recurring tasks.
 - Later, consider full Google Calendar, Outlook, and mobile calendar sync only after privacy, permissions, conflicts, edits, and user trust are designed properly.
 - Keep in-app alarms for open-app guidance, but use phone calendars/alarms for reliable background wake-up or reminder behavior.
+- Explore Location-Aware Safety Checks as a later native-phone feature, not a simple web feature:
+  - user-defined places such as home, work, school, childcare, pharmacy, gym, and common errands
+  - user-confirmed safety responsibilities such as "drop baby at childcare" or "pick up child from school"
+  - optional GPS/geofence checks to notice when the user goes to the wrong destination or arrives at work before completing a critical stop
+  - optional Wi-Fi/network arrival signals where supported by the phone OS
+  - loud escalation when a critical child/pet/passenger safety task may have been missed
+  - strict consent, privacy controls, and clear opt-in before reading messages, using location, or creating routes
+  - never treat this as the only safety layer; design it as backup protection with fail-safe wording and testing
+- Build a Household Responsibility Model before message/location automation:
+  - let the user identify significant others, children, pets, dependents, household members, and shared responsibilities
+  - optionally infer possible household relationships from messages only after explicit permission and review
+  - ask the user to confirm relationships and responsibilities before the assistant acts on them
+  - connect people to places, routines, transportation needs, school/childcare pickups, medical responsibilities, bills, and recurring household duties
+  - recognize when a message changes the day, such as a spouse being ill or asking the user to take over a childcare drop-off
+  - convert confirmed message-based responsibilities into tasks, calendar blocks, location checks, or safety alerts without requiring duplicate entry
+  - avoid hidden surveillance behavior; make it obvious what the assistant noticed, why it matters, and what it proposes to do
+  - include privacy boundaries for shared devices, sensitive relationships, children, medical details, and household finances
